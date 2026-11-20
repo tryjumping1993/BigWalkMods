@@ -16,7 +16,7 @@ Shader "BWM/Fir"
         _SnowLine ("Snow line", Range(-0.5, 1)) = 0.35
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.18
         _Translucency ("Light through the needles", Range(0, 1)) = 0.25
-        _BarkColor ("Bark", Color) = (0.26, 0.18, 0.12, 1)
+        _BarkColor ("Bark", Color) = (0.46, 0.33, 0.24, 1)
     }
 
     SubShader

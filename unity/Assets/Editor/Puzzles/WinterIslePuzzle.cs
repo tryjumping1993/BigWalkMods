@@ -1039,10 +1039,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     mb.Tri(shoulder[sd], crown, shoulder[nxt], col);
                 }
             }
-            for (float z = Z0 + 2f; z < Z1; z += 2.7f)
-                for (float x = X0 + 2f; x < X1; x += 2.7f)
+            for (float z = Z0 + 2f; z < Z1; z += 2f)
+                for (float x = X0 + 2f; x < X1; x += 2f)
                 {
-                    var p = new Vector2(x + Rs(-1.3f, 1.3f), z + Rs(-1.3f, 1.3f));
+                    var p = new Vector2(x + Rs(-1f, 1f), z + Rs(-1f, 1f));
                     int k = Cell_(p);
                     float roll = Rs(0f, 1f), roll2 = Rs(0f, 1f);
                     if (!(height[k] > 0.9f) || !Free(p, -1.9f)) continue;
@@ -1052,7 +1052,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     bool onSand = beach[k] > 0.35f && height[k] < 1.1f;
                     // fields of lumps here, smooth snow there
                     float field = Mathf.PerlinNoise(p.x * 0.023f + 51.7f, p.y * 0.023f + 14.2f);
-                    if (!onSand && slope < 0.5f && roll < 0.1f + 0.4f * Smooth((field - 0.38f) / 0.3f))
+                    if (!onSand && slope < 0.5f && roll < 0.06f + 0.22f * Smooth((field - 0.38f) / 0.3f))
                     {
                         // a drift: a low teardrop, blunt end to the wind, tail trailing downwind; one in three is a
                         // narrow ridge with a sharp crest (sastrugi)
@@ -1092,7 +1092,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     float patch = Mathf.PerlinNoise(p.x * 0.05f + 5.9f, p.y * 0.05f + 77.3f);
                     // the wrack line: a band of driftwood and pebbles where the last high water left them
                     bool wrack = onSand && height[k] > 0.4f && height[k] < 0.8f;
-                    float tuftChance = wrack ? 0.03f : (onSand ? 0.1f : 0.04f + 0.24f * Smooth((patch - 0.55f) / 0.2f) * (height[k] < 45f ? 1f : 0.3f)) * byPath;
+                    float tuftChance = wrack ? 0.03f : (onSand ? 0.1f : 0.07f + 0.26f * Smooth((patch - 0.48f) / 0.2f) * (height[k] < 45f ? 1f : 0.3f)) * byPath;
                     if (roll2 < tuftChance)
                     {
                         // dry grass: a few tussocks standing through the snow, each a spray of blades
@@ -1178,7 +1178,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 8. Ice: the lake, and the creek above and below it (sheets just over the beds players walk on)
         var ice = new MeshBuilder();
         var iceColor = new Color(0.62f, 0.80f, 0.93f);
-        Kit.AddDisc(ice, new Vector3(Lake.x - root.x, LakeLevel - 0.3f - root.y, Lake.y - root.z), LakeRadius + 7f, 0.36f, iceColor, 72);
+        Kit.AddDisc(ice, new Vector3(Lake.x - root.x, LakeLevel - 0.3f - root.y, Lake.y - root.z), LakeRadius + 3f, 0.34f, iceColor, 72);
         for (int s = 0; s + 1 < Creek.Length; s++)
         {
             Vector3 a = Creek[s], c = Creek[s + 1];

@@ -575,7 +575,7 @@ public static class WinterIsleDressing
                     // fallen logs and stumps, the odd dead snag (a grove with bare snow between its trunks reads as
                     // planted, not grown)
                     float grove = Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f);
-                    float a = 0.035f * wood, b = a + 0.13f * wood * clump + 0.022f + 0.2f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
+                    float a = 0.07f * wood + 0.02f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.22f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
                     if (roll < 0.006f * wood && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
                     else if (roll < a) Plant(Pick(woodland), p, R(0.6f, 1.0f));
                     else if (roll < b) Plant(Pick(under), p, R(0.6f, 1.1f));
@@ -601,10 +601,10 @@ public static class WinterIsleDressing
                 if (toPath < 1.7f || InsideRock(p, 0.3f) || !l.Free(p, -1.9f)) continue;
                 float near = 1f - Smooth01((toPath - 4f) / 30f);
                 float patch = Mathf.PerlinNoise(p.x * 0.05f + 91.3f, p.y * 0.05f + 27.7f);
-                if (R(0f, 1f) > (0.1f + 0.5f * near) * (0.4f + patch * 1.2f)) continue;
+                if (R(0f, 1f) > (0.2f + 0.55f * near) * (0.4f + patch * 1.2f)) continue;
                 // by the trails it is mostly low bushes and ferns under snow, in clumps; further off, tufts and stones
-                float pick = R(0f, 1f), bushy = 0.2f + 0.3f * near;
-                if (pick < bushy) Plant(Pick(low), p, R(0.5f, 1.05f), 0.3f);
+                float pick = R(0f, 1f), bushy = 0.32f + 0.25f * near;
+                if (pick < bushy && toPath > 3.4f) Plant(Pick(low), p, R(0.5f, 1.05f), 0.3f);      // (a bush nearer than that stands in the walker's face)
                 else if (pick < bushy + 0.3f) Plant(Pick(tufts), p, R(0.28f, 0.5f), 0.3f);
                 else if (pick < bushy + 0.5f) Rock(Pick(SmallRound), p, LowGround(p, 0.3f), R(0.35f, 1.1f), R(0.45f, 0.65f), 0.35f, 25f, true, false);
                 else Plant(Pick(sticks), p, R(0.35f, 0.7f), 0.35f);
