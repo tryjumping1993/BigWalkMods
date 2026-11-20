@@ -3,7 +3,8 @@
 The Winter Isle is judged against the base game's island by a fresh agent reading matched screenshots.
 
 - `review-shots.sh [orig|winter|both]` (Git Bash, with the game running: `bwm.ps1 play`) takes an aerial, a mid
-  shot, eight eye-level shots and one shore shot of each island into `shotseview\`, and contact sheets into
+  shot, eight eye-level shots and one shore shot of each island into `shots
+eview\`, and contact sheets into
   `shots\sheets\`. Eye-level shots: the player is set down on the ground at each point (the base island's points
   are in `review-viewpoints.txt`; the Winter Isle's are twelve spread through `world\winter-viewpoints.tsv`, which
   its build writes along the trails), and the shot is taken from the game camera's own position, looking level
@@ -27,6 +28,17 @@ Rounds so far (original / winter):
 | 3 | 9/6 | 10/2 | 10/5 | 10/4 | 9/3 | 8/5 | (not asked) |
 | 4 | 9/6 | 9/5 | 9/6 | 9/4 | 9/4 | 8/6 | (not asked) |
 | 5 | 9/6 | 9/5 | 9/7 | 10/6 | 9/3 | 7/7 | rocks, paths |
+| 6 | 9/7 | 9/5 | 9/6 | 10/5 | 9/5 | 8/7 | landform, paths |
+| 7 | 9/7 | 9/5 | 9/7 | 9/5 | 9/6 | 8/6 | landform, rocks, paths |
+| 8 | 9/7 | 9/5 | 9/7 | 9/5 | 8/6 | 7/6 | landform, rocks, paths |
+| 9 | 9/7 | 9/5 | 9/6 | 10/5 | 8/7 | 7/6 | landform, coast, paths |
+| 10 | 9/7 | 9/5 | 9/7 | 9/5 | 8/6 | 7/6 | landform, rocks, paths |
 
 What each round's gaps led to is in the git log. Things the reviewer has asked for more than once: clutter lying
 on the snow, dense woods a walker is inside of, a shore that is not raw terrain, peaks that are not smooth cones.
+
+Rounds 6 to 10 changed a great deal on the island and moved ground and vegetation not at all (5 and 5 every
+round). What the reviewers name each time is a difference of kind, not amount: our conifers are flat-shaded cards
+with untextured trunks beside the game's textured trees, the snow is one material where the base island's ground
+changes every few metres, and every winter eye shot is under open sky where the base island's are inside woods.
+More scatter does not move those scores. Rocks and coast flip between 6 and 7 with the reviewer.
