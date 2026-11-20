@@ -34,7 +34,7 @@ Shader "BWM/Snow"
         _SparkleAmount ("Sparkle amount", Range(0, 4)) = 2.4
         _SparkleDistance ("Sparkle distance", Float) = 22
         _Rim ("Rim", Range(0, 1)) = 0.18
-        _PathColor ("Trodden path", Color) = (0.80, 0.84, 0.91, 1)
+        _PathColor ("Trodden path", Color) = (0.74, 0.79, 0.88, 1)
         _RockColor ("Rock", Color) = (0.47, 0.43, 0.39, 1)
         _RockLine ("Rock line (how steep before rock shows)", Range(0.3, 0.95)) = 0.72
         _RockTex ("Rock texture", 2D) = "white" {}
@@ -368,7 +368,7 @@ Shader "BWM/Snow"
                 float3 snowAlbedo = BwmSnowAlbedo(_Color.rgb, positionWS, windH.g, windH.b);
                 snowAlbedo = lerp(snowAlbedo, float3(0.56, 0.73, 0.87) * (0.9 + 0.1 * ValueNoise(positionWS.xz * 1.7)), icy * 0.85);
                 // trodden snow: packed and a little greyer, each print bluer and darker than the snow round it
-                float3 pathAlbedo = _PathColor.rgb * (0.94 + 0.06 * ValueNoise(positionWS.xz * 1.3)) * lerp(float3(0.89, 0.92, 0.98), float3(1.0, 1.0, 1.0), smoothstep(0.15, 0.5, trackCavity));
+                float3 pathAlbedo = _PathColor.rgb * (0.94 + 0.06 * ValueNoise(positionWS.xz * 1.3)) * lerp(float3(0.82, 0.87, 0.97), float3(1.0, 1.0, 1.0), smoothstep(0.15, 0.5, trackCavity));
                 float3 snowColor = lerp(lerp(lerp(snowAlbedo, pathAlbedo, path), earth, earthy), rockColor, rock);
                 float3 earthShade = earth * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
                 shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * lerp(float3(1, 1, 1), _ShadeColor.rgb, 0.35) * (ambient * 1.1 + 0.16), rock);      // rock in shade stays grey, not snow-blue

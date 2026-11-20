@@ -541,7 +541,7 @@ public static class WinterIsleDressing
         // winter woodland: mostly bare, dead-looking broadleaf (evergreen gum and banksia read as summer from afar,
         // where only their impostors draw), a few hardy evergreens, and thickets
         string[] woodland = { "SheoakDrooping_Short", "Paperbark_Thicket", "KangarooApple", "HazelPomaderris", "AustralianBlackthorn_Bush", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short" };
-        string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead", "SheoakDrooping", "Blackwood" };
+        string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead_ClosedForest", "SheoakDrooping", "Blackwood", "SheoakSwamp", "Paperbark", "TeatreeCoast_Dead_Tall", "BrownStringybark_Dead_Short" };
         string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath", "HazelPomaderris_Thicket", "Paperbark_Bush", "BushyNeedlewood", "PricklyMoses" };
         string[] tops = { "GrassTree", "GrassTree_Short", "GrassTree_NoFlower", "ButtonGrass", "PricklyMoses", "TreeEverlasting" };
         string[] dead = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "LillyPilly_ForestTall_Dead" };
@@ -576,12 +576,12 @@ public static class WinterIsleDressing
                     // planted, not grown)
                     float grove = Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f);
                     float a = 0.07f * wood + 0.02f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.22f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
-                    if (roll < 0.006f * wood && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
+                    if (roll < 0.016f * wood + 0.004f && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
                     else if (roll < a) Plant(Pick(woodland), p, R(0.6f, 1.0f));
                     else if (roll < b) Plant(Pick(under), p, R(0.6f, 1.1f));
                     else if (roll < c) Plant(Pick(tops), p, R(0.7f, 1.0f));
-                    else if (roll < c + 0.008f + 0.006f * grove) Plant(Pick(dead), p, R(0.5f, 0.9f), 0.25f);
-                    else if (roll < c + 0.018f + 0.022f * grove && s < 0.35f) Plant(Pick(logs), p, R(0.8f, 1.1f), 0.35f);
+                    else if (roll < c + 0.02f + 0.012f * grove) Plant(Pick(dead), p, R(0.5f, 0.9f), 0.25f);
+                    else if (roll < c + 0.04f + 0.03f * grove && s < 0.35f) Plant(Pick(logs), p, R(0.8f, 1.1f), 0.35f);
                 }
             }
 

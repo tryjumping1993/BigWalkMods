@@ -1072,7 +1072,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                                 float downwind = Mathf.Cos(a) * length * 0.5f * (Mathf.Cos(a) > 0f ? 1.45f : 0.6f), sideways = Mathf.Sin(a) * width * 0.5f;
                                 float wobble = 0.85f + 0.3f * Mathf.PerlinNoise(p.x * 0.7f + Mathf.Cos(a) * 1.3f, p.y * 0.7f + Mathf.Sin(a) * 1.3f);
                                 Vector2 q = p + (wind * downwind + cross * sideways) * (t * wobble);
-                                float c = Mathf.Cos(t * Mathf.PI * 0.5f);
+                                float c = Mathf.Max(0f, Mathf.Cos(t * Mathf.PI * 0.5f));      // (never below 0: its square root is taken for a ridge)
                                 if (r == rings) lumpRims[region].Add(lv.Count);
                                 lv.Add(On(q, tall * (ridge ? c * Mathf.Sqrt(c) : c * c) - (r == rings ? 0.02f : 0f)));
                             }
@@ -1102,10 +1102,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             Vector2 at = p + new Vector2(Rs(-0.9f, 0.9f), Rs(-0.9f, 0.9f));
                             Vector3 foot = On(at, -0.04f);
                             int blades = random.Next(10, 19);
-                            float tallest = Rs(0.22f, 0.62f);
+                            float tallest = Rs(0.14f, 0.75f);
                             for (int bl = 0; bl < blades; bl++)
                             {
-                                float a = Rs(0f, Mathf.PI * 2f), lean = Rs(0.1f, 0.7f), tall = tallest * Rs(0.5f, 1f);
+                                float a = Rs(0f, Mathf.PI * 2f), lean = Rs(0.15f, 1.3f), tall = tallest * Rs(0.35f, 1f);
                                 var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                                 var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.008f, 0.018f);
                                 Vector3 root0 = foot + outward * Rs(0f, 0.1f), tip = root0 + Vector3.up * tall + outward * (tall * lean);
@@ -1135,7 +1135,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     else if (roll2 < tuftChance + (wrack ? 0.55f : onSand ? 0.2f : 0.085f * byPath))
                     {
                         // a stone's top showing, its crown catching snow
-                        Stone(mb, p, Rs(0.12f, 0.5f));
+                        Stone(mb, p, Rs(0.06f, 0.17f));      // small: anything bigger is the game's own textured rock
                         stones++;
                     }
                     else if (roll2 < tuftChance + (wrack ? 0.85f : onSand ? 0.32f : 0.105f * byPath))
