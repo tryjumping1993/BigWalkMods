@@ -129,6 +129,14 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         return ski * Mathf.Max(open * (1f - Rib(p)), best);
     }
+    // The middle of run 0, 1 or 2 at a distance from the peak, and its half-width there (the same sums as Piste)
+    public static Vector2 RunCentre(int run, float along, out float half)
+    {
+        float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f) + 0.13f * Mathf.Sin(along / (150f + run * 37f) + run * 2.1f) * Smooth((along - 300f) / 200f);
+        half = 27f + 9f * Mathf.Sin(along / 90f + run * 1.7f);
+        float angle = SkiBearing - centre;      // Piste measures 'off' as bearing minus angle
+        return Peak + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * along;
+    }
     // 1 where the ski face is forest: below the tree line, off the pistes
     public static float SkiForest(Vector2 p, float height) => SkiFace(p) * (1f - Piste(p)) * (1f - Smooth((height - TreeLine + 50f) / 50f)) * Smooth((height - 6f) / 10f);
     static float MountainRadius(Vector2 p) => Mathf.Lerp(SteepRadius, SkiRadius, SkiFace(p));
@@ -1728,6 +1736,55 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 mark.transform.position = new Vector3(at.x, HeightAt(at) + 0.75f, at.y);
             }
             b.MeshPiece("Gear Racks", rackMesh.ToMesh(), gear, false);
+
+            // piste furniture: orange marker poles down both edges of every run, slalom gates down the middle run
+            // (red and blue flags alternately, set to one runSide then the other), a finish arch and a lodge at the foot
+            var furniture = new MeshBuilder();
+            Vector3 Ground3(Vector2 q) => new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z);
+            int markers = 0, gates = 0;
+            for (int run = 0; run < 3; run++)
+                for (float d = 420f; d < SkiRadius - 90f; d += 45f)
+                {
+                    Vector2 runMid = RunCentre(run, d, out float runHalf), runNext = RunCentre(run, d + 6f, out _);
+                    Vector2 runDir = (runNext - runMid).normalized, runSide = new Vector2(runDir.y, -runDir.x);
+                    for (int sgn = -1; sgn <= 1; sgn += 2)
+                    {
+                        Vector2 q = runMid + runSide * (sgn * (runHalf + 4f));
+                        if (!(HeightAt(q) > 3f)) continue;
+                        Kit.AddBox(furniture, Ground3(q), new Vector3(0.07f, 1.7f, 0.07f), new Color(0.95f, 0.45f, 0.08f));
+                        Kit.AddBox(furniture, Ground3(q) + Vector3.up * 1.7f, new Vector3(0.16f, 0.16f, 0.16f), new Color(0.1f, 0.1f, 0.1f));
+                        markers++;
+                    }
+                    if (run == 1 && ((int)(d / 45f) % 2 == 0))
+                    {
+                        // a gate: two poles and a flag between them, to one runSide of the run's middle
+                        int flip = ((int)(d / 90f) % 2 == 0) ? 1 : -1;
+                        Color flag = flip > 0 ? new Color(0.85f, 0.1f, 0.1f) : new Color(0.1f, 0.3f, 0.85f);
+                        Vector2 g0 = runMid + runSide * (flip * runHalf * 0.45f), g1 = g0 + runSide * (flip * 1.6f);
+                        if (!(HeightAt(g0) > 3f)) continue;
+                        float gateYaw = Mathf.Atan2(runSide.x, runSide.y) * Mathf.Rad2Deg;
+                        Kit.AddBox(furniture, Ground3(g0), new Vector3(0.05f, 1.5f, 0.05f), flag);
+                        Kit.AddBox(furniture, Ground3(g1), new Vector3(0.05f, 1.5f, 0.05f), flag);
+                        Kit.AddBox(furniture, Ground3((g0 + g1) * 0.5f) + Vector3.up * 0.95f, new Vector3(0.03f, 0.5f, 1.6f), flag, gateYaw);
+                        gates++;
+                    }
+                }
+            // the finish: an arch across the middle run near its foot, and a lodge beside it
+            {
+                Vector2 runMid = RunCentre(1, SkiRadius - 110f, out float runHalf), runNext = RunCentre(1, SkiRadius - 104f, out _);
+                Vector2 runDir = (runNext - runMid).normalized, runSide = new Vector2(runDir.y, -runDir.x);
+                float archYaw = Mathf.Atan2(runSide.x, runSide.y) * Mathf.Rad2Deg;
+                Kit.AddBox(furniture, Ground3(runMid - runSide * (runHalf * 0.8f)), new Vector3(0.3f, 4.2f, 0.3f), new Color(0.8f, 0.12f, 0.1f));
+                Kit.AddBox(furniture, Ground3(runMid + runSide * (runHalf * 0.8f)), new Vector3(0.3f, 4.2f, 0.3f), new Color(0.8f, 0.12f, 0.1f));
+                Kit.AddBox(furniture, Ground3(runMid) + Vector3.up * 4.2f, new Vector3(0.3f, 0.7f, runHalf * 1.6f + 0.3f), new Color(0.95f, 0.95f, 0.9f), archYaw);
+                Vector2 lodge = runMid + runSide * (runHalf + 22f) + runDir * 10f;
+                float lodgeYaw = Mathf.Atan2(runDir.x, runDir.y) * Mathf.Rad2Deg;
+                Kit.AddBox(furniture, Ground3(lodge) + Vector3.down * 1f, new Vector3(9f, 4.2f, 14f), new Color(0.45f, 0.3f, 0.2f), lodgeYaw);
+                Kit.AddBox(furniture, Ground3(lodge) + Vector3.up * 3.2f, new Vector3(10.4f, 0.5f, 15.4f), new Color(0.3f, 0.2f, 0.16f), lodgeYaw);
+                Kit.AddBox(furniture, Ground3(lodge) + Vector3.up * 3.7f, new Vector3(6.5f, 0.9f, 15.4f), new Color(0.3f, 0.2f, 0.16f), lodgeYaw);
+            }
+            b.MeshPiece("Piste Furniture", furniture.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), false);
+            Debug.Log("[BWM] Winter Isle pistes: " + markers + " marker poles, " + gates + " slalom gates, a finish arch and a lodge");
         }
 
         b.RegisterLand(X0, Z0, Cell, nx, nz, land, blocked);
