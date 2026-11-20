@@ -213,6 +213,7 @@ namespace Bwm
             if (string.IsNullOrEmpty(name) || !name.All(char.IsLetterOrDigit)) throw new Exception("Puzzle names are letters and digits only: '" + name + "'");
             Debug.Log("[BWM] Building " + name);
             EnsureUrp();
+            KeepShaderVariants();
 
             string assetDir = "Assets/Puzzles/" + name;
             if (!AssetDatabase.IsValidFolder("Assets/Puzzles")) AssetDatabase.CreateFolder("Assets", "Puzzles");
@@ -272,10 +273,30 @@ namespace Bwm
             Debug.Log("[BWM] Built " + root.GetComponentsInChildren<Transform>(true).Length + " objects");
 
             AssetDatabase.SaveAssets();
+            CheckShaders(root);
             if (!EditorSceneManager.SaveScene(scene)) throw new Exception("Could not save " + scenePath);
             if (!Flag("-bwmNoPreview")) Preview.Render(root, name, PreviewDir, Mathf.Max(def.Footprint.x, def.Footprint.y) / 2f);
             Check(root);
             if (!Flag("-bwmNoExport")) Export(root);
+        }
+
+        // A shader of ours that does not compile would export and then draw nothing (or pink) in the game
+        static void CheckShaders(GameObject root)
+        {
+            var seen = new HashSet<Shader>();
+            int errors = 0;
+            foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+                foreach (Material m in r.sharedMaterials)
+                {
+                    if (m == null || m.shader == null || !seen.Add(m.shader)) continue;
+                    foreach (ShaderMessage msg in ShaderUtil.GetShaderMessages(m.shader))
+                    {
+                        if (msg.severity != UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error) continue;
+                        errors++;
+                        Debug.LogError("[BWM] Shader " + m.shader.name + ": " + msg.message + " (" + msg.file + ":" + msg.line + ")");
+                    }
+                }
+            if (errors > 0) throw new Exception(errors + " shader error(s)");
         }
 
         // The SDK's own checks (missing pillow, unlinked boards, ...). Any issue stops the build unless -bwmAllowIssues.
@@ -323,6 +344,30 @@ namespace Bwm
             QualitySettings.renderPipeline = asset;
             EditorUtility.SetDirty(asset);
             Debug.Log("[BWM] URP pipeline asset assigned");
+        }
+
+        // Our own shaders are compiled here and run in the game, whose render settings we do not control. Turn on
+        // every lighting feature in our pipeline asset, so URP's variant stripping keeps whichever variant the game
+        // asks for. Stripping itself must stay on: without it the stock Lit shader alone is 221,000 variants.
+        static void KeepShaderVariants()
+        {
+            if (!(GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset asset)) return;
+            var so = new SerializedObject(asset);
+            void Set(string name, Action<SerializedProperty> apply) { SerializedProperty p = so.FindProperty(name); if (p != null) apply(p); }
+            Set("m_MainLightShadowsSupported", p => p.boolValue = true);
+            Set("m_ShadowCascadeCount", p => p.intValue = 4);
+            Set("m_SoftShadowsSupported", p => p.boolValue = true);
+            Set("m_AdditionalLightsRenderingMode", p => p.intValue = 1);      // per pixel
+            Set("m_AdditionalLightShadowsSupported", p => p.boolValue = true);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            var stripping = GraphicsSettings.GetRenderPipelineSettings<UnityEngine.Rendering.ShaderStrippingSetting>();
+            if (stripping != null) stripping.stripRuntimeDebugShaders = true;
+            var urpStripping = GraphicsSettings.GetRenderPipelineSettings<URPShaderStrippingSetting>();
+            if (urpStripping != null)
+            {
+                urpStripping.stripUnusedVariants = true;
+                urpStripping.stripUnusedPostProcessingVariants = true;
+            }
         }
     }
 }

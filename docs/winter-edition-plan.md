@@ -39,13 +39,16 @@ Measured from the game's own world (`world\world-index.tsv`):
 
 ## What is not proven (each is a spike in phase 0)
 
-1. **Custom script logic.** No puzzle has used its own C# yet. About a third of the list below needs it.
+1. **Custom script logic.** Answered 2026-11-20 for local code: a script of ours (the snowfall follower) is
+   exported, loaded by the game and runs. Host-driven shared state through the SDK's synced variables, which
+   the code-heavy puzzles need, is still untried.
 2. **Custom models, textures and sounds.** Only cubes and the game's own parts so far.
 3. **Material artifact.** Flat-colour materials show thin dark grid lines in the game. Cause unknown.
 4. **Snow on everything that is not terrain.** Paths stay red-brown, grass and shrubs stay orange, trees olive,
    rocks brown. Each needs its own treatment (tint, texture swap, or hiding).
-5. **Falling snow, cold light, fog.** The game's sky system (Enviro) has sky, fog, lighting and cloud modules
-   but no weather or particle module, so snowfall must be our own particle effect.
+5. **Falling snow, cold light, fog.** Falling snow is answered 2026-11-20: our own particle effect and flake
+   shader follow each player's camera over the island (`shots\snowfall-player.png`). The sky over the island is
+   still the game's sunny one; an overcast winter sky and light through the game's sky system is not started.
 6. **Multiplayer.** Nothing has been played by two people. State sync is the SDK's job, but untested here.
 7. **Installing on a friend's PC.** No packaging script yet; nobody else has installed any of this.
 8. **Walking on new land.** Standing is proven on the full-size island; nobody has walked the causeway or the
@@ -85,7 +88,8 @@ The island as built:
   search finds flat ground everywhere.
 - Sea level is height 0. Players dropped in the sea float and are not killed, so water is not a wall: puzzles
   cannot rely on the shoreline to keep players in or out.
-- Its surface is a plain placeholder material. The bespoke snow, trees, rocks and snowfall are still to make.
+- Its ground uses our own snow shader (drift relief, blue shadows, glints) and it snows there. Both are first
+  versions that work in game and have had no art pass. Winter trees, rocks, ice and the sky are still to make.
 
 Fallback if new land fails later: the north-west of the island, beyond the big wall near the ending (few base-game
 puzzles there), dressed with the same bespoke snow materials laid over the ground as meshes.

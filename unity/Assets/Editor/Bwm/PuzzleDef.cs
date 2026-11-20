@@ -147,7 +147,9 @@ namespace Bwm
         // Custom geometry: a mesh built in code (land, ramps, anything a box cannot be), saved with the puzzle so
         // it is exported with it. Vertices are in the puzzle's local space, y measured from the root's level.
         // With collider, players can stand on it and bump into it.
-        public Piece MeshPiece(string name, Mesh mesh, Color color, bool collider = true)
+        public Piece MeshPiece(string name, Mesh mesh, Color color, bool collider = true) => MeshPiece(name, mesh, Material(color), collider);
+
+        public Piece MeshPiece(string name, Mesh mesh, Material material, bool collider = true)
         {
             string dir = assetDir + "/Meshes";
             if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder(assetDir, "Meshes");
@@ -158,7 +160,7 @@ namespace Bwm
             var go = new GameObject(name);
             go.transform.SetParent(Root.transform, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = Material(color);
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
             if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
             return new Piece(go);
         }
@@ -170,6 +172,19 @@ namespace Bwm
             Ground.SaveLand(Root.name, worldX0, worldZ0, cell, nx, nz, worldHeights);
         }
 
+        // Adds one of our own runtime scripts (a class in Assets/PuzzleScripts) to a piece. The SDK compiles that
+        // folder into a plugin DLL exported beside the pack; a changed script needs a game restart, not a reload.
+        public Component AddCustomScript(Piece piece, string className)
+        {
+            foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (a.GetName().Name != "WinterWalkScripts") continue;
+                Type t = a.GetType(className);
+                if (t != null) return piece.Go.AddComponent(t);
+            }
+            throw new Exception("No script class '" + className + "' in Assets/PuzzleScripts");
+        }
+
         // Adds an SDK "Add Component" script (PuzzleHider, PuzzlePressInOrder, PuzzleItem, ...) to a piece
         public Component AddScript(Piece piece, string type) => piece.Go.AddComponent(Sdk.T(type));
 
@@ -177,6 +192,33 @@ namespace Bwm
         public void DebugTeleport(float x, float z, float height = 1.5f)
         {
             Sdk.Set(Puzzle, "debugTeleport", Empty("Debug Teleport", x, z, height).Transform);
+        }
+
+        // A material using one of our own shaders (Assets/Shaders), saved with the puzzle. The game has no shader
+        // of that name, so the pack carries it; 'setup' sets its properties. Rebuilt on every build.
+        public Material ShaderMaterial(string shaderName, string materialName, Action<Material> setup = null)
+        {
+            Shader shader = Shader.Find(shaderName);
+            if (shader == null) throw new Exception("Shader not found: " + shaderName + " (it should be in Assets/Shaders)");
+            string dir = assetDir + "/Materials";
+            if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder(assetDir, "Materials");
+            string path = dir + "/" + materialName + ".mat";
+            Material m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null)
+            {
+                m = new Material(shader);
+                AssetDatabase.CreateAsset(m, path);
+            }
+            else
+            {
+                m.shader = shader;
+                var defaults = new Material(shader);
+                m.CopyPropertiesFromMaterial(defaults);
+                UnityEngine.Object.DestroyImmediate(defaults);
+            }
+            setup?.Invoke(m);
+            EditorUtility.SetDirty(m);
+            return m;
         }
 
         // A plain URP material of this colour, saved with the puzzle so it is exported with it

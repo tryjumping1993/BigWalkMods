@@ -37,6 +37,69 @@ public sealed class WinterIslePuzzle : PuzzleDef
         return (f + Smooth((t - f - 0.5f) * 2f)) * 2f;
     }
 
+    // Falling snow: one particle emitter that a small script keeps over each player's camera while they are on or
+    // near the island. Flakes drift on a light wind with a wandering flutter, and live in world space so that
+    // walking does not drag them along.
+    void Snowfall(PuzzleBuilder b)
+    {
+        Piece fall = b.Empty("Snowfall", 0f, 0f, 0f, false);
+        ParticleSystem ps = fall.Go.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule main = ps.main;
+        main.loop = true;
+        main.playOnAwake = true;
+        main.prewarm = true;
+        main.duration = 10f;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(6f, 9f);
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.075f);
+        main.startColor = new Color(1f, 1f, 1f, 0.92f);
+        main.gravityModifier = 0f;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 9000;
+        main.scalingMode = ParticleSystemScalingMode.Shape;
+
+        ParticleSystem.EmissionModule emission = ps.emission;
+        emission.enabled = true;
+        emission.rateOverTime = 1100f;
+
+        ParticleSystem.ShapeModule shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(46f, 1f, 46f);
+
+        ParticleSystem.VelocityOverLifetimeModule velocity = ps.velocityOverLifetime;
+        velocity.enabled = true;
+        velocity.space = ParticleSystemSimulationSpace.World;
+        velocity.x = new ParticleSystem.MinMaxCurve(0.5f, 1.3f);       // the wind
+        velocity.y = new ParticleSystem.MinMaxCurve(-2.6f, -1.5f);     // falling
+        velocity.z = new ParticleSystem.MinMaxCurve(-0.2f, 0.5f);
+
+        ParticleSystem.NoiseModule noise = ps.noise;
+        noise.enabled = true;
+        noise.strength = 0.55f;
+        noise.frequency = 0.3f;
+        noise.scrollSpeed = 0.25f;
+        noise.octaveCount = 2;
+
+        ParticleSystem.ColorOverLifetimeModule fade = ps.colorOverLifetime;
+        fade.enabled = true;
+        var gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+            new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(1f, 0.85f), new GradientAlphaKey(0f, 1f) });
+        fade.color = gradient;
+
+        ParticleSystemRenderer renderer = fall.Go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Billboard;
+        renderer.sharedMaterial = b.ShaderMaterial("BWM/Snowflake", "Snowflake");
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+
+        Component follow = b.AddCustomScript(fall, "SnowfallFollow");
+        Sdk.Set(follow, "areaCentre", new Vector3((X0 + X1) / 2f, 0f, (Z0 + Z1) / 2f));
+        Sdk.Set(follow, "areaSize", new Vector3(X1 - X0, 0f, Z1 - Z0));
+    }
+
     public override void Build(PuzzleBuilder b)
     {
         Vector3 root = b.Root.transform.position;      // on the sea floor, at the box's centre
@@ -130,7 +193,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         mesh.SetTriangles(tris, 0);
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
-        b.MeshPiece("Island", mesh, Snow);
+        b.MeshPiece("Island", mesh, b.ShaderMaterial("BWM/Snow", "Snow"));
         b.RegisterLand(X0, Z0, Cell, nx, nz, land);
 
         // 4. Causeway from the mainland shore to the nearest solid point of the island
@@ -146,6 +209,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Vector2 run = ShorePoint - landing, mid = (ShorePoint + landing) / 2f;
         float yaw = Mathf.Atan2(run.x, run.y) * Mathf.Rad2Deg;
         b.Box("Causeway", mid.x - root.x, mid.y - root.z, new Vector3(7f, 3.2f, run.magnitude + 24f), PackedSnow, -2.2f - root.y, yaw, false);
+
+        Snowfall(b);
 
         b.Empty("Debug Teleport", topAt.x - root.x, topAt.y - root.z, top + 2f - root.y, false);
         Sdk.Set(b.Puzzle, "debugTeleport", b.Root.transform.Find("Debug Teleport"));

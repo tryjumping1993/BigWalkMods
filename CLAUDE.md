@@ -70,8 +70,17 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   them under a parent with `PuzzleSoundProof`.
 - A `Puzzle`-type puzzle needs one Gourd Vice (or Box), one Pillow and a Start Switch. The SDK's checks run
   on every build and fail it; they also reject wiring where start and stop do the same thing to a part.
-- Custom runtime logic goes in `unity\Assets\PuzzleScripts\` (the SDK compiles that folder into a plugin DLL
-  beside the pack). Only the host changes state; use the SDK's `Synced*` variables. Not exercised yet.
+- Custom runtime code goes in `unity\Assets\PuzzleScripts\` (assembly `WinterWalkScripts`); add a class to a
+  piece with `b.AddCustomScript(piece, "ClassName")` and set its `[SerializeField]` fields with `Sdk.Set`. The
+  SDK exports the folder as `WinterWalkScripts.dll` beside the packs, and the game loads it as a plugin.
+  `SnowfallFollow.cs` is the working example. A changed script needs a game restart (`game quit`, then
+  `play`), not a reload. Only the host should change shared state (the SDK's `Synced*` variables); that part
+  is not exercised yet.
+- Our own shaders live in `unity\Assets\Shaders\` and are used through `b.ShaderMaterial("BWM/Name", "File")`,
+  which resets the material to the shader's defaults on every build. `BwmSnow.shader` (ground) and
+  `BwmSnowflake.shader` (particles) are the examples. The lit pass must be tagged
+  `"LightMode" = "UniversalForwardOnly"`: the game renders deferred, and a pass tagged `UniversalForward`
+  draws nothing there. A build fails on shader compile errors.
 - The first build finds the nearest flat, clear ground to the spawn rooms that is not near another puzzle and
   remembers it in `Assets\Puzzles\<Name>\site.json`; edit that file, or override `FixedSite` / `Near` / `Yaw`.
 
@@ -93,6 +102,9 @@ the user and friends, who must all have the same packs and SDK version.
   install another version (it defaults to C:, which is nearly full).
 - **Steam:** the game launches through Steam. If Steam shows "Refresh Sign In", nothing starts until the
   user signs in.
+- **Shader variants:** never turn URP's variant stripping off to "be safe". The stock Lit shader alone becomes
+  221,000 variants and the build runs for hours. `Cli.KeepShaderVariants` enables the lighting features in our
+  pipeline asset instead, so stripping keeps the variants the game may ask for.
 - **Do not `Start-Process -Wait` Unity:** it also waits for Unity's compiler server, which lingers for minutes.
 - **Stripped engine methods:** the game is IL2CPP, so engine methods it never calls are missing. In the
   companion prefer the generic forms (`FindObjectOfType<T>()`), and test each new call live.
@@ -105,6 +117,12 @@ the user and friends, who must all have the same packs and SDK version.
 - **Game folder:** only `winhttp.dll`, `.doorstop_version` and `doorstop_config.ini` (enabled = false,
   absolute paths into `profile\`) were added to `G:\SteamLibrary\steamapps\common\Big Walk`.
 - **Disk:** C: is nearly full. Unity, its caches and this repo are on Z:; keep it that way.
+
+## Git
+
+The repo is private on GitHub (`origin`). The user has given standing permission to commit and push whenever
+the work forms a meaningful commit (a feature working in game, a spike answered, notes updated); do not ask
+each time, and do not commit broken or half-built states.
 
 ## Known open problems
 
