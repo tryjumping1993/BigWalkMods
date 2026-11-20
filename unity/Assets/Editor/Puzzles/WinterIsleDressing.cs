@@ -125,7 +125,8 @@ public static class WinterIsleDressing
     static float Rock(string kind, Vector2 p, float ground, float diameter, float sink, float snow, float tilt = 8f, bool onTerrain = true, bool block = true)
     {
         if (!catalog.TryGetValue(kind, out Kind k)) throw new Exception("No '" + kind + "' in world\\catalog.tsv");
-        if (onTerrain && diameter > 2.5f && land.Forest(p) > 0.4f) return ground;      // the forest between the ski runs is trees, not a boulder field
+        if (onTerrain && diameter > 2.5f && land.Forest(p) > 0.4f) return ground;
+        if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.Piste(p) > 0.15f) return ground;      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
             // never float: the rock's bottom goes below the lowest ground under it, deeper on a slope
@@ -433,12 +434,15 @@ public static class WinterIsleDressing
                 float inGrove = Mathf.Max(Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 200f) / 60f)), forest);
                 // glades: open ground inside a grove, a few tens of metres across
                 if (forest < 0.5f && inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
+                // the ski forest has glades too, larger and fewer, and clumps rather than an even stand
+                if (forest >= 0.5f && Mathf.PerlinNoise(p.x * 0.013f + 17.7f, p.y * 0.013f + 61.3f) > 0.68f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
                 float chance = inGrove * 0.9f * thick + 0.015f + edge;
                 if (R(0f, 1f) > chance || !l.Free(p, 1.5f) || InsideRock(p, 1.2f)) continue;
                 float tallness = Mathf.Lerp(4.5f, 13.5f, Mathf.Clamp01(inGrove * R(0.55f, 1.15f))) * (h > 40f ? 0.8f : 1f);
+                tallness *= Mathf.Lerp(1f, 0.4f, Smooth01((h - (WinterIslePuzzle.TreeLine - 170f)) / 170f));      // stunted towards the tree line
                 bool young = edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f;      // saplings feather the edges and grow among the old trees
                 // beside a path a grown fir's boughs would hang across it (and through a walker's eyes): there it is a
                 // pine, its crown overhead, or a sapling

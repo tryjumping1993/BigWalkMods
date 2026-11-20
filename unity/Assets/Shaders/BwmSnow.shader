@@ -346,12 +346,18 @@ Shader "BWM/Snow"
                 float calm = lerp(0.55, 1.15, ValueNoise(positionWS.xz * 0.021 + 13.0));
                 float pressed = smoothstep(0.008, 0.03, -trail), bank = smoothstep(0.004, 0.02, trail) * snowy;
                 float relief = (1.0 - path * 0.85) * (1.0 - pressed * 0.8) * (1.0 - icy * 0.92) * snowy;
+                // groomed piste (a negative 'under.x'): the wind's relief rolled flat, and corduroy running down the fall line
+                float groomed = saturate(-i.under.x) * snowy;
+                relief *= 1.0 - groomed * 0.75;
+                float3 acrossFall = normalize(float3(-ground.z, 0, ground.x) + float3(1e-4, 0, 0));
+                float cordFade = saturate(1.0 - distance(positionWS, _WorldSpaceCameraPos) / 70.0);
+                float cord = sin(dot(positionWS, acrossFall) * (6.2831853 / 0.42)) * groomed * cordFade;
                 float2 tilt = _DriftStrength * float2(h0 - hx, h0 - hz)
                     + _WindStrength * calm * (windN.xy + farN.xy * 0.5)
                     + _GrainStrength * grainN.xy * grainFade;
                 tilt += grainN.xy * bank * 1.5;      // the heaped banks are loose and lumpy
                 float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * (sand * 0.45)
-                    + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy);
+                    + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.75));
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));

@@ -300,5 +300,13 @@ and finished assets for the puzzles.
   `docs\reference\mantrip.jpg` (a long, very low, open white personnel carrier on four road wheels, flat decks
   front and back, a sunken blue seating well in the middle with a chain along each side). Not started; nothing
   about how a tunnel under a heightfield island would be built, lit or driven has been tried yet.
-- Order of work as of this note: the great mountain (first pass in game), then the gondola, skiing and
-  snowboarding, the towers, the mine, and last the rework of trees and ground and a fresh review.
+- **Built since** (2026-11-20, in game unless noted): the great mountain (summit about 595 m, three pistes through
+  forest on its east face); the gondola (ridden end to end by a seated test player); skiing and snowboarding
+  (`SkiDriver`); the coal mine (`WinterIsleMine.cs`: hall, three tunnels, cross-cuts, track, eight mantrips
+  modelled on the reference, gates); the mine tower beside the east portal; Downhill, a timed race from the summit
+  to the finish arch with the game's timer ball. Not tried by a real player: picking gear off the racks, steering
+  on skis with a controller, pressing the towers' buttons, anything with two players.
+- **Towers as built:** one SDK tower list in The Tree's pack: the tree's five plinths (the gondola), the mine
+  tower's five (the mine), the summit's twenty. The SDK shows one plinth per puzzle loaded, so the mine needs
+  ten island puzzles and the summit thirty; five are built (Glass Booth, Light the Tree, Bell Ringers, Snowman,
+  Downhill).

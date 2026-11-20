@@ -3,8 +3,7 @@
 The Winter Isle is judged against the base game's island by a fresh agent reading matched screenshots.
 
 - `review-shots.sh [orig|winter|both]` (Git Bash, with the game running: `bwm.ps1 play`) takes an aerial, a mid
-  shot, eight eye-level shots and one shore shot of each island into `shots
-eview\`, and contact sheets into
+  shot, eight eye-level shots and one shore shot of each island into `shots\review\`, and contact sheets into
   `shots\sheets\`. Eye-level shots: the player is set down on the ground at each point (the base island's points
   are in `review-viewpoints.txt`; the Winter Isle's are twelve spread through `world\winter-viewpoints.tsv`, which
   its build writes along the trails), and the shot is taken from the game camera's own position, looking level
@@ -33,6 +32,7 @@ Rounds so far (original / winter):
 | 8 | 9/7 | 9/5 | 9/7 | 9/5 | 8/6 | 7/6 | landform, rocks, paths |
 | 9 | 9/7 | 9/5 | 9/6 | 10/5 | 8/7 | 7/6 | landform, coast, paths |
 | 10 | 9/7 | 9/5 | 9/7 | 9/5 | 8/6 | 7/6 | landform, rocks, paths |
+| 11 | 9/7 | 9/6 | 9/6 | 10/5 | 8/6 | 8/7 | landform, rocks (just), paths |
 
 What each round's gaps led to is in the git log. Things the reviewer has asked for more than once: clutter lying
 on the snow, dense woods a walker is inside of, a shore that is not raw terrain, peaks that are not smooth cones.
@@ -42,3 +42,18 @@ round). What the reviewers name each time is a difference of kind, not amount: o
 with untextured trunks beside the game's textured trees, the snow is one material where the base island's ground
 changes every few metres, and every winter eye shot is under open sky where the base island's are inside woods.
 More scatter does not move those scores. Rocks and coast flip between 6 and 7 with the reviewer.
+
+Round 11 (after the great mountain, 28 woods and bark on the trunks) named: card boughs with sawtooth edges and no
+understorey in the woods; bare-ground patches that are a blurred texture under a hard mask; a flat, untextured beach
+with a straight waterline; no walker-sized rock inland; the same recipe everywhere.
+
+## The mountain
+
+The great mountain has its own review, since the base game has no ski mountain to set beside it: `mountain-shots.sh`
+takes twelve fixed views into `shots/mountain/` (run it a minute or more after `play`, so the dressing has loaded),
+and a fresh agent follows `mountain-brief.md`: seven scores and a strict yes or no on "does it look like a realistic
+ski slope". The terrain reviewer's brief is `brief.md`.
+
+| Round | Shape | Ski face | Pistes | Forest | Rock | Furniture | Snow | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 4 | 3 | 4 | 4 | 5 | 3 | 5 | NO |

@@ -548,37 +548,74 @@ public static class WinterIsleMine
         Piece walls = b.MeshPiece("Mine Walls", solid.ToMesh(), mineMaterial);
         walls.Go.GetComponent<MeshRenderer>().enabled = false;
 
-        // ---- the mantrips: low yellow man-cars with a canopy and two benches. Built facing +z, the rail's top at
-        //      the origin; Winter Walk moves them (MineDriver) ----
+        // ---- the mantrips, after the user's reference (docs/reference/mantrip.jpg): a long, very low white carrier on
+        //      four road wheels, a broad flat deck at the nose and a shorter one at the tail, a sunken blue well
+        //      between with black seats and a steering wheel, and a chain on short posts along each side. Built
+        //      facing +z; the origin is the rail's top (the wheels stand on the floor either side of the track).
+        //      Winter Walk moves them (MineDriver) ----
         {
             var car = new MeshBuilder();
             var glow = new MeshBuilder();
-            Color yellow = new Color(0.96f, 0.74f, 0.08f), dark = new Color(0.14f, 0.14f, 0.16f), seatColor = new Color(0.3f, 0.22f, 0.16f);
-            Kit.AddBox(car, new Vector3(0f, 0.3f, 0f), new Vector3(1.5f, 0.22f, 4.6f), yellow);
+            Color white = new Color(0.93f, 0.93f, 0.9f), blue = new Color(0.14f, 0.22f, 0.78f), black = new Color(0.07f, 0.07f, 0.08f), chain = new Color(0.62f, 0.63f, 0.66f);
+            const float Down = -0.17f;      // the floor, below the rail's top
+            void Wheel(Vector3 centre, float radius, float width, Color color)
+            {
+                const int Sides = 12;
+                for (int k = 0; k < Sides; k++)
+                {
+                    float a0 = 2f * Mathf.PI * k / Sides, a1 = 2f * Mathf.PI * (k + 1) / Sides;
+                    Vector3 r0 = new Vector3(0f, Mathf.Sin(a0), Mathf.Cos(a0)) * radius, r1 = new Vector3(0f, Mathf.Sin(a1), Mathf.Cos(a1)) * radius;
+                    Vector3 l = Vector3.left * (width / 2f), r = Vector3.right * (width / 2f);
+                    car.Quad(centre + l + r0, centre + r + r0, centre + r + r1, centre + l + r1, color);
+                    car.Quad(centre + l + r1, centre + r + r1, centre + r + r0, centre + l + r0, color);
+                    car.Tri(centre + l, centre + l + r0, centre + l + r1, color); car.Tri(centre + l, centre + l + r1, centre + l + r0, color);
+                    car.Tri(centre + r, centre + r + r1, centre + r + r0, color); car.Tri(centre + r, centre + r + r0, centre + r + r1, color);
+                }
+            }
             foreach (int sx in new[] { -1, 1 })
                 foreach (int sz in new[] { -1, 1 })
-                    Kit.AddBox(car, new Vector3(sx * 0.45f, 0f, sz * 1.5f), new Vector3(0.12f, 0.44f, 0.44f), dark);
-            foreach (int sz in new[] { -1, 1 })
-            {
-                Kit.AddBox(car, new Vector3(0f, 0.52f, sz * 1.95f), new Vector3(1.5f, 0.7f, 0.7f), yellow * 0.95f);
-                Kit.AddBox(car, new Vector3(0f, 0.3f, sz * 2.36f), new Vector3(1.2f, 0.3f, 0.14f), dark);                 // buffer
-                foreach (int sx in new[] { -1, 1 })
-                    Kit.AddGlow(glow, new Vector3(sx * 0.45f, 0.98f, sz * 2.31f), new Vector3(0.2f, 0.2f, 0.04f), 0f, new Color(1f, 0.9f, 0.65f), 0.3f);
-                Kit.AddBox(car, new Vector3(0f, 0.52f, sz * 1.5f), new Vector3(1.5f, 0.12f, 0.2f), dark);
-            }
-            foreach (float bz in new[] { -0.75f, 0.55f })
-            {
-                Kit.AddBox(car, new Vector3(0f, 0.52f, bz), new Vector3(1.34f, 0.4f, 0.46f), seatColor);
-                Kit.AddBox(car, new Vector3(0f, 0.92f, bz - 0.27f), new Vector3(1.34f, 0.5f, 0.08f), seatColor * 0.9f);
-            }
+                {
+                    var hub = new Vector3(sx * 0.86f, Down + 0.36f, sz * 1.95f);
+                    Wheel(hub, 0.36f, 0.26f, black);
+                    Wheel(hub + Vector3.right * sx * 0.04f, 0.2f, 0.24f, white);
+                }
+            // the nose: a broad deck over the front axle, drawn in to a blunt point; the tail: a shorter deck
+            Kit.AddBox(car, new Vector3(0f, Down + 0.66f, 1.85f), new Vector3(1.96f, 0.1f, 1.3f), white);
+            Kit.AddBox(car, new Vector3(0f, Down + 0.66f, 2.62f), new Vector3(1.6f, 0.1f, 0.26f), white);
+            Kit.AddBox(car, new Vector3(0f, Down + 0.66f, 2.84f), new Vector3(1.05f, 0.1f, 0.2f), white);
+            Kit.AddBox(car, new Vector3(0f, Down + 0.26f, 1.9f), new Vector3(1.2f, 0.4f, 1.5f), white * 0.9f);
+            Kit.AddBox(car, new Vector3(0f, Down + 0.66f, -2.05f), new Vector3(1.96f, 0.1f, 0.95f), white);
+            Kit.AddBox(car, new Vector3(0f, Down + 0.26f, -2.05f), new Vector3(1.2f, 0.4f, 0.95f), white * 0.9f);
+            // the well: a blue floor slung low between the axles, white sides with a blue stripe
+            Kit.AddBox(car, new Vector3(0f, Down + 0.16f, -0.2f), new Vector3(1.8f, 0.1f, 2.8f), blue);
             foreach (int sx in new[] { -1, 1 })
             {
-                foreach (float pz in new[] { -1.55f, 0f, 1.55f })
-                    Kit.AddBox(car, new Vector3(sx * 0.7f, 0.52f, pz), new Vector3(0.07f, 1.7f, 0.07f), dark);
-                Kit.AddBox(car, new Vector3(sx * 0.72f, 0.52f, 0f), new Vector3(0.06f, 0.42f, 3.2f), yellow * 0.9f);      // low side rail
-                Kit.AddBox(car, new Vector3(sx * 0.72f, 1.05f, -1.05f), new Vector3(0.05f, 0.06f, 1f), dark);            // grab rails
+                Kit.AddBox(car, new Vector3(sx * 0.93f, Down + 0.16f, -0.2f), new Vector3(0.1f, 0.5f, 2.8f), white);
+                Kit.AddBox(car, new Vector3(sx * 0.985f, Down + 0.5f, -0.2f), new Vector3(0.02f, 0.09f, 2.8f), blue);
+                foreach (float pz in new[] { -1.55f, -0.2f, 1.15f })
+                    Kit.AddBox(car, new Vector3(sx * 0.93f, Down + 0.66f, pz), new Vector3(0.05f, 0.42f, 0.05f), white);
+                foreach (float cz in new[] { -0.875f, 0.475f })
+                {
+                    Kit.AddBox(car, new Vector3(sx * 0.93f, Down + 0.94f, cz - 0.33f), new Vector3(0.03f, 0.03f, 0.68f), chain);
+                    Kit.AddBox(car, new Vector3(sx * 0.93f, Down + 0.97f, cz + 0.33f), new Vector3(0.03f, 0.03f, 0.68f), chain);
+                }
             }
-            Kit.AddBox(car, new Vector3(0f, 2.2f, 0f), new Vector3(1.62f, 0.08f, 3.5f), yellow);
+            Kit.AddBox(car, new Vector3(0f, Down + 0.26f, 1.16f), new Vector3(1.8f, 0.4f, 0.1f), white);            // the well's ends
+            Kit.AddBox(car, new Vector3(0f, Down + 0.26f, -1.56f), new Vector3(1.8f, 0.4f, 0.1f), white);
+            foreach (float bz in new[] { -0.95f, 0.25f })
+                foreach (int sx in new[] { -1, 1 })
+                {
+                    Kit.AddBox(car, new Vector3(sx * 0.42f, Down + 0.26f, bz), new Vector3(0.56f, 0.2f, 0.5f), black);
+                    Kit.AddBox(car, new Vector3(sx * 0.42f, Down + 0.46f, bz - 0.27f), new Vector3(0.56f, 0.46f, 0.1f), black);
+                }
+            Kit.AddBox(car, new Vector3(-0.42f, Down + 0.26f, 0.9f), new Vector3(0.05f, 0.62f, 0.05f), black);            // the steering column and wheel
+            Wheel(new Vector3(-0.42f, Down + 0.9f, 0.86f), 0.17f, 0.04f, black);
+            Kit.AddBox(car, new Vector3(0.5f, Down + 0.76f, 1.5f), new Vector3(0.3f, 0.16f, 0.2f), new Color(0.85f, 0.12f, 0.1f));      // the red box on the deck
+            foreach (int sx in new[] { -1, 1 })
+            {
+                Kit.AddGlow(glow, new Vector3(sx * 0.4f, Down + 0.46f, 2.66f), new Vector3(0.2f, 0.14f, 0.04f), 0f, new Color(1f, 0.92f, 0.7f), 0.3f);
+                Kit.AddGlow(glow, new Vector3(sx * 0.45f, Down + 0.46f, -2.535f), new Vector3(0.16f, 0.1f, 0.04f), 0f, new Color(1f, 0.15f, 0.1f), 0.6f);
+            }
             Mesh carMesh = b.SaveMesh("Mantrip", car.ToMesh());
             Mesh glowMesh = b.SaveMesh("Mantrip Lamps", glow.ToMesh());
             Material carMaterial = b.ShaderMaterial("BWM/Snowy", "Mantrip", m => m.SetFloat("_SnowLine", 2f));
@@ -600,12 +637,12 @@ public static class WinterIsleMine
                 lampsGo.AddComponent<MeshFilter>().sharedMesh = glowMesh;
                 lampsGo.AddComponent<MeshRenderer>().sharedMaterial = glowMaterial;
                 int seatNumber = 0;
-                foreach (float bz in new[] { -0.75f, 0.55f })
+                foreach (float bz in new[] { -0.95f, 0.25f })
                     foreach (int sx in new[] { -1, 1 })
                     {
                         var seat = new Piece(new GameObject("Seat " + (++seatNumber)));
                         seat.Transform.SetParent(trip.transform, false);
-                        seat.Transform.localPosition = new Vector3(0.36f * sx, 0.98f, bz + 0.04f);
+                        seat.Transform.localPosition = new Vector3(0.42f * sx, -0.17f + 0.52f, bz + 0.04f);
                         b.AddScript(seat, "PuzzleSeat");
                         seat.Set("PuzzleSeat", "pose", sx < 0 ? 12 : 13);      // ChairliftLeft, ChairliftRight
                         seat.Set("PuzzleSeat", "clickSize", new Vector3(0.6f, 0.7f, 0.6f));

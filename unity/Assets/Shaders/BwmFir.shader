@@ -124,7 +124,12 @@ Shader "BWM/Fir"
                 float depth = i.color.a;      // 1 at the crown's surface, 0 deep inside by the trunk
 
                 float3 needles = tex.rgb * i.color.rgb;
-                float3 albedo = bark ? _BarkColor.rgb * (0.8 + 0.4 * Noise3(positionWS * float3(8, 1.5, 8))) : needles * lerp(0.45, 1.0, depth);
+                // bark: plates with dark furrows running up the trunk, paler and darker lengths, and patches of grey lichen
+                float furrow = smoothstep(0.34, 0.6, Noise3(positionWS * float3(21, 0.9, 21)) * 0.75 + Noise3(positionWS * float3(47, 2.6, 47)) * 0.25);
+                float plate = Noise3(positionWS * float3(5, 3.2, 5));
+                float3 barkColor = _BarkColor.rgb * lerp(0.42, 1.12, furrow) * (0.78 + 0.44 * plate);
+                barkColor = lerp(barkColor, float3(0.56, 0.6, 0.52), 0.65 * smoothstep(0.68, 0.82, Noise3(positionWS * float3(2.6, 1.7, 2.6) + 7.3)) * furrow);
+                float3 albedo = bark ? barkColor : needles * lerp(0.45, 1.0, depth);
                 if (core) albedo = i.color.rgb * float3(0.05, 0.13, 0.07) * (0.8 + 0.4 * Noise3(positionWS * 2.0));
 
                 // Snow: on what faces up, clumped by noise, thickest on the outer parts of the boughs; its edge follows
@@ -135,7 +140,8 @@ Shader "BWM/Fir"
                 BwmSnowDetail detail = BwmSnowDetailOn(positionWS, viewDistance, 4.0);
                 float clumps = Noise3(positionWS * 1.7) * 0.6 + Noise3(positionWS * 6.0) * 0.4;
                 float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + (clumps - 0.5) * 0.9 + (detail.cavity - 0.5) * 0.3) * smoothstep(0.15, 0.6, depth);
-                if (bark) snow *= smoothstep(0.6, 0.9, n.y);
+                // on a trunk: what lies on top, and snow the wind has plastered up one side
+                if (bark) snow = max(snow * smoothstep(0.6, 0.9, n.y), 0.8 * smoothstep(0.78, 0.92, dot(n, normalize(float3(0.72, 0.2, 0.66))) + (clumps - 0.5) * 0.5) * smoothstep(0.45, 0.6, Noise3(positionWS * float3(4, 1.1, 4) + 3.1)));      // in broken patches, never the whole trunk
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
