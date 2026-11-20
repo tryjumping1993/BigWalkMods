@@ -34,6 +34,7 @@ namespace WinterWalk
             Tracks = Config.Bind("General", "SnowTracks", true, "Players leave tracks in the Winter Isle's snow.");
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
             ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
+            ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
@@ -41,6 +42,7 @@ namespace WinterWalk
             go.AddComponent<SkyDriver>();
             go.AddComponent<Dresser>();
             go.AddComponent<SnowTrails>();
+            go.AddComponent<SkiDriver>();
             go.AddComponent<GondolaDriver>();
             L.LogInfo("Winter Walk loaded");
         }

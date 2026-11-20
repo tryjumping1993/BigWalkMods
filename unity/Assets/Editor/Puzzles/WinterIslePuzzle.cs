@@ -1634,6 +1634,102 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Debug.Log("[BWM] Winter Isle gondola: " + Sdk.F(length) + " m, " + (spans - 1) + " pylons, cable from " + Sdk.F(line[0].y) + " to " + Sdk.F(line[spans].y) + " m, " + GondolaCabins + " cabins");
         }
 
+        // 12. The pistes' surface: an unseen sheet a hand's breadth over the snow of the three runs and the bowl, with
+        //     no friction at all, so that anyone who steps onto a piste slides down it. (A spike: whether the game's
+        //     player slides on it is to be seen in the game.)
+        {
+            var sheet = new List<Vector3>();
+            var sheetTris = new List<int>();
+            var corner = new Dictionary<int, int>();
+            int Corner(int k)
+            {
+                if (corner.TryGetValue(k, out int at)) return at;
+                Vector2 p = At(k);
+                corner[k] = sheet.Count;
+                sheet.Add(new Vector3(p.x - root.x, height[k] + 0.08f - root.y, p.y - root.z));
+                return corner[k];
+            }
+            for (int j = 0; j < nz; j++)
+                for (int i = 0; i < nx; i++)
+                {
+                    int k = j * row + i;
+                    if (!Whole(i, j) || !(height[k] > 4f) || Piste(At(k) + new Vector2(Cell, Cell) * 0.5f) < 0.7f) continue;
+                    int a = Corner(k), bb = Corner(k + 1), c = Corner(k + row), d = Corner(k + row + 1);
+                    sheetTris.Add(a); sheetTris.Add(c); sheetTris.Add(bb);
+                    sheetTris.Add(bb); sheetTris.Add(c); sheetTris.Add(d);
+                }
+            var sheetMesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            sheetMesh.SetVertices(sheet);
+            sheetMesh.SetTriangles(sheetTris, 0);
+            sheetMesh.RecalculateBounds();
+            sheetMesh = b.SaveMesh("Piste Sheet", sheetMesh);
+            var slick = new PhysicsMaterial("Piste") { dynamicFriction = 0f, staticFriction = 0f, bounciness = 0f, frictionCombine = PhysicsMaterialCombine.Minimum, bounceCombine = PhysicsMaterialCombine.Minimum };
+            UnityEditor.AssetDatabase.DeleteAsset("Assets/Puzzles/WinterIsle/Piste.physicMaterial");
+            UnityEditor.AssetDatabase.CreateAsset(slick, "Assets/Puzzles/WinterIsle/Piste.physicMaterial");
+            var sheetGo = new GameObject("Piste Sheet");
+            sheetGo.transform.SetParent(b.Root.transform, false);
+            MeshCollider sheetCollider = sheetGo.AddComponent<MeshCollider>();
+            sheetCollider.sharedMesh = sheetMesh;
+            sheetCollider.sharedMaterial = slick;
+            Debug.Log("[BWM] Winter Isle pistes: " + (sheetTris.Count / 6 * Cell * Cell / 10000f).ToString("0.0") + " ha of run");
+        }
+
+        // 13. Ski gear: a pair of skis and a snowboard as models that Winter Walk hangs under a player (SkiDriver),
+        //     and two racks by the top station: walking up to one puts that gear on.
+        {
+            Material gear = b.ShaderMaterial("BWM/Snowy", "Gear", m => m.SetFloat("_SnowLine", 2f));
+            var gearModels = new GameObject("Gear Models");
+            gearModels.transform.SetParent(b.Root.transform, false);
+            // a ski: a long thin plank, its tip turned up; the board: one wide plank, both ends turned up
+            void Plank(MeshBuilder mb, Vector3 mid, float length, float width, Color color, bool bothEnds)
+            {
+                const int parts = 8;
+                for (int i = 0; i < parts; i++)
+                {
+                    float t0 = (float)i / parts, t1 = (float)(i + 1) / parts;
+                    float Lift(float t) => 0.14f * Mathf.Pow(Mathf.Clamp01((t - 0.82f) / 0.18f), 2f) + (bothEnds ? 0.14f * Mathf.Pow(Mathf.Clamp01((0.18f - t) / 0.18f), 2f) : 0f);
+                    float w0 = width * (0.5f - 0.12f * Mathf.Sin(t0 * Mathf.PI)), w1 = width * (0.5f - 0.12f * Mathf.Sin(t1 * Mathf.PI));
+                    Vector3 a = mid + new Vector3(-w0, Lift(t0), (t0 - 0.5f) * length), bb = mid + new Vector3(w0, Lift(t0), (t0 - 0.5f) * length);
+                    Vector3 c = mid + new Vector3(-w1, Lift(t1), (t1 - 0.5f) * length), d = mid + new Vector3(w1, Lift(t1), (t1 - 0.5f) * length);
+                    mb.Quad(a, c, d, bb, color);                                               // the top
+                    mb.Quad(a + Vector3.down * 0.02f, bb + Vector3.down * 0.02f, d + Vector3.down * 0.02f, c + Vector3.down * 0.02f, color * 0.6f);      // the sole
+                }
+            }
+            var skis = new MeshBuilder();
+            Plank(skis, new Vector3(-0.13f, 0f, 0.1f), 1.25f, 0.09f, new Color(0.85f, 0.12f, 0.1f), false);
+            Plank(skis, new Vector3(0.13f, 0f, 0.1f), 1.25f, 0.09f, new Color(0.85f, 0.12f, 0.1f), false);
+            var board = new MeshBuilder();
+            Plank(board, new Vector3(0f, 0f, 0f), 1.15f, 0.3f, new Color(0.1f, 0.45f, 0.8f), true);
+            foreach (var (name, gearMesh) in new[] { ("Ski Model", skis.ToMesh()), ("Board Model", board.ToMesh()) })
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(gearModels.transform, false);
+                go.AddComponent<MeshFilter>().sharedMesh = b.SaveMesh(name, gearMesh);
+                go.AddComponent<MeshRenderer>().sharedMaterial = gear;
+                go.SetActive(false);
+            }
+            // the racks: a rail on two posts with gear leaning on it, either side of the way out of the top station
+            Vector2 outDir = (Peak + new Vector2(Mathf.Cos(SkiBearing), Mathf.Sin(SkiBearing)) * 40f - Peak).normalized, sideDir = new Vector2(outDir.y, -outDir.x);
+            var rackMesh = new MeshBuilder();
+            for (int which = 0; which < 2; which++)
+            {
+                Vector2 at = Peak + outDir * 16f + sideDir * (which == 0 ? -5f : 5f);
+                var foot = new Vector3(at.x - root.x, HeightAt(at) - root.y, at.y - root.z);
+                float rackYaw = Mathf.Atan2(sideDir.x, sideDir.y) * Mathf.Rad2Deg;
+                var rackAlong = new Vector3(sideDir.x, 0f, sideDir.y);
+                Kit.AddBox(rackMesh, foot - rackAlong * 1.1f, new Vector3(0.1f, 1.2f, 0.1f), new Color(0.4f, 0.28f, 0.18f), rackYaw);
+                Kit.AddBox(rackMesh, foot + rackAlong * 1.1f, new Vector3(0.1f, 1.2f, 0.1f), new Color(0.4f, 0.28f, 0.18f), rackYaw);
+                Kit.AddBox(rackMesh, foot + Vector3.up * 1.05f, new Vector3(0.08f, 0.08f, 2.4f), new Color(0.4f, 0.28f, 0.18f), rackYaw + 90f);
+                for (int n = 0; n < 4; n++)
+                    Kit.AddBox(rackMesh, foot + rackAlong * (-0.8f + n * 0.5f) + new Vector3(outDir.x, 0f, outDir.y) * 0.12f, which == 0 ? new Vector3(0.09f, 1.3f, 0.03f) : new Vector3(0.28f, 1.2f, 0.03f),
+                        which == 0 ? new Color(0.85f, 0.12f, 0.1f) : new Color(0.1f, 0.45f, 0.8f), rackYaw);
+                var mark = new GameObject(which == 0 ? "Ski Rack" : "Board Rack");
+                mark.transform.SetParent(b.Root.transform, false);
+                mark.transform.position = new Vector3(at.x, HeightAt(at) + 0.75f, at.y);
+            }
+            b.MeshPiece("Gear Racks", rackMesh.ToMesh(), gear, false);
+        }
+
         b.RegisterLand(X0, Z0, Cell, nx, nz, land, blocked);
 
         // 9. Causeway from the mainland shore to the landing
