@@ -317,8 +317,9 @@ namespace Bwm
         // A snow-laden fir added to a mesh being built (use with the BWM/Fir shader and FirBranchTexture): a trunk
         // and whorls of drooping branch fronds, each frond a shallow roof of two cards so it has a top for snow to
         // lie on and an underside that stays dark. Vertex colour: rgb tints the tree, alpha is 1 at the crown's
-        // surface and 0 deep inside it. uv.x below 0 marks bark.
-        public static void AddFir(MeshBuilder mb, Vector3 foot, float height, int seed, float detail = 1f)
+        // surface and 0 deep inside it. uv.x below 0 marks bark. girth below 1 makes a slim spruce: a narrow crown of
+        // fewer, more drooping boughs.
+        public static void AddFir(MeshBuilder mb, Vector3 foot, float height, int seed, float detail = 1f, float girth = 1f)
         {
             var random = new System.Random(seed * 7919 + 3);
             float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
@@ -341,7 +342,7 @@ namespace Bwm
             // the crown's core: a dark cone inside the boughs, so the tree reads as full from a distance (uv.x -2);
             // close up it is only a thin shadow round the trunk
             {
-                float coreBase = height * 0.16f, coreR = (height * 0.36f * 0.5f + 0.2f) * (detail < 0.7f ? 1f : 0.35f);
+                float coreBase = height * 0.16f, coreR = (height * 0.36f * 0.5f + 0.2f) * girth * (detail < 0.7f ? 1f : 0.35f);
                 for (int s = 0; s < sides; s++)
                 {
                     float a0 = 2f * Mathf.PI * s / sides + spin, a1 = 2f * Mathf.PI * (s + 1) / sides + spin;
@@ -356,17 +357,19 @@ namespace Bwm
             // whorls of fronds, longest at the bottom; each frond droops and curves down towards its tip
             float first = height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.34f, 0.54f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
             int whorl = 0;
-            for (float y = first; y < height * 0.9f; y += spacing * R(0.85f, 1.15f), whorl++)
+            for (float y = first; y < height * 0.96f; y += spacing * R(0.85f, 1.15f), whorl++)
             {
-                float t = (y - first) / (height * 0.9f - first);      // 0 bottom ... 1 top
-                float reach = height * 0.36f * Mathf.Pow(1f - t, 0.82f) + 0.3f;      // a fuller crown than a straight cone
-                int count = t > 0.88f || detail < 0.7f ? 5 : random.Next(7, 10);
+                float t = (y - first) / (height * 0.96f - first);      // 0 bottom ... 1 top
+                // a fuller crown than a straight cone, drawing in to a narrow spire at the top
+                float reach = (height * 0.36f * Mathf.Pow(1f - t, 0.82f) + Mathf.Lerp(0.3f, 0.07f, t)) * girth;
+                int count = t > 0.88f || detail < 0.7f ? 5 : girth < 0.8f ? random.Next(5, 8) : random.Next(7, 10);
                 float offset = spin + whorl * 2.39996f;      // golden angle between whorls
                 for (int k = 0; k < count; k++)
                 {
                     float a = offset + 2f * Mathf.PI * k / count + R(-0.25f, 0.25f);
                     float len = reach * R(0.82f, 1.12f);
-                    float droop = Mathf.Lerp(0.38f, 0.12f, t) + R(-0.06f, 0.06f);      // radians below horizontal at the base
+                    // radians below horizontal at the base; the youngest shoots, at the top, point upwards
+                    float droop = Mathf.Lerp(0.38f, 0.12f, t) + (1f - girth) * 0.55f - Mathf.Clamp01((t - 0.72f) / 0.28f) * 0.8f + R(-0.06f, 0.06f);
                     var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                     var side = new Vector3(-dir.z, 0f, dir.x);
                     Vector3 root = foot + Vector3.up * y + dir * trunkR * 0.8f;
@@ -398,16 +401,112 @@ namespace Bwm
                     }
                 }
             }
-            // the top: a tuft of short fronds splaying upwards (a single upright leader read as a diamond spike)
-            Vector3 tipBase = foot + Vector3.up * height * 0.88f;
+            // the leader: three narrow fronds standing against the axis and meeting in a point, so the top is a spire
+            // from every side (two crossed full-width fronds read as a diamond, a splayed tuft as a forked V)
+            Vector3 tipBase = foot + Vector3.up * height * 0.9f, tip = foot + Vector3.up * height * 1.03f;
             var top = new Color(tint.r, tint.g, tint.b, 1f);
-            for (int k = 0; k < 4; k++)
+            for (int k = 0; k < 3; k++)
             {
-                float a = spin + k * Mathf.PI * 0.5f + 0.4f;
+                float a = spin + k * 2.0944f + 0.4f;
+                var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * height * 0.017f;
+                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.08f, tip - side * 0.08f, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.55f), new Vector2(1f, 0.45f), top, top, top, top);
+            }
+        }
+
+        // A bare winter birch added to a mesh being built (use with the BWM/Snowy shader, which lays snow on whatever
+        // faces up, so every limb gets a white top): a pale trunk with dark scars, leaning a little; limbs rising
+        // steeply and arching out; fine dark twigs hanging from their ends. detail below 0.7 leaves the twigs out
+        // (the version for distance).
+        public static void AddBirch(MeshBuilder mb, Vector3 foot, float height, int seed, float detail = 1f)
+        {
+            var random = new System.Random(seed * 6151 + 11);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            Color pale = new Color(R(0.82f, 0.9f), R(0.81f, 0.88f), R(0.74f, 0.82f)), scar = new Color(0.17f, 0.16f, 0.16f), twigColor = new Color(0.30f, 0.19f, 0.17f);
+            // a tapered limb from a to b
+            void Limb(Vector3 a, Vector3 b, float ra, float rb, int sides, Color ca, Color cb)
+            {
+                Vector3 axis = (b - a).normalized;
+                Vector3 u = Vector3.Cross(axis, Mathf.Abs(axis.y) > 0.95f ? Vector3.right : Vector3.up).normalized;
+                Vector3 v = Vector3.Cross(u, axis);
+                for (int s = 0; s < sides; s++)
+                {
+                    // turned so that one face looks straight up from a leaning limb: that face takes the snow
+                    float turned = Mathf.PI / 2f - Mathf.PI / sides;
+                    float a0 = 2f * Mathf.PI * s / sides + turned, a1 = 2f * Mathf.PI * (s + 1) / sides + turned;
+                    Vector3 d0 = u * Mathf.Cos(a0) + v * Mathf.Sin(a0), d1 = u * Mathf.Cos(a1) + v * Mathf.Sin(a1);
+                    mb.Quad(a + d0 * ra, a + d1 * ra, b + d1 * rb, b + d0 * rb, Color.Lerp(ca, cb, 0.5f));
+                }
+            }
+            // fine twigs hanging from a limb's end
+            void Twigs(Vector3 at, Vector3 dir, int count, float length)
+            {
+                if (detail < 0.7f) return;
+                var flat = new Vector3(dir.x, 0f, dir.z).normalized;
+                for (int i = 0; i < count; i++)
+                {
+                    float turn = R(-1.1f, 1.1f);
+                    var outward = Quaternion.Euler(0f, turn * Mathf.Rad2Deg, 0f) * flat;
+                    Vector3 mid = at + (outward * R(0.5f, 0.9f) + Vector3.up * R(-0.1f, 0.35f)).normalized * length * 0.45f;
+                    Vector3 end = mid + (outward * R(0.2f, 0.6f) + Vector3.down * R(0.5f, 1f)).normalized * length * R(0.5f, 0.9f);
+                    Limb(at, mid, 0.016f, 0.011f, 3, twigColor, twigColor);
+                    Limb(mid, end, 0.011f, 0.005f, 3, twigColor, twigColor);
+                }
+            }
+
+            // the trunk: leaning and gently curved, pale with dark scars, dark and rough at the foot
+            float lean = R(0f, Mathf.PI * 2f), leanBy = height * R(0.02f, 0.09f);
+            var leanDir = new Vector3(Mathf.Cos(lean), 0f, Mathf.Sin(lean));
+            float baseR = height * 0.011f + 0.045f;
+            Vector3 Spine(float t) => foot + Vector3.up * (height * t) + leanDir * (leanBy * t * t) + new Vector3(Mathf.Sin(t * 7f + lean), 0f, Mathf.Cos(t * 5f + lean)) * (height * 0.006f);
+            float Radius(float t) => Mathf.Lerp(baseR, 0.018f, Mathf.Pow(t, 0.8f));
+            const int segments = 10;
+            Limb(foot + Vector3.down * 0.4f, Spine(0f), baseR * 1.25f, baseR * 1.1f, 6, scar, scar);
+            for (int i = 0; i < segments; i++)
+            {
+                float t0 = (float)i / segments, t1 = (float)(i + 1) / segments;
+                Color lower = i == 0 ? Color.Lerp(scar, pale, 0.35f) : pale;
+                if (R(0f, 1f) < 0.4f) { Limb(Spine(t0), Spine(t1), Radius(t0), Radius(t1), 6, lower, lower); continue; }      // a clean stretch
+                float cut = Mathf.Lerp(t0, t1, R(0.1f, 0.85f)), band = R(0.003f, 0.016f);      // a dark scar ring somewhere up the segment
+                Limb(Spine(t0), Spine(cut), Radius(t0), Radius(cut), 6, lower, lower);
+                Limb(Spine(cut), Spine(cut + band), Radius(cut) * 1.04f, Radius(cut + band) * 1.04f, 6, scar, scar);
+                Limb(Spine(cut + band), Spine(t1), Radius(cut + band), Radius(t1), 6, pale, pale);
+            }
+            Twigs(Spine(1f), Vector3.up + leanDir * 0.3f, 4, height * 0.09f);
+
+            // limbs: rising steeply, arching outwards, each with side branches and hanging twigs
+            int limbs = Mathf.RoundToInt(Mathf.Lerp(8f, 14f, Mathf.Clamp01((height - 4f) / 7f)));
+            float spin = R(0f, Mathf.PI * 2f);
+            for (int k = 0; k < limbs; k++)
+            {
+                float t = Mathf.Lerp(0.3f, 0.93f, (k + R(0f, 0.8f)) / limbs);
+                float a = spin + k * 2.39996f + R(-0.3f, 0.3f);
                 var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                var side = new Vector3(-outward.z, 0f, outward.x) * height * 0.03f;
-                Vector3 tip = tipBase + (Vector3.up * 0.8f + outward * 0.6f).normalized * height * R(0.07f, 0.1f);
-                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.15f, tip - side * 0.15f, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.55f), new Vector2(1f, 0.45f), top, top, top, top);
+                float length = height * Mathf.Lerp(0.36f, 0.12f, (t - 0.3f) / 0.63f) * R(0.8f, 1.2f);
+                float tilt = R(0.35f, 0.7f);      // radians from upright where it leaves the trunk
+                Vector3 at = Spine(t);
+                float r = Radius(t) * 0.55f;
+                // the dark eye where a limb leaves the trunk
+                Limb(at, at + (Vector3.up * Mathf.Cos(tilt) + outward * Mathf.Sin(tilt)).normalized * (Radius(t) + 0.05f), r * 1.5f, r * 1.15f, 4, scar, scar);
+                const int parts = 5;
+                for (int j = 0; j < parts; j++)
+                {
+                    Vector3 dir = (Vector3.up * Mathf.Cos(tilt) + outward * Mathf.Sin(tilt)).normalized;
+                    Vector3 next = at + dir * (length / parts);
+                    float r1 = Mathf.Max(0.014f, r * 0.72f);
+                    Limb(at, next, r, r1, 4, j == 0 ? pale : Color.Lerp(pale, twigColor, 0.6f), Color.Lerp(pale, twigColor, j == 0 ? 0.6f : 1f));
+                    // a side branch from each joint, to one side and the other
+                    float sideTurn = (j % 2 == 0 ? 1f : -1f) * R(0.5f, 1.0f);
+                    Vector3 sideDir = (Quaternion.Euler(0f, sideTurn * Mathf.Rad2Deg, 0f) * outward * Mathf.Sin(tilt + 0.25f) + Vector3.up * Mathf.Cos(tilt + 0.25f)).normalized;
+                    float sideLength = length * R(0.3f, 0.45f);
+                    Vector3 sideEnd = next + sideDir * sideLength;
+                    if (detail >= 0.7f ? j >= 1 : j == 2)
+                    {
+                        Limb(next, sideEnd, r1 * 0.7f, 0.011f, 3, twigColor, twigColor);
+                        Twigs(sideEnd, sideDir, 3, height * 0.1f);
+                    }
+                    at = next; r = r1; tilt += R(0.07f, 0.2f);
+                }
+                Twigs(at, outward, 4, height * 0.11f);
             }
         }
 

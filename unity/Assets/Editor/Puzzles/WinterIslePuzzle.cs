@@ -753,18 +753,25 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         b.MeshPiece("Ice", ice.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Ice", m => { m.SetFloat("_SnowLine", 1.02f); m.SetFloat("_SnowNoise", 0.9f); m.SetFloat("_SnowEdge", 0.05f); }), false);
 
-        // 9. Firs, built into the pack in tiles (so the game can skip the tiles out of view), with trunks to bump into
-        // Twenty fir models (ten heights, two shapes each), each with a lighter version for distance; every fir on
-        // the island is one of them, turned and scaled a little
+        // 9. Our own trees: firs, slim spruces and bare birches (WinterIsleDressing.TreeModels), each model with a
+        // lighter version for distance; every such tree on the island is one of them, turned and scaled a little
         Texture2D needles = Kit.FirBranchTexture("Assets/Puzzles/WinterIsle/FirBranch.png");
         Material firMaterial = b.ShaderMaterial("BWM/Fir", "Fir", m => m.SetTexture("_MainTex", needles));
-        var models = new List<(Mesh near, Mesh far, float height)>();
-        for (int v = 0; v < 20; v++)
+        Material birchMaterial = b.ShaderMaterial("BWM/Snowy", "Birch", m => { m.SetFloat("_SnowLine", 0.45f); m.SetFloat("_SnowEdge", 0.08f); m.SetFloat("_SnowNoise", 0.5f); });
+        var models = new List<(Mesh near, Mesh far, float height, Material material)>();
+        for (int v = 0; v < WinterIsleDressing.TreeModels.Count; v++)
         {
-            float tall = 4.5f + (v / 2) * 1f;
-            var near = new MeshBuilder(); Kit.AddFir(near, Vector3.zero, tall, 100 + v, 1f);
-            var far = new MeshBuilder(); Kit.AddFir(far, Vector3.zero, tall, 100 + v, 0.5f);
-            models.Add((b.SaveMesh("Fir " + v, near.ToMesh()), b.SaveMesh("Fir " + v + " far", far.ToMesh()), tall));
+            var (kind, tall, seed) = WinterIsleDressing.TreeModels[v];
+            var near = new MeshBuilder();
+            var far = new MeshBuilder();
+            if (kind == "birch") { Kit.AddBirch(near, Vector3.zero, tall, seed, 1f); Kit.AddBirch(far, Vector3.zero, tall, seed, 0.5f); }
+            else
+            {
+                float girth = kind == "spruce" ? 0.58f : 1f;
+                Kit.AddFir(near, Vector3.zero, tall, seed, 1f, girth);
+                Kit.AddFir(far, Vector3.zero, tall, seed, 0.5f, girth);
+            }
+            models.Add((b.SaveMesh("Fir " + v, near.ToMesh()), b.SaveMesh("Fir " + v + " far", far.ToMesh()), tall, kind == "birch" ? birchMaterial : firMaterial));
         }
         // The models ride in the pack switched off, far under the island; Winter Walk copies them to every place
         // the dressing list gives ("fir:<model>")
@@ -784,13 +791,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 part.transform.SetParent(go.transform, false);
                 part.AddComponent<MeshFilter>().sharedMesh = l == 0 ? model.near : model.far;
                 var rend = part.AddComponent<MeshRenderer>();
-                rend.sharedMaterial = firMaterial;
+                rend.sharedMaterial = model.material;
                 lods[l] = new LOD(l == 0 ? 0.05f : 0.004f, new Renderer[] { rend });
             }
             go.AddComponent<LODGroup>().SetLODs(lods);
             CapsuleCollider trunk = go.AddComponent<CapsuleCollider>();
             trunk.center = Vector3.up * (model.height * 0.3f);
-            trunk.radius = Mathf.Max(0.25f, model.height * 0.03f);
+            trunk.radius = model.material == birchMaterial ? 0.18f : Mathf.Max(0.25f, model.height * 0.03f);
             trunk.height = model.height * 0.6f;
         }
 

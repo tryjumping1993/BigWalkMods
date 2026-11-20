@@ -63,6 +63,31 @@ public static class WinterIsleDressing
     public static readonly List<(Vector2 at, float radius)> Cover = new List<(Vector2, float)>();  // plants placed: the ground under them shows through the snow
     public static readonly List<(Vector2 at, float height, int seed)> Firs = new List<(Vector2, float, int)>();   // our own firs, built into the island's pack
 
+    // Our own trees. Each is one of these models, which the island's build makes and Winter Walk copies to every
+    // place the dressing list gives ("fir:<index>", turned and scaled a little): firs, slim spruces and bare birches
+    public static readonly List<(string kind, float height, int seed)> TreeModels = Models();
+    static List<(string kind, float height, int seed)> Models()
+    {
+        var list = new List<(string, float, int)>();
+        for (int v = 0; v < 20; v++) list.Add(("fir", 4.5f + (v / 2) * 1f, 100 + v));
+        for (int v = 0; v < 10; v++) list.Add(("spruce", 7f + (v / 2) * 2.5f, 300 + v));
+        for (int v = 0; v < 8; v++) list.Add(("birch", 5.5f + (v / 2) * 1.5f, 500 + v));
+        return list;
+    }
+
+    // Stands one of our trees at p: the model of that kind nearest in height, scaled to fit
+    static void Tree(string kind, Vector2 p, float ground, float tallness, float trunk, float cover)
+    {
+        int best = -1;
+        for (int i = 0; i < TreeModels.Count; i++)
+            if (TreeModels[i].kind == kind && (best < 0 || Mathf.Abs(TreeModels[i].height - tallness) < Mathf.Abs(TreeModels[best].height - tallness) - 0.001f)) best = i;
+        best += random.Next(2);      // each height comes in two shapes
+        output.Append("fir:").Append(best).Append('\t').Append(F(p.x)).Append('\t').Append(F(ground - 0.05f)).Append('\t').Append(F(p.y)).Append('\t')
+            .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(tallness / TreeModels[best].height)).Append("\t-9\n");
+        solids.Add((p, trunk));
+        Cover.Add((p, cover));
+    }
+
     static float Smooth01(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
     static float R(float lo, float hi) => lo + (hi - lo) * (float)random.NextDouble();
     static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
@@ -329,28 +354,48 @@ public static class WinterIsleDressing
         // ---- snow banked against the bigger rocks, before anything else is stood on that ground ----
         if (l.Bank != null) foreach (var r in big) l.Bank(r.at, r.diameter * 0.75f + 1.5f, Mathf.Min(0.22f * r.diameter, 1.4f));
 
-        // ---- firs: groves on the middle slopes, thinning at their edges, and a few standing alone ----
+        // ---- firs: groves on the middle slopes, thinning at their edges, with glades, young trees among the old,
+        //      stands where slim spruces take over, and a few firs standing alone ----
+        int spruces = 0, birches = 0;
+        float Grove(Vector2 q) => Mathf.PerlinNoise(q.x * 0.0105f + 211.3f, q.y * 0.0105f + 87.4f) + (Mathf.PerlinNoise(q.x * 0.04f + 5.2f, q.y * 0.04f + 9.9f) - 0.5f) * 0.18f;
         for (float z = l.Z0; z < l.Z1; z += 4.6f)
             for (float x = l.X0; x < l.X1; x += 4.6f)
             {
                 var p = new Vector2(x + R(-2.1f, 2.1f), z + R(-2.1f, 2.1f));
                 float h = l.Height(p);
                 if (float.IsNaN(h) || h < 2.5f || h > 62f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;
-                float grove = Mathf.PerlinNoise(p.x * 0.0105f + 211.3f, p.y * 0.0105f + 87.4f) + (Mathf.PerlinNoise(p.x * 0.04f + 5.2f, p.y * 0.04f + 9.9f) - 0.5f) * 0.18f;
-                float inGrove = Smooth01((grove - 0.46f) / 0.14f) * (1f - Smooth01((h - 50f) / 14f));
+                float inGrove = Smooth01((Grove(p) - 0.46f) / 0.14f) * (1f - Smooth01((h - 50f) / 14f));
+                // glades: open ground inside a grove, a few tens of metres across
+                if (inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
                 float chance = inGrove * 0.9f * thick + 0.015f + edge;
                 if (R(0f, 1f) > chance || !l.Free(p, 1.5f) || InsideRock(p, 1.2f)) continue;
                 float tallness = Mathf.Lerp(4.5f, 13.5f, Mathf.Clamp01(inGrove * R(0.55f, 1.15f))) * (h > 40f ? 0.8f : 1f);
-                if (edge > 0f && R(0f, 1f) < 0.65f) tallness = R(1.8f, 4.2f);      // a sapling
+                bool young = edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f;      // saplings feather the edges and grow among the old trees
+                if (young) tallness = R(1.4f, 4.2f);
+                // spruces: slim and tall, taking over in some stands and scattered through the rest
+                bool spruce = !young && R(0f, 1f) < (Mathf.PerlinNoise(p.x * 0.017f + 9.1f, p.y * 0.017f + 55.5f) > 0.56f ? 0.7f : 0.07f);
                 Firs.Add((p, tallness, random.Next(1, 1000000)));
-                int band = Mathf.Clamp(Mathf.RoundToInt(tallness - 4.5f), 0, 9);
-                output.Append("fir:").Append(band * 2 + random.Next(2)).Append('\t').Append(F(p.x)).Append('\t').Append(F(h - 0.05f)).Append('\t').Append(F(p.y)).Append('\t')
-                    .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(tallness / (4.5f + band))).Append("\t-9\n");
-                solids.Add((p, 1.1f));
-                Cover.Add((p, tallness * 0.22f));
+                if (spruce) { Tree("spruce", p, h, tallness * 1.3f, 0.9f, tallness * 0.14f); spruces++; }
+                else Tree("fir", p, h, tallness, 1.1f, tallness * 0.22f);
+            }
+
+        // ---- birches: bare, pale stands on the low ground where the firs are not, and a few alone ----
+        for (float z = l.Z0; z < l.Z1; z += 5.2f)
+            for (float x = l.X0; x < l.X1; x += 5.2f)
+            {
+                var p = new Vector2(x + R(-2.4f, 2.4f), z + R(-2.4f, 2.4f));
+                float h = l.Height(p);
+                if (float.IsNaN(h) || h < 2f || h > 36f || l.Slope(p) > 0.45f || l.ToShore(p) < 14f || l.Beach(p)) continue;
+                float stand = Mathf.PerlinNoise(p.x * 0.012f + 57.3f, p.y * 0.012f + 140.8f) + (Mathf.PerlinNoise(p.x * 0.05f + 3.3f, p.y * 0.05f + 8.1f) - 0.5f) * 0.2f;
+                float inStand = Smooth01((stand - 0.54f) / 0.1f) * (1f - Smooth01((Grove(p) - 0.44f) / 0.1f));
+                if (R(0f, 1f) > inStand * 0.7f + 0.004f || !l.Free(p, 1.5f) || InsideRock(p, 0.9f)) continue;
+                float tallness = R(5.5f, 10.5f) * Mathf.Lerp(0.8f, 1f, inStand);
+                if (R(0f, 1f) < 0.15f) tallness = R(2.4f, 4.5f);
+                Tree("birch", p, h, tallness, 0.5f, 0.9f);
+                birches++;
             }
 
         // ---- plants ----
@@ -425,7 +470,7 @@ public static class WinterIsleDressing
             }
 
         File.WriteAllText(outputFile, output.ToString());
-        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs, " + rocks + " rocks (" + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
+        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs (" + spruces + " of them spruces), " + birches + " birches, " + rocks + " rocks (" + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
             + plants + " plants (" + scattered + " of them scatter); written to " + outputFile);
     }
 }
