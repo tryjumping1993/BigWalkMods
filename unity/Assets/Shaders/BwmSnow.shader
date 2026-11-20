@@ -84,6 +84,13 @@ Shader "BWM/Snow"
         {
             return (SAMPLE_TEXTURE2D_LOD(_BwmTrailTex, sampler_BwmTrailTex, xz * _BwmTrailParams.x, 0).r * 255.0 - 128.0) * 0.001;
         }
+        // An edge between two surfaces that stays about a pixel wide however near or far it is seen (a fixed-width
+        // blend is a crisp line far away and a blurred band up close). 'fine' is added detail that shapes the edge
+        // without widening it.
+        float Crisp(float value, float fine, float edge)
+        {
+            return saturate((value + fine - edge) / max(fwidth(value) * 1.3, 0.004) + 0.5);
+        }
         TEXTURE2D(_TrackNormal); SAMPLER(sampler_TrackNormal);
         TEXTURE2D(_TrackHeight); SAMPLER(sampler_TrackHeight);
         TEXTURE2D(_WindNormal); SAMPLER(sampler_WindNormal);
@@ -243,9 +250,9 @@ Shader "BWM/Snow"
                 float3 ground = normalize(i.normalWS);
                 float ragged = (ValueNoise(positionWS.xz * 0.13 + positionWS.y * 0.11 + 2.0) - 0.5) * 0.26
                     + (ValueNoise(positionWS.xz * 0.45 + positionWS.y * 0.3) - 0.5) * 0.16
-                    + (ValueNoise(positionWS.xz * 1.9 + positionWS.y * 1.3) - 0.5) * 0.07
-                    + (windH.g - 0.5) * 0.1 + grainN.y * 0.06;      // (the crust map's fine grain breaks the edge up close)
-                float rock = 1.0 - smoothstep(_RockLine - 0.035, _RockLine + 0.035, ground.y + ragged);
+                    + (ValueNoise(positionWS.xz * 1.9 + positionWS.y * 1.3) - 0.5) * 0.07;
+                // (the snow's own relief and the crust map's grain shape the edge up close)
+                float rock = 1.0 - Crisp(ground.y + ragged, (windH.g - 0.5) * 0.1 + grainN.y * 0.06, _RockLine);
                 float strata = ValueNoise(positionWS.xz * 0.11 + positionWS.y * 0.17) * 0.7 + ValueNoise(positionWS.xz * 0.5 - positionWS.y * 0.4) * 0.3;
                 // granite: the texture projected from all three sides, blended by how much the face looks each way
                 // (one projection stretches on faces between them)
@@ -269,28 +276,29 @@ Shader "BWM/Snow"
                 float3 rockColor = _RockColor.rgb * lerp(0.82, 1.1, strata) * rockTex * 1.6 * lerp(0.72, 1.18, mottle) * (1.0 - cracks * 0.45);
                 float3 bareRock = rockColor;
                 // snow caught on the rock's flatter parts, in patches with an edge (a soft dusting reads as a smear)
-                float caught = smoothstep(0.5, 0.58, strata * 0.75 + ValueNoise(positionWS.xz * 3.7 + positionWS.y * 2.9) * 0.25 + grainN.x * 0.08);
+                float caught = Crisp(strata * 0.75 + ValueNoise(positionWS.xz * 3.7 + positionWS.y * 2.9) * 0.25, grainN.x * 0.08, 0.54);
                 rockColor = lerp(rockColor, _Color.rgb * 0.92, saturate((ground.y - 0.3) * 2.5) * caught * 0.85);
 
                 // bare ground and sand where the snow is thin
                 float2 groundUV = positionWS.xz * _GroundTiling;
-                float patchy = ValueNoise(positionWS.xz * 0.21) * 0.6 + ValueNoise(positionWS.xz * 0.9) * 0.4;
+                // (three sizes of patch, so a bare place is a scatter of small ones with a ragged edge, not one blob)
+                float patchy = ValueNoise(positionWS.xz * 0.21) * 0.42 + ValueNoise(positionWS.xz * 0.9) * 0.33 + ValueNoise(positionWS.xz * 2.9 + 3.7) * 0.25;
                 // where the snow is thin the ground shows first in the troughs between the wind's ridges
-                float bare = smoothstep(0.58, 0.72, i.ground.x * 0.85 + (patchy - 0.5) * 0.5 + (0.5 - windH.g) * 0.35 + grainN.x * 0.2) * (1.0 - path * 0.45);
+                float bare = Crisp(i.ground.x * 0.85 + (patchy - 0.5) * 0.5, (0.5 - windH.g) * 0.35 + grainN.x * 0.2, 0.65) * (1.0 - path * 0.45);
                 float sand = smoothstep(0.3, 0.6, i.ground.y + (patchy - 0.5) * 0.25);
                 // No snow at the waterline or under it: the sea keeps a ragged band of rock wet and bare (sand, in the
                 // bays), and the seabed below is rock, darker the deeper it lies
-                float tide = 1.0 - smoothstep(0.05, 0.5, positionWS.y + (patchy - 0.5) * 0.45);
+                float tide = 1.0 - Crisp(positionWS.y + (patchy - 0.5) * 0.45, grainN.x * 0.05, 0.28);
                 rock = max(rock, tide * (1.0 - sand));
                 rockColor = lerp(rockColor, bareRock * lerp(0.62, 0.32, smoothstep(0.0, -5.0, positionWS.y)), tide);
                 // (from three sides, like the rock: laid from above alone it smears down a slope)
                 float3 bareTex = SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.zy * _GroundTiling).rgb * tw.x
                     + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * tw.y
                     + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.xy * _GroundTiling).rgb * tw.z;
-                // on a slope what shows through thin snow is the rock, not heath
-                float3 bareColor = lerp(_BareColor.rgb * bareTex * 1.7, bareRock, smoothstep(0.93, 0.8, ground.y));
+                // on a slope, and on the high ground, what shows through thin snow is the rock, not heath
+                float3 bareColor = lerp(_BareColor.rgb * bareTex * 1.7, bareRock, max(smoothstep(0.93, 0.8, ground.y), smoothstep(30.0, 46.0, positionWS.y)));
                 // snow lying among the heath in small pockets, each with an edge (an even mix reads as grey plastic)
-                float pockets = smoothstep(0.5, 0.6, ValueNoise(positionWS.xz * 2.7 + 11.0) * 0.5 + windH.g * 0.5 + (patchy - 0.5) * 0.45);
+                float pockets = Crisp(ValueNoise(positionWS.xz * 2.7 + 11.0) * 0.5 + (patchy - 0.5) * 0.45, windH.g * 0.5 + grainN.y * 0.1, 0.55);
                 bareColor = lerp(bareColor, _Color.rgb * 0.92, pockets * 0.85);
                 float wet = 1.0 - smoothstep(0.15, 0.9, positionWS.y);
                 float3 sandColor = _SandColor.rgb * SAMPLE_TEXTURE2D(_SandTex, sampler_SandTex, groundUV * 0.7).rgb * 1.5 * lerp(1.0, 0.62, wet);

@@ -14,6 +14,7 @@ Shader "BWM/Snowy"
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.12
         _SnowNoise ("Snow edge raggedness", Range(0, 1)) = 0.35
         _Through ("Light through thin things (dry grass)", Range(0, 1)) = 0
+        [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull (2 back for solids, 0 off for blades)", Float) = 2
     }
 
     SubShader
@@ -56,6 +57,7 @@ Shader "BWM/Snowy"
         {
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForwardOnly" }      // the game renders deferred: see BwmSnow.shader
+            Cull [_Cull]
 
             HLSLPROGRAM
             #pragma vertex Vert
@@ -150,6 +152,7 @@ Shader "BWM/Snowy"
         {
             Name "ShadowCaster"
             Tags { "LightMode" = "ShadowCaster" }
+            Cull [_Cull]
             ZWrite On
             ZTest LEqual
             ColorMask 0

@@ -448,8 +448,15 @@ namespace Bwm
                     var outward = Quaternion.Euler(0f, turn * Mathf.Rad2Deg, 0f) * flat;
                     Vector3 mid = at + (outward * R(0.5f, 0.9f) + Vector3.up * R(-0.1f, 0.35f)).normalized * length * 0.45f;
                     Vector3 end = mid + (outward * R(0.2f, 0.6f) + Vector3.down * R(0.5f, 1f)).normalized * length * R(0.5f, 0.9f);
-                    Limb(at, mid, 0.016f, 0.011f, 3, twigColor, twigColor);
-                    Limb(mid, end, 0.011f, 0.005f, 3, twigColor, twigColor);
+                    Limb(at, mid, 0.014f, 0.009f, 3, twigColor, twigColor);
+                    Limb(mid, end, 0.009f, 0.004f, 3, twigColor, twigColor);
+                    // finer still: a spray of hanging tips off each twig
+                    for (int tip = 0; tip < 2; tip++)
+                    {
+                        Vector3 from = Vector3.Lerp(mid, end, R(0.1f, 0.7f));
+                        Vector3 to = from + (outward * R(-0.25f, 0.45f) + Vector3.down * R(0.6f, 1f) + new Vector3(R(-0.3f, 0.3f), 0f, R(-0.3f, 0.3f))).normalized * length * R(0.3f, 0.55f);
+                        Limb(from, to, 0.006f, 0.003f, 3, twigColor, twigColor);
+                    }
                 }
             }
 
