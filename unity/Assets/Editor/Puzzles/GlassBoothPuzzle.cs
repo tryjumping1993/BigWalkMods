@@ -16,6 +16,11 @@ public sealed class GlassBoothPuzzle : PuzzleDef
     public override string Name => "GlassBooth";
     public override Vector2 Footprint => new Vector2(24f, 14f);
 
+    // On the Winter Isle, a short walk in from the causeway's landing
+    public override Vector2 Near => new Vector2(-565f, -750f);
+    public override float MinDistance => 0f;
+    public override float MaxDistance => 150f;
+
     const float Floor = 0.25f;      // top of the pad, above the root's level
     static readonly Color Concrete = new Color(0.72f, 0.70f, 0.66f);
     static readonly Color WallColor = new Color(0.83f, 0.42f, 0.25f);

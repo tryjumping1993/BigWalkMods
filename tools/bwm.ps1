@@ -7,7 +7,7 @@
 # is logs\unity-<command>.log. Exit code 0 means the command succeeded.
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('build', 'build-all', 'list', 'dump-world', 'part-metrics', 'setup', 'launch', 'log', 'companion', 'game', 'play')]
+    [ValidateSet('build', 'build-all', 'list', 'dump-world', 'part-metrics', 'survey', 'setup', 'launch', 'log', 'companion', 'game', 'play')]
     [string]$Command,
     [Parameter(Position = 1)][string]$Puzzle,
     [switch]$Resite,
@@ -60,6 +60,7 @@ switch ($Command) {
     'list' { $out = Invoke-BwmUnity 'List' @() }
     'dump-world' { $out = Invoke-BwmUnity 'DumpWorld' @() }
     'part-metrics' { $out = Invoke-BwmUnity 'PartMetrics' @() }
+    'survey' { $out = Invoke-BwmUnity 'Survey' @() }
     'setup' { $out = Invoke-BwmUnity 'SetupProject' @() }
     'launch' {
         if (Get-Process 'Big Walk' -ErrorAction SilentlyContinue) { Write-Output 'Big Walk is already running. In game: Ctrl+F2 reloads puzzles, Ctrl+F1 teleports to the dev puzzle.'; exit 0 }

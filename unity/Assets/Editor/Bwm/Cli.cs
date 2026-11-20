@@ -130,6 +130,78 @@ namespace Bwm
             Debug.Log("[BWM] Part metrics: " + bounds.Count + " of " + instances.Count + " parts measured, written to " + file);
         });
 
+        // Writes world\heightmap.png (the whole 2048 m square at 4 m per pixel, north up) and
+        // world\heightmap-zoom.png (-bwmCx/-bwmCz/-bwmSize in metres, default the coast by the opening area, 1 m per pixel).
+        // Sea (below height 0) is blue, land is shaded by height with a line every 10 m, holes are magenta,
+        // the spawn rooms are a red dot and every puzzle site a yellow one.
+        public static void Survey() => Run(() =>
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var ground = new Ground(World.ImportMap());
+            var marks = new List<(Vector2 at, Color color)> { (World.Spawn, Color.red) };
+            foreach (PuzzleDef d in Defs())
+            {
+                string f = Path.Combine(Application.dataPath, "Puzzles", d.Name, "site.json");
+                if (!File.Exists(f)) continue;
+                Site s = JsonUtility.FromJson<Site>(File.ReadAllText(f));
+                marks.Add((new Vector2(s.x, s.z), Color.yellow));
+            }
+            string dir = Path.Combine(RepoDir, "world");
+            Directory.CreateDirectory(dir);
+            float land = HeightImage(ground, 0f, 0f, 2048f, 512, marks, Path.Combine(dir, "heightmap.png"));
+            Debug.Log("[BWM] Survey: land above sea level is about " + Sdk.F(land / 1e6f) + " km2 of the 4.19 km2 square");
+            float cx = float.Parse(Arg("-bwmCx") ?? "-300", System.Globalization.CultureInfo.InvariantCulture);
+            float cz = float.Parse(Arg("-bwmCz") ?? "-700", System.Globalization.CultureInfo.InvariantCulture);
+            float size = float.Parse(Arg("-bwmSize") ?? "800", System.Globalization.CultureInfo.InvariantCulture);
+            HeightImage(ground, cx, cz, size, 800, marks, Path.Combine(dir, "heightmap-zoom.png"));
+            Debug.Log("[BWM] Survey: zoom is " + size + " m wide, centred on " + cx + ", " + cz);
+        });
+
+        // Renders a square of the world to a PNG; returns the land area in it (m2)
+        static float HeightImage(Ground ground, float cx, float cz, float size, int pixels, List<(Vector2 at, Color color)> marks, string file)
+        {
+            float step = size / pixels, land = 0f;
+            var tex = new Texture2D(pixels, pixels, TextureFormat.RGB24, false);
+            var colors = new Color[pixels * pixels];
+            for (int j = 0; j < pixels; j++)
+                for (int i = 0; i < pixels; i++)
+                {
+                    float x = cx - size / 2f + (i + 0.5f) * step, z = cz - size / 2f + (j + 0.5f) * step;
+                    Color c;
+                    if (!ground.At(x, z, out float y)) c = (x < -1024f || x > 1024f || z < -1024f || z > 1024f) ? new Color(0.05f, 0.1f, 0.25f) : Color.magenta;
+                    else if (y < 0f) c = Color.Lerp(new Color(0.45f, 0.7f, 0.9f), new Color(0.08f, 0.2f, 0.45f), Mathf.Clamp01(-y / 20f));
+                    else
+                    {
+                        land += step * step;
+                        float t = Mathf.Clamp01(y / 160f);
+                        c = t < 0.5f ? Color.Lerp(new Color(0.55f, 0.75f, 0.45f), new Color(0.75f, 0.65f, 0.4f), t * 2f) : Color.Lerp(new Color(0.75f, 0.65f, 0.4f), Color.white, t * 2f - 1f);
+                        if (y % 10f < 10f * step / 30f + 0.35f) c *= 0.75f;      // a line every 10 m of height
+                    }
+                    // a grid line every 100 m, heavier every 500 m
+                    float gx = Mathf.Abs(x % 100f), gz = Mathf.Abs(z % 100f);
+                    if (gx < step || gz < step) c = Color.Lerp(c, Color.black, (Mathf.Abs(x % 500f) < step || Mathf.Abs(z % 500f) < step) ? 0.45f : 0.15f);
+                    colors[j * pixels + i] = c;
+                }
+            foreach (var m in marks)
+            {
+                int mi = Mathf.RoundToInt((m.at.x - (cx - size / 2f)) / step), mj = Mathf.RoundToInt((m.at.y - (cz - size / 2f)) / step);
+                int r = Mathf.Max(3, pixels / 160);
+                for (int dj = -r; dj <= r; dj++)
+                    for (int di = -r; di <= r; di++)
+                    {
+                        int pi = mi + di, pj = mj + dj;
+                        if (pi < 0 || pj < 0 || pi >= pixels || pj >= pixels || di * di + dj * dj > r * r) continue;
+                        colors[pj * pixels + pi] = m.color;
+                    }
+            }
+            tex.SetPixels(colors);
+            tex.Apply();
+            File.WriteAllBytes(file, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            Debug.Log("[BWM] Survey image: " + file);
+            return land;
+        }
+
         // ---- building ----
 
         [Serializable]
@@ -158,7 +230,7 @@ namespace Bwm
             }
 
             GameObject map = World.ImportMap();
-            var ground = new Ground(map);
+            var ground = new Ground(map, name);
             SceneManager.SetActiveScene(scene);
 
             // Site: pinned by the definition, remembered from the last build, or searched for
@@ -173,11 +245,11 @@ namespace Bwm
                 foreach (PuzzleDef other in Defs())
                 {
                     string otherFile = Path.Combine(Application.dataPath, "Puzzles", other.Name, "site.json");
-                    if (other.Name == name || !File.Exists(otherFile)) continue;
+                    if (other.Name == name || other.PuzzleType == 2 || !File.Exists(otherFile)) continue;      // land and scenery packs are built on, not avoided
                     Site s = JsonUtility.FromJson<Site>(File.ReadAllText(otherFile));
                     taken.Add(new Vector3(s.x, s.z, other.Footprint.magnitude / 2f));
                 }
-                Vector3 found = ground.FindSite(def.Near, def.Footprint, taken);
+                Vector3 found = ground.FindSite(def.Near, def.Footprint, taken, def.MinDistance, def.MaxDistance);
                 site = new Site { x = found.x, z = found.z, yaw = def.Yaw };
             }
             site.yaw = def.Yaw;
@@ -194,7 +266,7 @@ namespace Bwm
             for (int i = root.transform.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(root.transform.GetChild(i).gameObject);
             foreach (Component c in root.GetComponents<Component>()) if (!(c is Transform)) UnityEngine.Object.DestroyImmediate(c);
             root.transform.SetPositionAndRotation(new Vector3(site.x, y, site.z), Quaternion.Euler(0f, site.yaw, 0f));
-            root.AddComponent(Sdk.T("PuzzleSDK"));
+            Sdk.Set(root.AddComponent(Sdk.T("PuzzleSDK")), "puzzleType", def.PuzzleType);
 
             def.Build(new PuzzleBuilder(root, ground, assetDir));
             Debug.Log("[BWM] Built " + root.GetComponentsInChildren<Transform>(true).Length + " objects");

@@ -64,8 +64,44 @@ namespace Bwm
         readonly List<MeshFilter> obstacles = new List<MeshFilter>();
         readonly Dictionary<MeshFilter, Vector3[]> worldVerts = new Dictionary<MeshFilter, Vector3[]>();
 
-        public Ground(GameObject map)
+        // Land that our own packs add (an island in the sea): a height grid per pack, saved by the pack's build in
+        // unity\Land\<Name>.land. It is read here so that site search and ground snapping treat it as ground.
+        sealed class Land { public string name; public float x0, z0, cell; public int nx, nz; public float[] h; }
+        readonly List<Land> lands = new List<Land>();
+        static string LandDir => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Land"));
+
+        // Heights are world heights at the (nx + 1) x (nz + 1) grid points, row by row in z; NaN where there is no land
+        public static void SaveLand(string name, float x0, float z0, float cell, int nx, int nz, float[] heights)
         {
+            Directory.CreateDirectory(LandDir);
+            using (var w = new BinaryWriter(File.Create(Path.Combine(LandDir, name + ".land"))))
+            {
+                w.Write(x0); w.Write(z0); w.Write(cell); w.Write(nx); w.Write(nz);
+                foreach (float h in heights) w.Write(h);
+            }
+        }
+
+        void LoadLands(string except)
+        {
+            if (!Directory.Exists(LandDir)) return;
+            foreach (string file in Directory.GetFiles(LandDir, "*.land"))
+            {
+                string name = Path.GetFileNameWithoutExtension(file);
+                if (name == except) continue;
+                using (var r = new BinaryReader(File.OpenRead(file)))
+                {
+                    var l = new Land { name = name, x0 = r.ReadSingle(), z0 = r.ReadSingle(), cell = r.ReadSingle(), nx = r.ReadInt32(), nz = r.ReadInt32() };
+                    l.h = new float[(l.nx + 1) * (l.nz + 1)];
+                    for (int i = 0; i < l.h.Length; i++) l.h[i] = r.ReadSingle();
+                    lands.Add(l);
+                }
+            }
+        }
+
+        // 'exceptLand': the pack being built, whose own land must not count as the ground it stands on
+        public Ground(GameObject map, string exceptLand = null)
+        {
+            LoadLands(exceptLand);
             Transform deathFloor = map.transform.Find("Death Floor");
             foreach (MeshFilter mf in map.GetComponentsInChildren<MeshFilter>(true))
             {
@@ -96,6 +132,17 @@ namespace Bwm
         // Terrain height at (x, z); false over a hole or off the terrain
         public bool At(float x, float z, out float y)
         {
+            foreach (Land l in lands)
+            {
+                float fx = (x - l.x0) / l.cell, fz = (z - l.z0) / l.cell;
+                if (fx < 0f || fz < 0f || fx >= l.nx || fz >= l.nz) continue;
+                int i = (int)fx, j = (int)fz;
+                float a = l.h[j * (l.nx + 1) + i], b = l.h[j * (l.nx + 1) + i + 1], c = l.h[(j + 1) * (l.nx + 1) + i], d = l.h[(j + 1) * (l.nx + 1) + i + 1];
+                if (float.IsNaN(a) || float.IsNaN(b) || float.IsNaN(c) || float.IsNaN(d)) continue;
+                float tx = fx - i, tz = fz - j;
+                y = Mathf.Lerp(Mathf.Lerp(a, b, tx), Mathf.Lerp(c, d, tx), tz);
+                return true;
+            }
             foreach (Grid g in grids)
             {
                 float fx = (x - g.origin.x) / g.step, fz = (z - g.origin.z) / g.step;

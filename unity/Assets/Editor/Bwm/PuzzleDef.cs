@@ -25,6 +25,13 @@ namespace Bwm
         // Heading of the puzzle's local +z axis, in degrees
         public virtual float Yaw => 0f;
 
+        // How far from Near (metres) the site search looks
+        public virtual float MinDistance => 15f;
+        public virtual float MaxDistance => 300f;
+
+        // The SDK's puzzle type: 0 Puzzle (rewards a gourd), 1 Tower, 2 None (scenery, land, anything else)
+        public virtual int PuzzleType => 0;
+
         public abstract void Build(PuzzleBuilder b);
     }
 
@@ -135,6 +142,32 @@ namespace Bwm
             hole.Set("PuzzleTerrainHole", "cutHoles", cutHole).Set("PuzzleTerrainHole", "removeTrees", true)
                 .Set("PuzzleTerrainHole", "removeShrubs", true).Set("PuzzleTerrainHole", "removeRocks", removeRocks);
             return hole;
+        }
+
+        // Custom geometry: a mesh built in code (land, ramps, anything a box cannot be), saved with the puzzle so
+        // it is exported with it. Vertices are in the puzzle's local space, y measured from the root's level.
+        // With collider, players can stand on it and bump into it.
+        public Piece MeshPiece(string name, Mesh mesh, Color color, bool collider = true)
+        {
+            string dir = assetDir + "/Meshes";
+            if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder(assetDir, "Meshes");
+            string path = dir + "/" + name + ".asset";
+            AssetDatabase.DeleteAsset(path);
+            mesh.name = name;
+            AssetDatabase.CreateAsset(mesh, path);
+            var go = new GameObject(name);
+            go.transform.SetParent(Root.transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = Material(color);
+            if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
+            return new Piece(go);
+        }
+
+        // Declares the land this pack adds, so later builds of other puzzles can be sited on it and snap to it.
+        // Heights are world heights at the (nx + 1) x (nz + 1) grid points, row by row in z; NaN where there is none.
+        public void RegisterLand(float worldX0, float worldZ0, float cell, int nx, int nz, float[] worldHeights)
+        {
+            Ground.SaveLand(Root.name, worldX0, worldZ0, cell, nx, nz, worldHeights);
         }
 
         // Adds an SDK "Add Component" script (PuzzleHider, PuzzlePressInOrder, PuzzleItem, ...) to a piece

@@ -35,6 +35,7 @@ Measured from the game's own world (`world\world-index.tsv`):
 | A real puzzle from the game's parts plus blockout geometry | Working: Glass Booth loads, deals its answer, and wins |
 | Snow on the ground | Proven live: swapping the terrain's 12 ground textures turns the whole island white (`shots\winter-after.png`) |
 | Clearing trees, shrubs and boulders from a site | Working (the SDK's Terrain Hole) |
+| New land in the sea | Built 2026-11-20: the Winter Isle, 0.21 km2 above the sea, with a 56 m causeway to the mainland shore. It loads in game, a player stands on its summit and on the causeway, and the Glass Booth is sited on it (`WinterIslePuzzle.cs`, `shots\winterisle-oblique.png`) |
 
 ## What is not proven (each is a spike in phase 0)
 
@@ -47,7 +48,8 @@ Measured from the game's own world (`world\world-index.tsv`):
    but no weather or particle module, so snowfall must be our own particle effect.
 6. **Multiplayer.** Nothing has been played by two people. State sync is the SDK's job, but untested here.
 7. **Installing on a friend's PC.** No packaging script yet; nobody else has installed any of this.
-8. **New land.** Whether a large custom landmass with colliders works: standing, walking, sea, world limits.
+8. **Walking on new land.** Standing is proven on the full-size island; nobody has walked the causeway or the
+   ramps between shelves yet, which needs a person at the controls.
 
 ## Design
 
@@ -72,7 +74,20 @@ is ours too:
 - Light and sky over the island: overcast and cold through the game's sky system, blended in as players cross
   the causeway, so the mainland keeps its normal look.
 
-Fallback if new land fails: the north-west of the island, beyond the big wall near the ending (few base-game
+The island as built:
+
+- It fills the open sea south-west of the opening area, keeping a 50 m channel from the mainland and staying
+  inside the game's terrain square (the user's rule for its shape). That gives 0.21 km2, about 55% of the base
+  game's puzzle area. Land past the square's edge also held a player in a test, so the island can grow west or
+  south later if the 24 puzzles need more room.
+- The causeway lands on the mainland shore at about (-468, -700), roughly 290 m from the spawn rooms.
+- Inland it is terraced: level shelves 2 m apart joined by gentle ramps, up to 14 m above the sea, so the site
+  search finds flat ground everywhere.
+- Sea level is height 0. Players dropped in the sea float and are not killed, so water is not a wall: puzzles
+  cannot rely on the shoreline to keep players in or out.
+- Its surface is a plain placeholder material. The bespoke snow, trees, rocks and snowfall are still to make.
+
+Fallback if new land fails later: the north-west of the island, beyond the big wall near the ending (few base-game
 puzzles there), dressed with the same bespoke snow materials laid over the ground as meshes.
 
 ### Puzzle list (24; the first is built)

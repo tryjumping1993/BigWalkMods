@@ -20,6 +20,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `companion` | Rebuilds the companion plugin (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
+| `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
 | `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
 
 Build output is only the framework's `[BWM]` lines; the full Unity log is `logs\unity-<command>.log`. Exit
@@ -56,6 +57,15 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - `Part(name, ...)` takes an SDK prefab's file name. `Set` / `Add` / `On` take the SDK component's type name
   and its serialized field name; enums are set by index. Field names and enum orders are in
   `vendor\BigPuzzleSDK-src\Unity\BigPuzzleSDK\Internal\Puzzle*.cs`.
+- `b.MeshPiece(name, mesh, colour)` adds geometry built in code (land, ramps), with a collider. Override
+  `PuzzleType => 2` for packs that are scenery or land, not a puzzle. Sea level is height 0; with `FixedSite`
+  offshore the root sits on the sea floor, so subtract the root's position from world coordinates.
+- **The Winter Isle** (`WinterIslePuzzle.cs`) is the island the winter edition is built on. Its build writes
+  `unity\Land\WinterIsle.land`, a height grid the framework reads as ground, so puzzles can be sited on it and
+  snap to it. Rebuild every island puzzle after changing the island's shape. To put a puzzle on the island,
+  override `Near` (a point on it), `MinDistance => 0` and `MaxDistance`; `GlassBoothPuzzle.cs` does this.
+  The editor previews do not show the island (puzzles there look as if they float over the sea); use game
+  screenshots.
 - Only Glass, Timer and Progress Bar can be scaled. Lamps start off. Ordinary walls do not block voices: put
   them under a parent with `PuzzleSoundProof`.
 - A `Puzzle`-type puzzle needs one Gourd Vice (or Box), one Pillow and a Start Switch. The SDK's checks run
@@ -98,7 +108,8 @@ the user and friends, who must all have the same packs and SDK version.
 
 ## Known open problems
 
-- Flat-colour materials made by `b.Box` show thin dark grid lines in the game. Cause unknown.
+- Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
+  material on the test island and causeway does not. Cause unknown.
 - `ClearGround` leaves dark flat patches where some boulders were.
 - Packaging a puzzle for friends (Thunderstore zip) is not built.
 - Nothing has been tested with two players.
