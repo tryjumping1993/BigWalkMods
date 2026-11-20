@@ -152,7 +152,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     {
         float ski = SkiFace(p);
         // off the ski face the whole mass is pushed about by a slow noise, so no contour is a circle
-        Vector2 q = p + new Vector2(Mathf.PerlinNoise(p.x * 0.0021f + 5.5f, p.y * 0.0021f + 1.1f) - 0.5f, Mathf.PerlinNoise(p.x * 0.0021f + 9.2f, p.y * 0.0021f + 6.6f) - 0.5f) * (230f * (1f - ski));
+        Vector2 q = p + new Vector2(Mathf.PerlinNoise(p.x * 0.0021f + 5.5f, p.y * 0.0021f + 1.1f) - 0.5f, Mathf.PerlinNoise(p.x * 0.0021f + 9.2f, p.y * 0.0021f + 6.6f) - 0.5f) * (230f * (1f - ski) * Smooth((p - Peak).magnitude / 260f));      // and not at the top, so the summit stays where Peak says
         Vector2 dq = q - Peak;
         float d = Mathf.Max(0f, dq.magnitude - SummitFlat), radius = MountainRadius(p);
         float t = Mathf.Clamp01(1f - d / radius);
@@ -174,7 +174,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // crags and spurs on the steep sides; the ski face only rolls a little
         float rough = (Ridged(p.x * 0.006f + 11.3f, p.y * 0.006f + 4.9f) - 0.4f) * 70f + (Ridged(p.x * 0.017f + 2.1f, p.y * 0.017f + 7.7f) - 0.45f) * 24f + (Ridged(p.x * 0.05f + 6.3f, p.y * 0.05f + 1.2f) - 0.5f) * 7f;
         float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 16f;
-        float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 70f);      // none at the foot or on the summit
+        float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 150f);      // none at the foot or on the summit
         float rib = Rib(p) * Smooth((h - TreeLine + 40f) / 60f);      // rock ribs only above the trees; below, the face is even ground under forest
         return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, ski * (1f - rib)) * body + rib * ski * 16f * body);
     }
