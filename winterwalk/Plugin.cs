@@ -22,6 +22,7 @@ namespace WinterWalk
     {
         internal static ManualLogSource L;
         internal static ConfigEntry<bool> Enabled;
+        internal static ConfigEntry<bool> Tracks;
         internal const float RockSnowRaise = 0.2f;      // rocks keep more bare granite than the list's snow line says
 
         public override void Load()
@@ -29,12 +30,15 @@ namespace WinterWalk
             L = Log;
             Enabled = Config.Bind("General", "WinterSky", true, "Blend the sky and light towards winter near the Winter Isle.");
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
+            Tracks = Config.Bind("General", "SnowTracks", true, "Players leave tracks in the Winter Isle's snow.");
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
+            ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
             go.AddComponent<SkyDriver>();
             go.AddComponent<Dresser>();
+            go.AddComponent<SnowTrails>();
             L.LogInfo("Winter Walk loaded");
         }
     }

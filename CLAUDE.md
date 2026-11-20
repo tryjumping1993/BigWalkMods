@@ -16,7 +16,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
 | `build-all` / `list` | All puzzle definitions. |
 | `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save, capped at 30 fps (`BWM_FPS` overrides, 0 = no cap). Unattended, about 80 s. |
-| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `quit`; `game help` lists all. |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `quit`; `game help` lists all. |
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
@@ -35,7 +35,8 @@ code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-N
   Dev profile only; it must never ship with a puzzle.
 - `winterwalk\` — Winter Walk, the edition's own BepInEx plugin, which every player needs. It gives the island
   its sky and light: near the island's box (kept in step with `WinterIslePuzzle.cs` by hand) it blends the
-  game's sky system (Enviro) towards winter for that player, and back on the mainland.
+  game's sky system (Enviro) towards winter for that player, and back on the mainland. It also dresses the island
+  with the game's rocks and plants (`Dresser.cs`) and keeps the tracks players leave in the snow (`SnowTrails.cs`).
 - `profile\` — the mod profile: BepInEx 6.0.788 (IL2CPP), the SDK mod, the companion and dev helpers
   (UnityExplorer hidden at startup, NoClip, SkipIntro). Builds export to `profile\BepInEx\plugins\BigPuzzleSDK\`.
 - `previews\<Name>-*.png` — editor renders of the last build. `shots\*.png` — screenshots from the real game.
@@ -98,6 +99,18 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   `BWM/SnowOverlay` (caps on the game's rocks) use them. Run it with `--preview <dir>` for shaded renders of each
   surface to look at before a build. Change the snow's look there, not with noise in the shader: shader value
   noise gave the blur and the evenly spaced bands the reviews complained of.
+- **One snow everywhere:** `unity\Assets\Shaders\BwmSnowCommon.hlsl` holds the snow's shading (colour, blue shade,
+  wrapped light, sheen, glints). The ground, `BWM/SnowOverlay`, `BWM/Fir` and `BWM/Snowy` all call it, so change the
+  snow's look there and every surface follows. Fir and Snowy read the surface maps as globals (`_BwmWindNormal`,
+  `_BwmWindHeight`, `_BwmGrainNormal`, `_BwmSnowMaps`) that Winter Walk sets from the island's materials, so snow
+  on trees and props is smooth in the editor and on any pack loaded without the island.
+- **Tracks in the snow** (`winterwalk\SnowTrails.cs`): the snow's surface is a height field in millimetres, kept only
+  where disturbed. Each player's PC stamps it from where it sees every `PlayerCharacter` (a walk treads a trench
+  with banks pushed up beside it, anything faster than 4.2 m/s a smooth groove), falling snow fills it by 1 mm
+  every 7 s, and a 64 m window round the camera goes to the ground shader as `_BwmTrailTex`, which marches the
+  eye's ray into the trench. Nothing is sent between players. The player's origin rides 0.75 m above the ground.
+  Test without a controller: `game 'set?path=WinterWalk.SnowTrails.TestPattern&value=true'` draws tracks in front
+  of the camera, `game 'walk?x=..&z=..'` makes the player leave a real one. Config `SnowTracks` turns it off.
 - **Loose snow** is items: `b.Item(name, mesh, material, x, z, height, mass)` makes something players can pick
   up, carry and throw. A Presence Sensor with `type` 2 (Specific Item), the items in `acceptedCustom` and
   `requiredPlayers` set to how many are needed counts the ones inside it; wire its `onPressed` to

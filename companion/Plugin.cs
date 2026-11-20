@@ -181,7 +181,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -202,6 +202,7 @@ namespace BwmCompanion
                 case "snowtest": yield return SnowTest(r); break;
                 case "move": yield return Move(r); break;
                 case "look": yield return Look(r); break;
+                case "walk": { IEnumerator<string> e = Walk(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "obj": yield return Objects.Describe(r); break;
                 case "clone": yield return Objects.Clone(r); break;
                 case "overlay": yield return Objects.Overlay(r); break;
@@ -678,6 +679,43 @@ namespace BwmCompanion
                 sb.Append(' ').Append(F(best));
             }
             return sb.ToString();
+        }
+
+        // Moves the player over the ground in a straight line to x, z at a speed (metres a second), keeping them at
+        // the height above the ground they started at: walk?x=..&z=..&speed=1.5. For testing what reacts to a
+        // player moving (tracks in the snow); it does not play the game's own walk.
+        static IEnumerator<string> Walk(Request r)
+        {
+            NetworkIdentity player = NetworkClient.localPlayer;
+            if (player == null) { yield return "ERROR not in a walk"; yield break; }
+            PlayerCharacter character = player.GetComponent<PlayerCharacter>();
+            Rigidbody body = character != null ? character.rb : player.GetComponent<Rigidbody>();
+            Transform root = player.transform.root;
+            float Ground(float x, float z, float near)
+            {
+                float best = float.MinValue;
+                foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(x, near + 3f, z), Vector3.down, 8f, ~0, QueryTriggerInteraction.Ignore))
+                    if (hit.collider != null && hit.collider.transform.root != root) best = Mathf.Max(best, hit.point.y);
+                return best > float.MinValue ? best : near;
+            }
+            Vector3 start = player.transform.position;
+            float lift = Mathf.Clamp(start.y - Ground(start.x, start.z, start.y), 0f, 1f);
+            var target = new Vector2(r.Num("x"), r.Num("z"));
+            float speed = r.Has("speed") ? r.Num("speed") : 1.5f;
+            for (int frame = 0; frame < 6000; frame++)
+            {
+                Vector3 p = player.transform.position;
+                Vector2 to = target - new Vector2(p.x, p.z);
+                float step = speed * Time.deltaTime;
+                if (to.magnitude <= step) break;
+                Vector2 d = to.normalized * step;
+                var next = new Vector3(p.x + d.x, 0f, p.z + d.y);
+                next.y = Ground(next.x, next.z, p.y) + lift;
+                player.transform.position = next;
+                if (body != null) { body.position = next; body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; }
+                yield return null;
+            }
+            yield return "walked to " + V(player.transform.position) + " (riding " + F(lift) + " m above the ground)";
         }
 
         static IEnumerator<string> Shot(Request r)

@@ -75,6 +75,15 @@ Shader "BWM/Snow"
             float _GrainStrength;
             float _TrackTile;
         CBUFFER_END
+        // Tracks pressed into the snow by players: Winter Walk keeps the snow's height round the camera in this
+        // texture (millimetres, 128 = untouched) and sets these globals; without it _BwmTrail is 0
+        TEXTURE2D(_BwmTrailTex); SAMPLER(sampler_BwmTrailTex);
+        float4 _BwmTrailParams;      // x: texture coordinates per metre; y, z: full strength within y metres of the eye, none beyond z; w: metres per texel
+        float _BwmTrail;
+        float TrailHeight(float2 xz)      // metres: below 0 pressed down, above 0 heaped up
+        {
+            return (SAMPLE_TEXTURE2D_LOD(_BwmTrailTex, sampler_BwmTrailTex, xz * _BwmTrailParams.x, 0).r * 255.0 - 128.0) * 0.001;
+        }
         TEXTURE2D(_TrackNormal); SAMPLER(sampler_TrackNormal);
         TEXTURE2D(_TrackHeight); SAMPLER(sampler_TrackHeight);
         TEXTURE2D(_WindNormal); SAMPLER(sampler_WindNormal);
@@ -168,15 +177,53 @@ Shader "BWM/Snow"
             half4 Frag(Varyings i) : SV_Target
             {
                 float3 positionWS = i.positionWS;
+                float3 viewVector = GetWorldSpaceViewDir(positionWS);
+                float viewDistance = length(viewVector);
+                float3 v = viewVector / max(viewDistance, 1e-4);
+
+                // Tracks: where players have pressed the snow down and heaped it aside. The eye's ray is followed
+                // down into the trench (a short march through the height field), so its floor and far wall sit
+                // below the surface instead of being painted on it.
+                float trail = 0.0;              // metres at the point seen: below 0 pressed down, above 0 heaped
+                float2 trailSlope = 0.0;        // its lean, to add to the normal
+                float trailFade = _BwmTrail * (1.0 - smoothstep(_BwmTrailParams.y, _BwmTrailParams.z, viewDistance));
+                if (trailFade > 0.0)
+                {
+                    const float deepest = 0.1;
+                    float2 across = -v.xz / max(v.y, 0.22);      // metres sideways for each metre the ray goes down
+                    float2 seen = positionWS.xz;
+                    float here = TrailHeight(seen), far = TrailHeight(seen + across * deepest), mid = TrailHeight(seen + across * deepest * 0.5);
+                    if (min(here, min(far, mid)) < -0.003)
+                    {
+                        float lastDepth = 0.0, lastGap = -here;      // gap: how far the floor is below the ray (negative once the ray is under it)
+                        float hit = max(-here, 0.0);
+                        for (int k = 1; k <= 6; k++)
+                        {
+                            float depth = deepest * k / 6.0;
+                            float gap = -TrailHeight(seen + across * depth) - depth;
+                            if (gap <= 0.0)
+                            {
+                                hit = lerp(lastDepth, depth, saturate(lastGap / max(lastGap - gap, 1e-5)));
+                                break;
+                            }
+                            lastDepth = depth; lastGap = gap; hit = depth;
+                        }
+                        seen += across * hit;
+                    }
+                    float texel = _BwmTrailParams.w;
+                    float h = TrailHeight(seen);
+                    trail = h * trailFade;
+                    trailSlope = float2(h - TrailHeight(seen + float2(texel, 0)), h - TrailHeight(seen + float2(0, texel))) / texel * trailFade;
+                }
+                float walked = smoothstep(0.052, 0.066, -trail);      // a walked trench is deeper than a slid groove
+
                 // Paths: trodden snow, packed and covered in boot prints, without glints. The edge is ragged and
                 // follows the prints themselves, so stray ones wander off it
                 float2 trackUV = positionWS.xz / _TrackTile;
                 float3 trackN = UnpackNormal(SAMPLE_TEXTURE2D(_TrackNormal, sampler_TrackNormal, trackUV));
                 float trackCavity = SAMPLE_TEXTURE2D(_TrackHeight, sampler_TrackHeight, trackUV).g;      // 0 in a print
                 float path = smoothstep(0.42, 0.58, i.path + (ValueNoise(positionWS.xz * 0.9) - 0.5) * 0.35 + (0.5 - trackCavity) * 0.25);
-                float3 viewVector = GetWorldSpaceViewDir(positionWS);
-                float viewDistance = length(viewVector);
-                float3 v = viewVector / max(viewDistance, 1e-4);
+                path = max(path, walked);      // the floor of a walked trench is trodden snow too
 
                 // The snow's surface, from the generated maps (tools/snowtex.py), laid over the ground from above:
                 // the wind-carved map at its own size; the same map four times larger and blurred, for the shapes
@@ -248,11 +295,13 @@ Shader "BWM/Snow"
                 float snowy = (1.0 - rock) * (1.0 - earthy * 0.8);
                 // calmer and rougher stretches, so no two places look the same; packed paths are nearly flat
                 float calm = lerp(0.55, 1.15, ValueNoise(positionWS.xz * 0.021 + 13.0));
-                float relief = (1.0 - path * 0.85) * snowy;
+                float pressed = smoothstep(0.008, 0.03, -trail), bank = smoothstep(0.004, 0.02, trail) * snowy;
+                float relief = (1.0 - path * 0.85) * (1.0 - pressed * 0.8) * snowy;
                 float2 tilt = _DriftStrength * float2(h0 - hx, h0 - hz)
                     + _WindStrength * calm * (windN.xy + farN.xy * 0.5)
                     + _GrainStrength * grainN.xy * grainFade;
-                float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(trackN.x, 0, trackN.y) * (path * snowy));
+                tilt += grainN.xy * bank * 1.5;      // the heaped banks are loose and lumpy
+                float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy);
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -276,6 +325,12 @@ Shader "BWM/Snow"
 
                 // Hollows between drifts are a touch bluer; so is every dip in the land, and crests catch more light
                 color = lerp(color, color * float3(0.90, 0.95, 1.0), saturate(0.55 - h0));
+                // tracks: a slid groove is packed smooth and a little greyer; a trench lies in the shade of its own
+                // walls, deeper is darker; the banks heaped beside it are fresh loose snow
+                float groove = pressed * (1.0 - walked) * snowy;
+                color *= lerp(float3(1, 1, 1), float3(0.84, 0.89, 0.97), groove)
+                    * lerp(float3(1, 1, 1), float3(0.74, 0.81, 0.95), smoothstep(0.0, 0.09, -trail) * 0.75 * snowy)
+                    * (1.0 + 0.07 * bank);
                 // a trail is trodden down into the snow: the low wall along each side of it is in shade
                 color *= lerp(float3(1, 1, 1), float3(0.80, 0.86, 0.97), path * (1.0 - path) * 4.0 * 0.7 * (1.0 - rock) * (1.0 - earthy));
                 float hollow = saturate((0.5 - i.form) * 2.0), crest = saturate((i.form - 0.5) * 2.0);
