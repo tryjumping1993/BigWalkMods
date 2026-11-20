@@ -280,3 +280,17 @@ and finished assets for the puzzles.
 - Is the summit's 20 on top of the tree's 5 (25 puzzles in all), or 20 in all?
 - "Complete assets for the puzzles": finish the look of the four built puzzles, or build the unbuilt ones in
   the list above?
+
+### Decisions since (user, 2026-11-20)
+
+- The new tower takes only gourds won on the Winter Isle itself (the island puzzles' own gourds), not the base
+  game's. So the SDK's one-Tower-pack rule stands: every plinth that must survive a save lives in one pack.
+- The towers need not be SDK-only: the base game's five gourd towers (the four Lookouts and the Black Tower) may
+  be copied and re-themed for Christmas.
+- The mountain is to be very tall: at least three times the base game's highest point (about 185 m, so 550 m or
+  more), made for skiing and snowboarding. The island may be made much bigger to hold it.
+- Skiing and snowboarding are to be games with props players handle (skis, boards and the like, modelled in
+  code), not only smooth runs to slide down.
+- The gondola must run much faster than the base game's lift, because it climbs so much higher.
+- Order of work: finish the terrain review goal first (tools\review\README.md), then this. The forked session's
+  untested gondola, summit and plinth work is on branch `gondola-wip`.
