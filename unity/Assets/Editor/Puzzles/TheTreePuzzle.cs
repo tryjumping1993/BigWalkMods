@@ -94,6 +94,8 @@ public sealed class TheTreePuzzle : PuzzleDef
             plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(x, z) * Mathf.Rad2Deg, 0f);
             plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
         }
+        // the list fills in this order: the tree's five (the gondola), the mine tower's five (the mine), the summit's twenty
+        plinths.AddRange(MineTower(b, snowy));
         var summitPlinths = Summit(b, stone, bare, snowy);
         plinths.AddRange(summitPlinths);
 
@@ -111,6 +113,68 @@ public sealed class TheTreePuzzle : PuzzleDef
             ring.Add(new Vector3(Mathf.Cos(a) * outer, 3f, Mathf.Sin(a) * outer));
         }
         Kit.LightString(b, "Plaza Lights", ring, 0.3f, 0.5f, true, true, 9);
+    }
+
+    // The mine tower, on the apron outside the mine's east portal (WinterIsleMine.Tower): a timber headframe with a
+    // lantern at its top, five plinths in an arc before it and a hold button that opens them while it is held.
+    // When the five hold gourds, Winter Walk opens the mine (MineDriver). Local coordinates are from the plaza.
+    const int MinePlinths = 5;
+    static List<UnityEngine.Object> MineTower(PuzzleBuilder b, Material snowy)
+    {
+        var plinths = new List<UnityEngine.Object>();
+        if (!WinterIsleMine.Load()) { Debug.LogWarning("[BWM] The Tree: no mine yet (build WinterIsle first); the mine tower is left out"); return plinths; }
+        Vector2 c = WinterIsleMine.Tower - WinterIslePuzzle.Plaza;
+        Vector2 toTrack = WinterIsleMine.Right(0);                  // the tower stands on the track's left; this faces the loop
+        Vector2 along = WinterIsleMine.Dir(0);
+        float yaw = Mathf.Atan2(toTrack.x, toTrack.y) * Mathf.Rad2Deg;
+        Vector3 Here(float x, float z, float up) => b.WorldPoint(c.x + x, c.y + z, up) - b.Root.transform.position;
+        Vector3 At(float forward, float side, float up) { Vector2 p = toTrack * forward + along * side; return Here(p.x, p.y, up); }
+        var frame = new MeshBuilder();
+        Color timber = new Color(0.5f, 0.35f, 0.2f), iron = new Color(0.22f, 0.22f, 0.25f);
+        Kit.AddBox(frame, At(-1.2f, 0f, -0.4f), new Vector3(4.4f, 0.6f, 4.4f), Stone, yaw);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(-1.2f + sz * 1.5f, sx * 1.5f, 0.2f), new Vector3(0.36f, 8.2f, 0.36f), timber, yaw);
+        foreach (float up in new[] { 2.6f, 5.2f, 8.1f })
+        {
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(frame, At(-1.2f + sgn * 1.5f, 0f, up), new Vector3(3.3f, 0.26f, 0.26f), timber * 0.9f, yaw);
+                Kit.AddBox(frame, At(-1.2f, sgn * 1.5f, up), new Vector3(0.26f, 0.26f, 3.3f), timber * 0.9f, yaw);
+            }
+        }
+        Kit.AddBox(frame, At(-1.2f, 0f, 8.4f), new Vector3(4.2f, 0.3f, 4.2f), timber * 0.8f, yaw);             // the top deck
+        Kit.AddBox(frame, At(-1.2f, 0f, 8.7f), new Vector3(0.3f, 1.7f, 2.2f), iron, yaw);                      // the winding wheel, edge on
+        Kit.AddBox(frame, At(-1.2f, 0f, 9.15f), new Vector3(0.5f, 0.8f, 0.8f), iron * 1.3f, yaw);
+        Kit.AddBox(frame, At(-1.2f, 0f, 10.4f), new Vector3(3.2f, 0.25f, 3.2f), new Color(0.55f, 0.16f, 0.13f), yaw);      // a red cap
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(-1.2f + sz * 1.3f, sx * 1.3f, 8.7f), new Vector3(0.2f, 1.7f, 0.2f), timber, yaw);
+        b.MeshPiece("Mine Tower", frame.ToMesh(), snowy);
+
+        for (int i = 0; i < MinePlinths; i++)
+        {
+            float a = (i - (MinePlinths - 1) / 2f) * 0.5f;
+            Vector2 p = toTrack * (-1.2f + Mathf.Cos(a) * 4.3f) + along * (Mathf.Sin(a) * 4.3f);
+            Vector2 facing = (toTrack * Mathf.Cos(a) + along * Mathf.Sin(a)).normalized;
+            Piece plinth = b.Empty("Mine Plinth " + (i + 1), c.x + p.x, c.y + p.y, 0.15f, true);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(facing.x, facing.y) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        Vector2 post = toTrack * 1.4f - along * 3.6f;
+        b.Box("Mine Button Post", c.x + post.x, c.y + post.y, new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, yaw, true);
+        Vector2 face = post + toTrack * 0.11f;
+        Piece button = b.Part("Button Hold", c.x + face.x, c.y + face.y, 1.15f, yaw, true);
+        foreach (UnityEngine.Object p in plinths) button.On("PuzzleButton", "onPressed", p, "HoldToOpen");
+        var lights = new List<Vector3>();
+        for (int i = 0; i <= 6; i++)
+        {
+            float a = (i - 3) * 0.5f;
+            Vector2 p = toTrack * (-1.2f + Mathf.Cos(a) * 5.6f) + along * (Mathf.Sin(a) * 5.6f);
+            lights.Add(new Vector3(c.x + p.x, 2.2f, c.y + p.y));
+        }
+        Kit.LightString(b, "Mine Tower Lights", lights, 0.3f, 0.5f, true, true, 31);
+        return plinths;
     }
 
     // The summit sanctuary, at WinterIslePuzzle.Summit: twenty plinths in a ring round a great gold star on a

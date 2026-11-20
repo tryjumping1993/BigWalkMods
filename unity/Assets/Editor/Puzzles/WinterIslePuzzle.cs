@@ -596,6 +596,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 3. Level the plaza and every puzzle site on the island, each at the height the land has at its centre
         var sites = new List<Vector2>();
         var flats = new List<(Vector2 at, float radius, float blend)> { (Plaza, PlazaRadius, 16f), (Summit, SummitRadius, 4f), (GondolaBottom, 10f, 9f) };
+        // the mine's portals: where each tunnel's line meets the mountainside, with a level apron outside
+        WinterIsleMine.FindPortals(p => height[Cell_(p)]);
+        int mineFlat = flats.Count;
+        for (int portal = 0; portal < 3; portal++) flats.Add((WinterIsleMine.Apron(portal), WinterIsleMine.ApronRadius, 9f));
         foreach (Vector3 site in b.OtherSites)
         {
             var at = new Vector2(site.x, site.y);
@@ -605,6 +609,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         var level = new float[flats.Count];
         for (int f = 0; f < flats.Count; f++) level[f] = Mathf.Round(height[Cell_(flats[f].at)] * 2f) / 2f;
+        for (int portal = 0; portal < 3; portal++) level[mineFlat + portal] = WinterIsleMine.Floor;
         for (int k = 0; k < count; k++)
         {
             if (!(height[k] > 0f)) continue;
@@ -734,6 +739,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
             foreach (Vector2 e in beachEnds) if ((e - p).magnitude < 150f) far = false;
             if (far) { pointEnds.Add(p); trailEnds.Add(k); }
         }
+        for (int portal = 0; portal < 3; portal++)
+        {
+            int apron = Cell_(WinterIsleMine.Point(portal, WinterIsleMine.Threshold[portal] + WinterIsleMine.ApronOut + WinterIsleMine.ApronRadius - 2f, 0f));
+            if (reachable[apron]) trailEnds.Add(apron);
+        }
         foreach (int end in trailEnds) if (end >= 0 && !targets.Contains(end)) { targets.Add(end); trails++; }
         // Each route is found from the whole network laid so far, so it branches off the nearest path instead of
         // running all the way back to the plaza beside the others (which made the paths spokes of a wheel)
@@ -778,6 +788,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // the gondola's stations, the summit, and a corridor under the cable, kept clear of trees and rocks
         structures.Add((Summit, SummitRadius + 1f));
         structures.Add((GondolaBottom, 14f));
+        for (int portal = 0; portal < 3; portal++)
+        {
+            structures.Add((WinterIsleMine.Apron(portal), WinterIsleMine.ApronRadius + 2f));
+            for (float back = 0f; back < 60f; back += 5f) structures.Add((WinterIsleMine.Point(portal, WinterIsleMine.Threshold[portal] - back, 0f), 9f));
+        }
         for (float t = 0f; t <= 1f; t += 0.004f) structures.Add((Vector2.Lerp(GondolaBottom, GondolaTop, t), 7f));
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
@@ -1034,6 +1049,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // The mesh is twice as fine as the grid (1.5 m) and follows HeightAt. It is the collider too, so players
         // walk on exactly what they see. Colours are the grid's, blended.
         const int Sub = 2;
+        WinterIsleMine.FindCuts(HeightAt);
         int fw = nx * Sub + 1;
         var fineIndex = new int[fw * (nz * Sub + 1)];
         for (int f = 0; f < fineIndex.Length; f++) fineIndex[f] = -1;
@@ -1062,6 +1078,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     for (int si = 0; si < Sub; si++)
                     {
                         int fi = i * Sub + si, fj = j * Sub + sj;
+                        if (WinterIsleMine.InCut(new Vector2(X0 + (fi + 0.5f) * Cell / Sub, Z0 + (fj + 0.5f) * Cell / Sub))) continue;      // the mine's open cuts
                         int a = Vertex(fi, fj, i, j), bb = Vertex(fi + 1, fj, i, j), c = Vertex(fi, fj + 1, i, j), d = Vertex(fi + 1, fj + 1, i, j);
                         tris.Add(a); tris.Add(c); tris.Add(bb);
                         tris.Add(bb); tris.Add(c); tris.Add(d);
@@ -1104,6 +1121,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             for (int si = 0; si < Sub; si++)
                             {
                                 int f = (j * Sub + sj) * fw + i * Sub + si;
+                                if (WinterIsleMine.InCut(new Vector2(X0 + (i * Sub + si + 0.5f) * Cell / Sub, Z0 + (j * Sub + sj + 0.5f) * Cell / Sub))) continue;
                                 int a = fineIndex[f], bb = fineIndex[f + 1], c = fineIndex[f + fw], d = fineIndex[f + fw + 1];
                                 tt.Add(Local(a)); tt.Add(Local(c)); tt.Add(Local(bb));
                                 tt.Add(Local(bb)); tt.Add(Local(c)); tt.Add(Local(d));
@@ -1641,6 +1659,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             Debug.Log("[BWM] Winter Isle gondola: " + Sdk.F(length) + " m, " + (spans - 1) + " pylons, cable from " + Sdk.F(line[0].y) + " to " + Sdk.F(line[spans].y) + " m, " + GondolaCabins + " cabins");
         }
+
+        // 14. The coal mine under the mountain (WinterIsleMine)
+        WinterIsleMine.Build(b, root, HeightAt);
+        WinterIsleMine.Save();
 
         // 12. The pistes' surface: an unseen sheet a hand's breadth over the snow of the three runs and the bowl, with
         //     no friction at all, so that anyone who steps onto a piste slides down it. (A spike: whether the game's

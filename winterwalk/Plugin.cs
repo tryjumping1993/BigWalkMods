@@ -36,6 +36,7 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
             ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<MineDriver>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -44,6 +45,7 @@ namespace WinterWalk
             go.AddComponent<SnowTrails>();
             go.AddComponent<SkiDriver>();
             go.AddComponent<GondolaDriver>();
+            go.AddComponent<MineDriver>();
             L.LogInfo("Winter Walk loaded");
         }
     }
