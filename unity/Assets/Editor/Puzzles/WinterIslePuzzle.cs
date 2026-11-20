@@ -29,7 +29,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
     // The box of sea the island may fill (world metres). It runs past the terrain square's edge at -1024, which
     // the game allows: land there holds players like any other.
-    const float X0 = -1310f, X1 = -428f, Z0 = -1259f, Z1 = -560f, Cell = 3f;
+    const float X0 = -1992f, X1 = -360f, Z0 = -1581f, Z1 = -501f, Cell = 3f;
+    // The island's outline: two overlapping ovals (west and east), roughened by coves; the east one reaches the
+    // causeway and is cut back where it would come within a channel's width of the mainland
+    static readonly (Vector2 centre, Vector2 radius)[] Ovals = { (new Vector2(-1230f, -1060f), new Vector2(620f, 420f)), (new Vector2(-740f, -870f), new Vector2(295f, 320f)) };
     const float Channel = 50f;          // open water kept between the island and the mainland
     const float Skirt = 24f;            // how far the submerged rim runs out from the coast
     static readonly Vector2 ShorePoint = new Vector2(-468f, -700f);     // where the causeway meets the mainland
@@ -44,6 +47,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         (new[] { new Vector3(-1020f, 70f, -820f), new Vector3(-905f, 58f, -765f), new Vector3(-830f, 30f, -690f) }, 85f),
         (new[] { new Vector3(-1215f, 20f, -1150f), new Vector3(-1160f, 42f, -1110f), new Vector3(-1090f, 30f, -1080f) }, 80f),
         (new[] { new Vector3(-700f, 14f, -990f), new Vector3(-640f, 28f, -965f), new Vector3(-585f, 18f, -985f) }, 70f),
+        (new[] { new Vector3(-1760f, 26f, -950f), new Vector3(-1630f, 66f, -1005f), new Vector3(-1510f, 84f, -1075f), new Vector3(-1400f, 52f, -1150f) }, 120f),
+        (new[] { new Vector3(-1460f, 22f, -1330f), new Vector3(-1310f, 44f, -1380f), new Vector3(-1160f, 30f, -1350f) }, 90f),
     };
     public static readonly Vector2 Lake = new Vector2(-822f, -1012f);
     public const float LakeRadius = 32f, LakeLevel = 1f;
@@ -59,7 +64,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
     static readonly List<(Vector2 at, float radius, float height)> knolls = new List<(Vector2, float, float)>();
 
     public override Vector2 Footprint => new Vector2(X1 - X0, Z1 - Z0);
-    public override Vector2? FixedSite => new Vector2((X0 + X1) / 2f, (Z0 + Z1) / 2f);
+    // The pack's root stays where it was first placed (it must be over the game's terrain square, which the island
+    // now runs well past); everything is built relative to it
+    public override Vector2? FixedSite => new Vector2(-869f, -909.5f);
 
     static readonly Color PackedSnow = new Color(0.8f, 0.85f, 0.93f);
 
@@ -280,7 +287,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 0. Granite knolls, kept off the plaza and the puzzle sites
         knolls.Clear();
         var knollRandom = new System.Random(1717);
-        for (int tries = 0; tries < 400 && knolls.Count < 46; tries++)
+        for (int tries = 0; tries < 800 && knolls.Count < 85; tries++)
         {
             var at = new Vector2(X0 + (float)knollRandom.NextDouble() * (X1 - X0), Z0 + (float)knollRandom.NextDouble() * (Z1 - Z0));
             float radius = 14f + (float)knollRandom.NextDouble() * 22f, tall = 4f + (float)knollRandom.NextDouble() * 9f;
@@ -306,8 +313,17 @@ public sealed class WinterIslePuzzle : PuzzleDef
         {
             Vector2 p = At(k);
             float toMainland = toLand[(k / row + pad) * pw + k % row + pad] * Cell - Channel;
-            float toEdge = Mathf.Min(Mathf.Min(p.x - X0, X1 - p.x), Mathf.Min(p.y - Z0, Z1 - p.y)) - 22f;
-            float coves = (Mathf.PerlinNoise(p.x * 0.006f + 3.3f, p.y * 0.006f + 8.8f) - 0.5f) * 80f + (Mathf.PerlinNoise(p.x * 0.02f + 1.3f, p.y * 0.02f + 4.1f) - 0.5f) * 24f;
+            float toEdge = Mathf.Min(Mathf.Min(p.x - X0, X1 - p.x), Mathf.Min(p.y - Z0, Z1 - p.y)) - 10f;
+            float shape = float.MinValue;
+            foreach (var oval in Ovals)
+            {
+                Vector2 d = new Vector2((p.x - oval.centre.x) / oval.radius.x, (p.y - oval.centre.y) / oval.radius.y);
+                float wobble = 1f + 0.08f * Mathf.Sin(Mathf.Atan2(d.y, d.x) * 3f + oval.centre.x) + 0.05f * Mathf.Sin(Mathf.Atan2(d.y, d.x) * 5f + oval.centre.y);
+                shape = Mathf.Max(shape, (wobble - d.magnitude) * Mathf.Min(oval.radius.x, oval.radius.y));
+            }
+            toEdge = Mathf.Min(toEdge, shape);
+            float coves = (Mathf.PerlinNoise(p.x * 0.0032f + 13.1f, p.y * 0.0032f + 2.7f) - 0.5f) * 150f
+                + (Mathf.PerlinNoise(p.x * 0.006f + 3.3f, p.y * 0.006f + 8.8f) - 0.5f) * 70f + (Mathf.PerlinNoise(p.x * 0.02f + 1.3f, p.y * 0.02f + 4.1f) - 0.5f) * 24f;
             float inside = Mathf.Min(toMainland, toEdge) + coves;
             height[k] = RawHeight(p.x, p.y, inside);
             beach[k] = BeachAmount(p);
@@ -379,7 +395,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 float run = Cell * (n < 4 ? 1f : diag), grade = Mathf.Abs(height[nk] - height[k]) / run;
                 if (grade > 0.5f) continue;
                 float lakeside = (At(nk) - Lake).magnitude < LakeRadius ? 4f : 1f;      // go round the lake, not over it
-                float c = cost[k] + run * (1f + 40f * grade * grade) * lakeside;
+                Vector2 q = At(nk);
+                float wander = 0.75f + 0.5f * Mathf.PerlinNoise(q.x * 0.03f + 7.1f, q.y * 0.03f + 3.3f);      // so routes meander, not run in straight lines
+                float c = cost[k] + run * (1f + 40f * grade * grade) * lakeside * wander;
                 if (c >= cost[nk]) continue;
                 open.Remove((cost[nk], nk));
                 cost[nk] = c; from[nk] = k;
@@ -391,10 +409,56 @@ public sealed class WinterIslePuzzle : PuzzleDef
         int routed = 0;
         var targets = new List<int> { landingCell };
         foreach (Vector2 site in sites) targets.Add(Cell_(site));
+        // Trails for exploring: to the highest ground walkable in each part of the island, the lake, and the beaches
+        int trails = 0;
+        int Highest(System.Func<Vector2, bool> where)
+        {
+            int bestCell = -1; float bestHeight = 0f;
+            for (int k = 0; k < count; k++)
+                if (from[k] >= 0 && height[k] > bestHeight && where(At(k))) { bestHeight = height[k]; bestCell = k; }
+            return bestCell;
+        }
+        var trailEnds = new List<int>
+        {
+            Highest(p => true),                                       // the summit (as near as walking gets)
+            Highest(p => p.x < -1400f),                               // the western range
+            Highest(p => p.x > -1400f && p.x < -1000f && p.y < -1250f),   // the southern ridge
+            Highest(p => p.x > -800f && p.y < -900f),                 // the southern headland
+        };
+        int lakeShore = Cell_(Lake + (Plaza - Lake).normalized * (LakeRadius + 10f));
+        if (from[lakeShore] >= 0) trailEnds.Add(lakeShore);
+        var beachEnds = new List<Vector2>();
+        for (int k = 0; k < count; k += 7)
+        {
+            if (from[k] < 0 || !(beach[k] > 0.6f) || !(height[k] > 0.8f && height[k] < 2.5f)) continue;
+            Vector2 p = At(k);
+            bool far = true;
+            foreach (Vector2 e in beachEnds) if ((e - p).magnitude < 260f) far = false;
+            if (far) { beachEnds.Add(p); trailEnds.Add(k); }
+        }
+        foreach (int end in trailEnds) if (end >= 0 && !targets.Contains(end)) { targets.Add(end); trails++; }
         foreach (int target in targets)
         {
             if (from[target] < 0 && target != start) { Debug.LogWarning("[BWM] Winter Isle: no walkable route from the plaza to " + At(target)); continue; }
-            for (int k = target; k >= 0; k = from[k]) toPath[k] = 0f;
+            // the route as points, smoothed into curves (Chaikin), then drawn into the grid
+            var route = new List<Vector2>();
+            for (int k = target; k >= 0; k = from[k]) route.Add(At(k));
+            for (int pass = 0; pass < 4 && route.Count > 2; pass++)
+            {
+                var smooth = new List<Vector2> { route[0] };
+                for (int i = 0; i + 1 < route.Count; i++)
+                {
+                    smooth.Add(Vector2.Lerp(route[i], route[i + 1], 0.25f));
+                    smooth.Add(Vector2.Lerp(route[i], route[i + 1], 0.75f));
+                }
+                smooth.Add(route[route.Count - 1]);
+                route = smooth;
+            }
+            for (int i = 0; i + 1 < route.Count; i++)
+            {
+                float length = (route[i + 1] - route[i]).magnitude;
+                for (float s = 0f; s <= length; s += 1f) toPath[Cell_(Vector2.Lerp(route[i], route[i + 1], s / Mathf.Max(length, 0.001f)))] = 0f;
+            }
             routed++;
         }
         Spread(toPath, row, nz + 1);      // now in cells; times Cell for metres
@@ -628,7 +692,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
             if (s > 0.7f) steep++; else if (s < 0.06f) flat++;
             if (beach[k] > 0.35f && height[k] < 4f) sandy++;
         }
-        Debug.Log("[BWM] Winter Isle: " + knolls.Count + " knolls; " + routed + " of " + targets.Count + " paths routed from the plaza");
+        int mainland = 0;
+        for (float mz = -1024f; mz < 1024f; mz += 8f)
+            for (float mx = -1024f; mx < 1024f; mx += 8f)
+                if (b.Ground.At(mx, mz, out float my) && my > 0.5f) mainland++;
+        Debug.Log("[BWM] Winter Isle: " + knolls.Count + " knolls; " + routed + " of " + targets.Count + " paths routed from the plaza (" + trails + " of them trails); the base game's island is " + Sdk.F(mainland * 64f / 1e6f) + " km2");
         Debug.Log("[BWM] Winter Isle: " + Sdk.F(area / 1e6f) + " km2 above the sea, summit " + Sdk.F(top) + " m at " + Sdk.F(topAt.x) + ", " + Sdk.F(topAt.y)
             + "; level ground " + Sdk.F(flat * Cell * Cell / 1e6f) + " km2, cliff " + Sdk.F(steep * Cell * Cell / 1e6f) + " km2, beach " + Sdk.F(sandy * Cell * Cell / 1e6f)
             + " km2; plaza at " + Sdk.F(level[0]) + " m; mesh " + verts.Count + " vertices");

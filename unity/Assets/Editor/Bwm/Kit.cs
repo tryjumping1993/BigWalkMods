@@ -162,6 +162,28 @@ namespace Bwm
                 }
         }
 
+        // A small round ball (a bauble) added to a mesh being built, flat-shaded
+        public static void AddBall(MeshBuilder mb, Vector3 centre, float radius, Color color)
+        {
+            const int rings = 5, segments = 8;
+            var points = new Vector3[(rings + 1) * segments];
+            for (int r = 0; r <= rings; r++)
+                for (int s = 0; s < segments; s++)
+                {
+                    float lat = Mathf.PI * ((float)r / rings - 0.5f), lon = 2f * Mathf.PI * s / segments;
+                    points[r * segments + s] = centre + new Vector3(Mathf.Cos(lat) * Mathf.Cos(lon), Mathf.Sin(lat), Mathf.Cos(lat) * Mathf.Sin(lon)) * radius;
+                }
+            for (int r = 0; r < rings; r++)
+                for (int s = 0; s < segments; s++)
+                {
+                    Vector3 a = points[r * segments + s], b2 = points[r * segments + (s + 1) % segments];
+                    Vector3 c = points[(r + 1) * segments + s], d = points[(r + 1) * segments + (s + 1) % segments];
+                    float shine = 0.85f + 0.3f * Mathf.Clamp01(((float)r / rings) - 0.2f);
+                    mb.Tri(a, c, b2, color * shine);
+                    mb.Tri(b2, c, d, color * shine);
+                }
+        }
+
         // A solid block added to a mesh being built: 'foot' is the centre of its underside, yaw turns it about that.
         // Build a puzzle's posts, walls, roofs and plinths this way into one mesh with the Snowy shader, and snow
         // settles on their tops by itself.

@@ -15,7 +15,7 @@ public sealed class TheTreePuzzle : PuzzleDef
     public override Vector2 Footprint => new Vector2(WinterIslePuzzle.PlazaRadius * 2f, WinterIslePuzzle.PlazaRadius * 2f);
     public override Vector2? FixedSite => WinterIslePuzzle.Plaza;
 
-    const float TreeHeight = 16f;
+    const float TreeHeight = 19f;
     const int Plinths = 24;
     const float RingRadius = 6.2f;
     static readonly Color Stone = new Color(0.50f, 0.52f, 0.56f);
@@ -35,9 +35,27 @@ public sealed class TheTreePuzzle : PuzzleDef
         Kit.AddDisc(step, Vector3.up * 0.3f, RingRadius - 1.4f, 0.3f, Stone * 0.92f, 32);
         b.MeshPiece("Step", step.ToMesh(), stone);
 
+        // a great snow-laden fir, the same make as the island's (Kit.AddFir), decked with baubles
+        Texture2D needles = Kit.FirBranchTexture("Assets/Puzzles/TheTree/FirBranch.png");
+        Material fir = b.ShaderMaterial("BWM/Fir", "Fir", m => { m.SetTexture("_MainTex", needles); m.SetFloat("_SnowLine", 0.45f); });
         var tree = new MeshBuilder();
-        Kit.AddPine(tree, Vector3.up * 0.6f, TreeHeight, 2026);
-        Piece pine = b.MeshPiece("Tree", tree.ToMesh(), snowy, false);
+        Kit.AddFir(tree, Vector3.up * 0.6f, TreeHeight, 2026, 1.4f);
+        Kit.AddFir(tree, Vector3.up * 0.6f, TreeHeight * 0.97f, 1225, 0.9f);      // a second set of boughs, for a full crown
+        Piece pine = b.MeshPiece("Tree", tree.ToMesh(), fir, false);
+
+        var baubles = new MeshBuilder();
+        var random = new System.Random(2512);
+        Color[] colours = { new Color(0.85f, 0.08f, 0.1f), new Color(1f, 0.75f, 0.18f), new Color(0.82f, 0.85f, 0.9f), new Color(0.15f, 0.35f, 0.9f), new Color(0.75f, 0.1f, 0.12f) };
+        for (int i = 0; i < 90; i++)
+        {
+            float t = 0.06f + 0.86f * (float)random.NextDouble();
+            float y = 0.6f + TreeHeight * (0.14f + 0.79f * t);
+            float r = (TreeHeight * 0.36f * Mathf.Pow(1f - t, 0.95f) + 0.25f) * (0.78f + 0.15f * (float)random.NextDouble());
+            float a = (float)random.NextDouble() * Mathf.PI * 2f;
+            var at = new Vector3(Mathf.Cos(a) * r, y - r * 0.42f, Mathf.Sin(a) * r);
+            Kit.AddBall(baubles, at, 0.17f + 0.1f * (float)random.NextDouble() * (1f - t), colours[i % colours.Length]);
+        }
+        b.MeshPiece("Baubles", baubles.ToMesh(), bare, false);
         CapsuleCollider trunk = pine.Go.AddComponent<CapsuleCollider>();
         trunk.center = Vector3.up * (0.6f + TreeHeight * 0.2f);
         trunk.radius = 0.7f;
@@ -54,7 +72,7 @@ public sealed class TheTreePuzzle : PuzzleDef
         {
             float t = (float)i / points;
             float y = 0.6f + TreeHeight * (0.17f + 0.78f * t);
-            float r = TreeHeight * 0.275f * (1f - t * 0.93f) + 0.15f;
+            float r = TreeHeight * 0.31f * (1f - t * 0.93f) + 0.2f;
             float a = t * 5f * 2f * Mathf.PI;
             spiral.Add(new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r));
         }
