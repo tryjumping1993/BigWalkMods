@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Test companion for Big Walk Mods: a BepInEx (IL2CPP) plugin that lets the build tools drive the running
+       game over http://127.0.0.1:17361. Dev profile only; never ship it with a puzzle.
+       Build with tools\bwm.ps1 companion (the game must be closed: Windows locks a loaded DLL). -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>BwmCompanion</AssemblyName>
+    <RootNamespace>BwmCompanion</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Profile>$(MSBuildThisFileDirectory)..\profile\BepInEx</Profile>
+    <OutputPath>$(Profile)\plugins\BwmCompanion\</OutputPath>
+    <DebugType>none</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoWarn>$(NoWarn);MSB3277;CS0436</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The mod loader, the game's generated interop assemblies and the SDK mod: all already in the profile -->
+    <Reference Include="$(Profile)\core\BepInEx.Core.dll;$(Profile)\core\BepInEx.Unity.IL2CPP.dll;$(Profile)\core\Il2CppInterop.Runtime.dll;$(Profile)\core\Il2CppInterop.Common.dll;$(Profile)\core\0Harmony.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(Profile)\interop\*.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(Profile)\plugins\markviews-BigPuzzleSDK\BigPuzzleSDK.dll">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

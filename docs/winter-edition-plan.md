@@ -1,0 +1,168 @@
+# Winter Walk: plan for a Christmas edition of Big Walk
+
+Written 2026-11-19, decisions added 2026-11-20. Goal: a snowy, Christmas-themed edition of Big Walk with 24 new
+puzzles in a region about 60% the size of the original game's puzzle area, playable by the user and friends as
+one modpack, by Christmas 2026.
+
+## Decisions (from the user, 2026-11-20)
+
+- **Region:** its own island, which players walk out to from the game's opening area. If new land turns out
+  not to be possible, the fallback is the area beyond the wall near the end of the game, where there are few
+  puzzles.
+- **Target:** all 24 puzzles by Christmas.
+- **Snow:** the snow and the falling-snow effects are to be made for this edition (own materials, shader work
+  and particles), not produced by stripping or swapping the game's existing textures.
+- **Players:** three is the minimum. Design for 3 and for 4+; two-player lobbies are not supported.
+- **Audience:** friends only. No public release, so no store page, support or licence review beyond using
+  assets we are allowed to use.
+
+## What "60% of the original" means
+
+Measured from the game's own world (`world\world-index.tsv`):
+
+- The island is four 1024 m terrains (2048 x 2048 m including sea).
+- The base game's challenges sit in a band of roughly 700 x 540 m (about 0.38 km2): 29 any-player-count
+  challenges plus 19 that differ by lobby size, around 40 puzzles in all.
+- So the winter region is about 0.23 km2, for example 550 x 420 m, with 22 to 24 puzzles. That is close to the
+  base game's own density (one puzzle per roughly 100 m of walking).
+
+## What is already proven
+
+| Capability | State |
+|---|---|
+| Puzzles written as code, built headless in about 25 s | Working (`tools\bwm.ps1 build`) |
+| Seeing and driving the game without a person | Working: companion plugin hosts a test walk, reloads puzzles, teleports, takes screenshots, starts and wins puzzles |
+| A real puzzle from the game's parts plus blockout geometry | Working: Glass Booth loads, deals its answer, and wins |
+| Snow on the ground | Proven live: swapping the terrain's 12 ground textures turns the whole island white (`shots\winter-after.png`) |
+| Clearing trees, shrubs and boulders from a site | Working (the SDK's Terrain Hole) |
+
+## What is not proven (each is a spike in phase 0)
+
+1. **Custom script logic.** No puzzle has used its own C# yet. About a third of the list below needs it.
+2. **Custom models, textures and sounds.** Only cubes and the game's own parts so far.
+3. **Material artifact.** Flat-colour materials show thin dark grid lines in the game. Cause unknown.
+4. **Snow on everything that is not terrain.** Paths stay red-brown, grass and shrubs stay orange, trees olive,
+   rocks brown. Each needs its own treatment (tint, texture swap, or hiding).
+5. **Falling snow, cold light, fog.** The game's sky system (Enviro) has sky, fog, lighting and cloud modules
+   but no weather or particle module, so snowfall must be our own particle effect.
+6. **Multiplayer.** Nothing has been played by two people. State sync is the SDK's job, but untested here.
+7. **Installing on a friend's PC.** No packaging script yet; nobody else has installed any of this.
+8. **New land.** Whether a large custom landmass with colliders works: standing, walking, sea, world limits.
+
+## Design
+
+Big Walk's puzzles are about communicating across distance and barriers. The winter edition keeps that and
+changes the dressing: the gourd tower becomes a Christmas tree, gourds become its ornaments, and each puzzle is
+a small winter scene. Three rules for every puzzle:
+
+- Needs at least three players and works for 3 and 4+ (the SDK's Hider shows different layouts per lobby size).
+- Nobody can get stuck; everything resets when the puzzle stops.
+- Readable in snow: strong colour on puzzle structures, lamps on anything used at night.
+
+### The island
+
+A new landmass of about 0.23 km2 off the coast by the opening area (sea level is height 0, and the shore is
+about 150 m from the spawn rooms). It ships as geometry in a puzzle pack: a terrain mesh with colliders, a
+causeway or bridge out to it, and its own trees, rocks and buildings. Because every surface is ours, the look
+is ours too:
+
+- Snow ground: our own material (soft blue shadows, sparkle, packed-snow paths), not the game's textures.
+- Winter trees, rocks, ice and frozen shoreline: our own models and materials.
+- Falling snow: our own particle effect that follows each player's camera, with wind and gusts.
+- Light and sky over the island: overcast and cold through the game's sky system, blended in as players cross
+  the causeway, so the mainland keeps its normal look.
+
+Fallback if new land fails: the north-west of the island, beyond the big wall near the ending (few base-game
+puzzles there), dressed with the same bespoke snow materials laid over the ground as meshes.
+
+### Puzzle list (24; the first is built)
+
+"Code" says whether it needs custom C#. "Risk" is my estimate of how likely it is to need redesign.
+
+| # | Name | Idea | Main SDK parts | Code | Risk |
+|---|---|---|---|---|---|
+| 1 | Glass Booth | Reader in a soundproof booth points out tiles for the others to hang | Display, Peg Board, Glass, Door | No | Built |
+| 2 | Wrapping Counter | Two booths, each sees half the answer; tiles pass through a hatch | Display x2, Peg Board, Glass, Box | No | Low |
+| 3 | Light the Tree | Lamps on a tree light in turn; press the matching button before it moves on | Press In Order, Light, Hold Button, Progress Bar | No | Low |
+| 4 | Bell Ringers | Bells far apart must be rung within the same second | Sim Press Switch, Light | No | Low |
+| 5 | Hold the Star | Everyone holds a button at once to raise the star; one must let go to fetch the gourd | N-Hold Button, Box | No | Low |
+| 6 | Reindeer Count | Count reindeer cut-outs scattered on a hillside from two lookouts that each see some | Count Input, Count Validator, Telescope | Yes (sets the answer) | Medium |
+| 7 | Bauble Hunt | Coloured baubles hidden in the snow go on a round board | Circle Peg, Circle Peg Board | No | Low |
+| 8 | Santa's List | A list only readable through one telescope; a second player hangs what is read out | Telescope (invisible ink), Peg Tile, Peg Board | No | Low |
+| 9 | Carol Match | Match tune-playing tiles to speakers by ear | Sound Peg, Sound Peg Answer, Peg Board | No (custom clips) | Medium |
+| 10 | Whispering Chimney | One player hears a distant room through a chimney microphone and relays what happens | Directional Mic, Listening Chair, Intercom | No | Medium |
+| 11 | Blizzard Walk | A blindfolded player is talked across a narrow walkway | No Items Gate (blind mask), Soundproof | No | Medium |
+| 12 | Radio Silence | A valley where walkie-talkies fail; messages go by runner or signal | Radio Dead Zone, Display, Peg Board | No | Low |
+| 13 | Stocking Sort | Hang the right gift on each named stocking; names are across the valley | Custom Item, Hook, Sign | Yes (checks hooks) | Medium |
+| 14 | Build a Snowman | Carry the parts in the right order; a far player sees the blueprint | Custom Item, Presence Sensor, Display | Yes | Medium |
+| 15 | Sleigh Seats | Everyone must be seated in the right seats, told only by players who cannot see them | Custom Chair, Sign | Yes (reads seats) | Medium |
+| 16 | Footprints | Step on hidden pads in an order that only a lookout can see | Presence Sensor, Press In Order, Light | No | Low |
+| 17 | Sleigh Run | Carry a present from start to goal before the clock runs out, through gates others hold open | Timer, Timer Spawner, Timer Goal, Door, Hold Button | Maybe | Medium |
+| 18 | Ice Cave | A dark underground maze; one player outside has the map | Terrain Hole, Light, Switch, Glass | No | High (underground building) |
+| 19 | Snow Globe | A room in a glass dome; inside and outside each hold half of a switch sequence | Glass (soundproof), Switch, Validator | Yes (sequence) | Medium |
+| 20 | Fairy Lights | A string of coloured lamps; set each switch so the pattern matches a picture seen elsewhere | Switch, Light, Display | Yes | Medium |
+| 21 | Frozen Lake | Cross on safe tiles only; safe tiles are marked on a board on the far shore | Presence Sensor, Light, Timer | Yes | Medium |
+| 22 | Gift Chute | Sort custom items into chutes by a rule only the sorter's partner knows | Custom Item, Presence Sensor, Count Validator | Yes | Medium |
+| 23 | Advent Trail | 24 numbered signs across the whole region; a final board asks about them | Sign, Peg Tile, Peg Board | No | Low (but needs every other site placed first) |
+| 24 | Midnight Finale | With every ornament on the tree, everyone triggers the fireworks together | Firework Launcher, Sim Press Switch, Light | Yes | Medium (the launcher has a known particle bug) |
+| T | The Tree | The modded gourd tower as a Christmas tree; each won puzzle adds an ornament | Gourd Plinth x24, Tower Button | No | Medium |
+
+Thirteen need no custom code. If the scripting spike goes badly, those thirteen plus variants still clear 20
+by reusing mechanics at new sites, at the cost of variety.
+
+### Art and audio
+
+- Geometry: code-built blockout first, then free low-poly holiday models (CC0 packs) for trees, presents,
+  cabins, sleigh, fences. Game assets are never copied into a pack; the SDK reuses them from each player's
+  own install.
+- Peg tile pictures: custom sheets of Christmas icons (the SDK takes a 4 x 4 sheet, eight images each).
+- Sound: carols must be public-domain compositions in recordings we are allowed to use (CC0 or self-made).
+
+## Framework work this needs
+
+- Building kit: walls with door and window openings, rooms, stairs, ramps, fences, so a booth is one call.
+- Model, texture and audio import by path, with the correct shader assigned.
+- A scripted-puzzle template (host-only logic, synced variables), and its DLL in the export.
+- Lobby-size variants (Hider) expressed in a definition.
+- Region planner: all sites on one map, spacing rules, a rendered overview image.
+- Automated smoke test: for every puzzle, host, teleport, start, win, screenshot, and check the log.
+- Packaging: one command to produce the Thunderstore-format modpack (SDK, WinterWalk plugin, all packs).
+
+## Phases
+
+| Phase | Work | Done when |
+|---|---|---|
+| 0. Spikes | The eight unknowns above, smallest test of each | Each has a yes/no answer and a fallback; a friend has installed a two-puzzle pack and played it with the user |
+| 1. World | WinterWalk plugin (ground, vegetation, sky, snowfall, off switch); region survey and choice; travel into the region | A walk through the region looks like winter in screenshots at noon, dusk and night, on two PCs |
+| 2. Vertical slice | The Tree, puzzles 1 to 5, building kit, smoke test, packaging | A group plays all five start to finish and places ornaments; their notes are in the repo |
+| 3. Production | Puzzles 6 to 24 in batches of four or five, each batch followed by a playtest | 20 or more puzzles pass a playtest with no blocker |
+| 4. Release | Polish pass, night lighting, Advent Trail, finale, README, modpack | One-step install from a profile code; full run by a fresh group |
+
+Rough size: phase 0 is two or three working sessions; phase 1 about three; each puzzle half a session to a
+full one plus a playtest; so 25 to 35 sessions in all, limited mainly by how often a group can playtest.
+
+## Timing
+
+The target is all 24 by Christmas, five weeks from the plan's date. A schedule that fits:
+
+| Week | Work |
+|---|---|
+| 1 (to 26 Nov) | Phase 0 spikes, the island and causeway, bespoke snow and snowfall, building kit, packaging; first friend install |
+| 2 (to 3 Dec) | The Tree and puzzles 1 to 8; first group playtest |
+| 3 (to 10 Dec) | Puzzles 9 to 16; second playtest |
+| 4 (to 17 Dec) | Puzzles 17 to 24; third playtest |
+| 5 (to 24 Dec) | Fixes from playtests, night lighting, Advent Trail and finale tuning, final pack |
+
+That is eight puzzles a week, which only works if playtests happen weekly and the code-heavy puzzles (about a
+third) do not stall. My own estimate is that this is tight; the order keeps whatever exists playable, so a
+slip costs puzzles at the end, not the edition.
+
+## Risks
+
+- **SDK and game updates.** The SDK is at 0.1.7 with weekly releases, and a game patch can break the mod
+  loader. Pin versions for the whole group until release; expect one or two forced fixes.
+- **Everyone must install the same thing.** Console players cannot join. A mismatch means nothing syncs.
+- **Three-player minimum.** Every playtest needs three people at once.
+- **Solo testing proves little about multiplayer.** Budget a short playtest after every batch.
+- **Performance.** Recolouring 47,000 trees and adding snowfall must be measured on the weakest PC in the group.
+- **Scope.** 24 distinct puzzles is a large design job; variety will suffer before quality should.

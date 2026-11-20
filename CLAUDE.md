@@ -1,0 +1,104 @@
+# Big Walk Mods
+
+Custom puzzles for the game Big Walk (House House; Unity 6000.3.17f1, IL2CPP), written as code and built
+headless. Claude authors the puzzles; the user directs and playtests with friends. Puzzles are built on the
+community [BigPuzzleSDK](https://github.com/markviews/BigPuzzleSDK) (MIT), pinned at 0.1.7.
+
+The long-term goal is a Christmas edition: see `docs\winter-edition-plan.md`.
+
+## Commands
+
+All through `tools\bwm.ps1` (Windows PowerShell):
+
+| Command | Does |
+|---|---|
+| `build <Puzzle>` | Builds one puzzle, renders previews, runs the SDK's checks, exports the pack. About 25 s. |
+| `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
+| `build-all` / `list` | All puzzle definitions. |
+| `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save. Unattended, about 80 s. |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `quit`; `game help` lists all. |
+| `companion` | Rebuilds the companion plugin (the game must be closed). |
+| `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
+| `log` | The puzzle-related lines of the last game run. |
+| `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
+
+Build output is only the framework's `[BWM]` lines; the full Unity log is `logs\unity-<command>.log`. Exit
+code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-NoExport`, `-AllowIssues`.
+
+## Layout
+
+- `unity\` — Unity project. `Assets\Editor\Bwm\` is the framework, `Assets\Editor\Puzzles\` holds one
+  `PuzzleDef` class per puzzle, `Assets\Puzzles\<Name>\` holds what a build generates for it (scene,
+  `site.json`, materials), `Assets\BigPuzzleSDK\` is the imported SDK (do not edit).
+- `companion\` — the test companion, a BepInEx plugin serving http://127.0.0.1:17361 inside the game.
+  Dev profile only; it must never ship with a puzzle.
+- `profile\` — the mod profile: BepInEx 6.0.788 (IL2CPP), the SDK mod, the companion and dev helpers
+  (UnityExplorer hidden at startup, NoClip, SkipIntro). Builds export to `profile\BepInEx\plugins\BigPuzzleSDK\`.
+- `previews\<Name>-*.png` — editor renders of the last build. `shots\*.png` — screenshots from the real game.
+- `world\` — the world index and part metrics.
+- `vendor\` — the SDK's `.unitypackage`, and `BigPuzzleSDK-src\` (its source: `Mod\` is the in-game code,
+  `Unity\BigPuzzleSDK\Internal\` the editor stubs and checks, `docs\components.txt` the component reference).
+- `docs\` — plans.
+
+## Writing a puzzle
+
+Add a class in `unity\Assets\Editor\Puzzles\`. `GlassBoothPuzzle.cs` is the model for a real puzzle (pad,
+walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the minimal smoke test.
+
+- Coordinates are local metres from the puzzle's centre, `+z` forward. `height` is measured from the terrain
+  under that point; pass `onGround: false` to measure from the root's level instead. For anything with walls,
+  build one level pad (`b.Box`, sunk about 1.5 m) and place everything `onGround: false` on it.
+- Call `b.ClearGround(sizeX, sizeZ)` for the whole working area. The island is covered in trees, shrubs and
+  loose boulders that neither the SDK map nor the previews show.
+- Parts face their local `+z`, and most are wall-mounted with the pivot at their centre: give them a height
+  (boards about 1.3 m, displays about 1.6 to 2.3 m) and a wall behind them. `yaw` turns the facing: 90 faces
+  `+x`, -90 faces `-x`, 180 faces `-z`. Sizes are in `world\part-metrics.tsv`.
+- `Part(name, ...)` takes an SDK prefab's file name. `Set` / `Add` / `On` take the SDK component's type name
+  and its serialized field name; enums are set by index. Field names and enum orders are in
+  `vendor\BigPuzzleSDK-src\Unity\BigPuzzleSDK\Internal\Puzzle*.cs`.
+- Only Glass, Timer and Progress Bar can be scaled. Lamps start off. Ordinary walls do not block voices: put
+  them under a parent with `PuzzleSoundProof`.
+- A `Puzzle`-type puzzle needs one Gourd Vice (or Box), one Pillow and a Start Switch. The SDK's checks run
+  on every build and fail it; they also reject wiring where start and stop do the same thing to a part.
+- Custom runtime logic goes in `unity\Assets\PuzzleScripts\` (the SDK compiles that folder into a plugin DLL
+  beside the pack). Only the host changes state; use the SDK's `Synced*` variables. Not exercised yet.
+- The first build finds the nearest flat, clear ground to the spawn rooms that is not near another puzzle and
+  remembers it in `Assets\Puzzles\<Name>\site.json`; edit that file, or override `FixedSite` / `Near` / `Yaw`.
+
+## Testing
+
+1. `bwm.ps1 build <Puzzle>` and Read `previews\<Puzzle>-*.png`.
+2. `bwm.ps1 play` (once), then after each rebuild `bwm.ps1 game reload`.
+3. `bwm.ps1 game 'shot?file=...'` with a camera and target position, and Read the image in `shots\`. World
+   position = site + local offset when yaw is 0. `time?hour=13` first for daylight.
+4. `bwm.ps1 game 'puzzle?name=<Puzzle>&do=start'` then `do=win` exercises the start, deal and win paths.
+
+What this cannot do: pick things up, press buttons as a player, or anything with two players. Those go to
+the user and friends, who must all have the same packs and SDK version.
+
+## Things that are easy to get wrong
+
+- **Unity licence:** batch mode only finds the licence while Unity Hub is running and signed in. `bwm.ps1`
+  starts the Hub if needed. Only editor 6000.3.17f1 (at `Z:\Unity\6000.3.17f1`) is wanted; never let the Hub
+  install another version (it defaults to C:, which is nearly full).
+- **Steam:** the game launches through Steam. If Steam shows "Refresh Sign In", nothing starts until the
+  user signs in.
+- **Do not `Start-Process -Wait` Unity:** it also waits for Unity's compiler server, which lingers for minutes.
+- **Stripped engine methods:** the game is IL2CPP, so engine methods it never calls are missing. In the
+  companion prefer the generic forms (`FindObjectOfType<T>()`), and test each new call live.
+- **Puzzle ids:** the SDK ties a puzzle's permanent id to its root object in `Assets\Puzzles\<Name>\<Name>.unity`
+  and records it in `unity\ProjectSettings\BigWalkPuzzleIds.json`. Builds reuse that root. Deleting the scene
+  or that file gives the puzzle a new id, which breaks saves and multiplayer matching for it.
+- **Saves:** the companion only ever hosts on the save slot named "BWM Test". Never select another slot.
+- **SDK internals:** the framework and companion call the SDK's exporter, checks, map importer and reload by
+  reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
+- **Game folder:** only `winhttp.dll`, `.doorstop_version` and `doorstop_config.ini` (enabled = false,
+  absolute paths into `profile\`) were added to `G:\SteamLibrary\steamapps\common\Big Walk`.
+- **Disk:** C: is nearly full. Unity, its caches and this repo are on Z:; keep it that way.
+
+## Known open problems
+
+- Flat-colour materials made by `b.Box` show thin dark grid lines in the game. Cause unknown.
+- `ClearGround` leaves dark flat patches where some boulders were.
+- Packaging a puzzle for friends (Thunderstore zip) is not built.
+- Nothing has been tested with two players.

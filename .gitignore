@@ -1,0 +1,29 @@
+# Unity generated
+unity/Library/
+unity/Temp/
+unity/Logs/
+unity/UserSettings/
+unity/obj/
+unity/*.csproj
+unity/*.sln
+unity/*.slnx
+
+# Build output and scratch
+logs/
+previews/
+world/
+
+# Mod profile: third-party binaries and generated files (rebuildable from Thunderstore + a game launch)
+profile/
+
+# Third-party source clone (the .unitypackage beside it is kept)
+vendor/BigPuzzleSDK-src/
+
+# Game screenshots and companion build output
+shots/
+companion/obj/
+companion/bin/
+
+# The SDK builds this scene from the game's own files (357 MB of game geometry): never commit it
+unity/Assets/BigPuzzleSDK/Internal/Map.unity
+unity/Assets/BigPuzzleSDK/Internal/Map.unity.meta
