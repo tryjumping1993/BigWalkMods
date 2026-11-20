@@ -404,7 +404,7 @@ public static class WinterIsleDressing
                 var p = new Vector2(x + R(-3f, 3f), z + R(-3f, 3f));
                 float h = l.Height(p), toPath = l.ToPath(p);
                 if (float.IsNaN(h) || h < 1.5f || toPath < 3.6f || toPath > 10f || l.Slope(p) > 0.5f || !l.Free(p, 0f) || InsideRock(p, 1.5f)) continue;
-                if (R(0f, 1f) > 0.16f + 0.4f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
+                if (R(0f, 1f) > 0.34f + 0.5f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
                 float d = Mathf.Min(R(2.2f, 7.5f), (toPath - 1.6f) * 1.7f);
                 Rock(Pick(BigRound), p, LowGround(p, d * 0.4f), d, R(0.38f, 0.58f), 0.45f, 10f);
                 int cobbles = random.Next(2, 6);
@@ -570,7 +570,7 @@ public static class WinterIsleDressing
                     if (roll < 0.05f * clump) Plant(Pick(shoreTrees), p, R(0.55f, 0.9f));
                     else if (roll < 0.30f * clump + 0.04f) Plant(Pick(heath), p, R(0.55f, 1.1f));
                 }
-                else if (h > 34f)
+                else if (h > 34f && l.Forest(p) < 0.4f && Wood(p, false, false) < 0.3f)
                 {
                     if (roll < 0.06f + 0.10f * clump) Plant(Pick(tops), p, R(0.7f, 1.05f));
                     else if (roll < 0.075f + 0.10f * clump) Plant(Pick(dead), p, R(0.5f, 0.85f), 0.25f);
@@ -581,14 +581,14 @@ public static class WinterIsleDressing
                     // under the firs and among the birches there is an understorey: snow-laden bushes in clumps,
                     // fallen logs and stumps, the odd dead snag (a grove with bare snow between its trunks reads as
                     // planted, not grown)
-                    float grove = Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f);
-                    float a = 0.07f * wood + 0.02f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.22f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
+                    float grove = Mathf.Max(Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f), Mathf.Max(Wood(p, false, false), l.Forest(p) * 0.7f));
+                    float a = 0.07f * wood + 0.02f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.42f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
                     if (roll < 0.016f * wood + 0.004f && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
                     else if (roll < a) Plant(Pick(woodland), p, R(0.6f, 1.0f));
                     else if (roll < b) Plant(Pick(under), p, R(0.6f, 1.1f));
                     else if (roll < c) Plant(Pick(tops), p, R(0.7f, 1.0f));
-                    else if (roll < c + 0.02f + 0.012f * grove) Plant(Pick(dead), p, R(0.5f, 0.9f), 0.25f);
-                    else if (roll < c + 0.04f + 0.03f * grove && s < 0.35f) Plant(Pick(logs), p, R(0.8f, 1.1f), 0.35f);
+                    else if (roll < c + 0.02f + 0.04f * grove) Plant(Pick(dead), p, R(0.5f, 0.9f), 0.25f);
+                    else if (roll < c + 0.04f + 0.11f * grove && s < 0.45f) Plant(Pick(logs), p, R(0.8f, 1.1f), 0.35f);
                 }
             }
 

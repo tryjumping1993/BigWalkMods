@@ -99,12 +99,12 @@ public sealed class WinterIslePuzzle : PuzzleDef
     {
         Vector2 d = p - Peak;
         float along = d.magnitude;
-        if (along < 170f || along > SkiRadius - 120f) return 0f;
+        if (along < 540f || along > SkiRadius - 120f) return 0f;      // none in the open bowl: rock there stood as a wall across its lip
         float off = Mathf.DeltaAngle(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, SkiBearing * Mathf.Rad2Deg) * Mathf.Deg2Rad;
         off += (Mathf.PerlinNoise(along * 0.004f + 7.1f, 3.3f) - 0.5f) * 0.3f;      // the ribs wander as they descend
         float rib = Mathf.Max(1f - Smooth(Mathf.Abs(off - 0.27f) / 0.075f), 1f - Smooth(Mathf.Abs(off + 0.25f) / 0.065f));
         // broken into lengths, with gaps where one run crosses to the next
-        return rib * Smooth((Mathf.PerlinNoise(along * 0.006f + 1.7f, off > 0f ? 9.9f : 4.4f) - 0.38f) / 0.12f) * Smooth((along - 170f) / 80f);
+        return rib * Smooth((Mathf.PerlinNoise(along * 0.006f + 1.7f, off > 0f ? 9.9f : 4.4f) - 0.38f) / 0.12f) * Smooth((along - 540f) / 80f);
     }
     // The pistes: above the tree line the whole upper face is open snow; below it three runs wind down through
     // the forest, each a cleared ribbon 50 to 70 m wide, swinging from side to side and meeting at the bottom.

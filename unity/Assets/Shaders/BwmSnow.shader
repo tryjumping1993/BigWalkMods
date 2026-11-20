@@ -319,6 +319,8 @@ Shader "BWM/Snow"
                 float3 bareTex = SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.zy * _GroundTiling).rgb * tw.x
                     + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * tw.y
                     + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.xy * _GroundTiling).rgb * tw.z;
+                // ...and again much finer, or bare ground is a blur at a walker's feet (their eyes are 60 cm up)
+                bareTex *= 0.55 + 0.9 * SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV * 7.3).g;
                 // on a slope, and on the high ground, what shows through thin snow is the rock, not heath
                 float3 heath = _BareColor.rgb * bareTex * 1.7;
                 // under the conifers the ground is needle litter: dark, reddish, fine; at a rock's foot it is scree
