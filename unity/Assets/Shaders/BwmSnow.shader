@@ -3,6 +3,8 @@
 //  - shadows and unlit sides go blue instead of black, as snow does under an open sky
 //  - glints that switch on and off with the view angle, fading with distance so they never shimmer far away
 //  - a faint bright rim at grazing angles
+//  - bare rock where the ground is too steep to hold snow, in rough horizontal bands, with a ragged snow line
+//  - trodden paths (the mesh's vertex colour marks them): packed, bluer, no glints
 // Lit by the sun (with its shadows) and by lamps. Written against URP 17 (Unity 6000.3), the game's version.
 Shader "BWM/Snow"
 {
@@ -17,6 +19,8 @@ Shader "BWM/Snow"
         _SparkleDistance ("Sparkle distance", Float) = 22
         _Rim ("Rim", Range(0, 1)) = 0.18
         _PathColor ("Trodden path", Color) = (0.74, 0.80, 0.90, 1)
+        _RockColor ("Rock", Color) = (0.36, 0.36, 0.40, 1)
+        _RockLine ("Rock line (how steep before rock shows)", Range(0.3, 0.95)) = 0.72
     }
 
     SubShader
@@ -36,6 +40,8 @@ Shader "BWM/Snow"
             float _SparkleDistance;
             float _Rim;
             half4 _PathColor;
+            half4 _RockColor;
+            float _RockLine;
         CBUFFER_END
 
         float Hash21(float2 p)
@@ -124,7 +130,13 @@ Shader "BWM/Snow"
                 // Drift relief: tilt the normal by the slope of the drift height (finite differences)
                 float2 dp = positionWS.xz * _DriftScale;
                 float h0 = Drift(dp), hx = Drift(dp + float2(0.35, 0)), hz = Drift(dp + float2(0, 0.35));
-                float3 n = normalize(normalize(i.normalWS) + _DriftStrength * (1.0 - path * 0.85) * float3(h0 - hx, 0, h0 - hz));
+                // Rock where the ground itself (not the drift relief) is steep
+                float3 ground = normalize(i.normalWS);
+                float ragged = (ValueNoise(positionWS.xz * 0.45 + positionWS.y * 0.3) - 0.5) * 0.16;
+                float rock = 1.0 - smoothstep(_RockLine - 0.07, _RockLine + 0.07, ground.y + ragged);
+                float strata = ValueNoise(float2(positionWS.y * 1.1, (positionWS.x + positionWS.z) * 0.06));
+                float3 rockColor = _RockColor.rgb * lerp(0.72, 1.18, strata);
+                float3 n = normalize(ground + _DriftStrength * (1.0 - path * 0.85) * (1.0 - rock) * float3(h0 - hx, 0, h0 - hz));
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -138,8 +150,9 @@ Shader "BWM/Snow"
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
                 float3 shade = _ShadeColor.rgb * (ambient * 1.1 + 0.18);
-                float3 snowColor = lerp(_Color.rgb, _PathColor.rgb, path);
-                float3 color = lerp(shade * lerp(1.0, 0.9, path), snowColor * sun.color, lit);
+                float3 snowColor = lerp(lerp(_Color.rgb, _PathColor.rgb, path), rockColor, rock);
+                shade = lerp(shade * lerp(1.0, 0.9, path), rockColor * _ShadeColor.rgb * (ambient * 1.1 + 0.16), rock);
+                float3 color = lerp(shade, snowColor * sun.color, lit);
 
                 // Hollows between drifts are a touch bluer
                 color = lerp(color, color * float3(0.90, 0.95, 1.0), saturate(0.55 - h0));
@@ -159,7 +172,7 @@ Shader "BWM/Snow"
                 #endif
 
                 // Glints: each small cell of the surface has a random facet; it flashes when it mirrors the sun
-                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path);
+                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path) * (1.0 - rock);
                 if (sparkleFade > 0.0)
                 {
                     float3 scaled = positionWS * _SparkleScale;
