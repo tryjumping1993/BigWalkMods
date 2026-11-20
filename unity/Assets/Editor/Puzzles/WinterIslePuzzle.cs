@@ -816,6 +816,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         {
             Woods = woods,
             Islets = isletList,
+            Lake = Lake,
+            LakeRadius = LakeRadius,
             Height = HeightAt,
             Slope = p => Slope(Cell_(p)),
             ToShore = ToShore,
@@ -887,7 +889,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float shoreline = height[k] > 0f && height[k] < 1.4f ? 0.55f * (1f - beach[k]) * Smooth((Mathf.PerlinNoise(p.x * 0.022f + 8.8f, p.y * 0.022f + 1.9f) - 0.38f) / 0.25f) : 0f;      // in stretches: elsewhere snow lies to the water
             float bare = Mathf.Clamp01(Mathf.Clamp01((slope - 0.45f) * 1.2f) * 0.3f + Mathf.Clamp01(convex * 0.15f) + heath + bareUnder[k] * 0.8f + shoreline) * (1f - trodden[k]);
             float worn = trodden[k] * Smooth((Mathf.PerlinNoise(p.x * 0.08f + 3.1f, p.y * 0.08f + 7.3f) - 0.4f) / 0.3f) * 0.6f;      // trodden through to the ground in places
-            bare = Mathf.Max(bare, worn);
+            // ...and beside the trails the snow lies thin in patches, the earth and litter showing (where walkers look)
+            float beside = (1f - Smooth((PathDistance(p) - 2.5f) / 9f)) * (1f - trodden[k]) * Smooth((Mathf.PerlinNoise(p.x * 0.065f + 41.7f, p.y * 0.065f + 9.3f) - 0.48f) / 0.14f) * 0.8f;
+            bare = Mathf.Max(bare, Mathf.Max(worn, beside));
             float sand = beach[k] * (1f - Smooth((height[k] - 0.4f) / 0.8f));      // a strip by the water; above it the beach lies under snow
             tint[k] = new Color(1f - trodden[k], bare, sand, Mathf.Clamp01(0.5f + convex * 0.11f));      // alpha: hollow (0) .. crest (1)
         }
@@ -1004,7 +1008,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Vector2 wind = new Vector2(0.8f, -0.6f), cross = new Vector2(0.6f, 0.8f);
             int lumps = 0, tufts = 0, sticks = 0, stones = 0;
             var straw = new Color(0.86f, 0.74f, 0.42f); var dryStraw = new Color(0.6f, 0.5f, 0.28f);
-            var wood = new Color(0.25f, 0.18f, 0.12f); var granite = new Color(0.43f, 0.38f, 0.33f);
+            var wood = new Color(0.44f, 0.33f, 0.22f); var granite = new Color(0.46f, 0.41f, 0.36f);      // (dark wood in shade reads as a black slit)
             void Stick(MeshBuilder mb, Vector3 from, Vector3 to, float thick)      // a round stick (five sides), tapering
             {
                 Vector3 dir = (to - from).normalized;
@@ -1042,7 +1046,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     int k = Cell_(p);
                     float roll = Rs(0f, 1f), roll2 = Rs(0f, 1f);
                     if (!(height[k] > 0.9f) || !Free(p, -1.9f)) continue;
-                    float byPath = 0.7f + 1.3f * (1f - Smooth((PathDistance(p) - 3f) / 25f));      // most where walkers look
+                    float byPath = 0.7f + 2.4f * (1f - Smooth((PathDistance(p) - 3f) / 22f));      // most where walkers look
                     int region = Region(p);
                     float slope = Slope(k);
                     bool onSand = beach[k] > 0.35f && height[k] < 1.1f;
@@ -1086,7 +1090,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     if (!litter.TryGetValue(region, out MeshBuilder mb)) { mb = litter[region] = new MeshBuilder(); grass[region] = new MeshBuilder(); }
                     MeshBuilder gb = grass[region];
                     float patch = Mathf.PerlinNoise(p.x * 0.05f + 5.9f, p.y * 0.05f + 77.3f);
-                    float tuftChance = (onSand ? 0.1f : 0.04f + 0.24f * Smooth((patch - 0.55f) / 0.2f) * (height[k] < 45f ? 1f : 0.3f)) * byPath;
+                    // the wrack line: a band of driftwood and pebbles where the last high water left them
+                    bool wrack = onSand && height[k] > 0.4f && height[k] < 0.8f;
+                    float tuftChance = wrack ? 0.03f : (onSand ? 0.1f : 0.04f + 0.24f * Smooth((patch - 0.55f) / 0.2f) * (height[k] < 45f ? 1f : 0.3f)) * byPath;
                     if (roll2 < tuftChance)
                     {
                         // dry grass: a few tussocks standing through the snow, each a spray of blades
@@ -1108,7 +1114,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             tufts++;
                         }
                     }
-                    else if (roll2 < tuftChance + (onSand ? 0.12f : 0.045f) * byPath && slope < 0.3f)
+                    else if (roll2 < tuftChance + (wrack ? 0.4f : onSand ? 0.12f : 0.045f * byPath) && slope < 0.3f)
                     {
                         // a fallen stick, half sunk, with a twig or two; its top takes the snow
                         // (each end lies on the ground where it is, so a stick never juts out of a slope or hovers over a dip)
@@ -1126,13 +1132,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
                         }
                         sticks++;
                     }
-                    else if (roll2 < tuftChance + (onSand ? 0.2f : 0.085f) * byPath)
+                    else if (roll2 < tuftChance + (wrack ? 0.55f : onSand ? 0.2f : 0.085f * byPath))
                     {
                         // a stone's top showing, its crown catching snow
                         Stone(mb, p, Rs(0.12f, 0.5f));
                         stones++;
                     }
-                    else if (roll2 < tuftChance + (onSand ? 0.32f : 0.105f) * byPath)
+                    else if (roll2 < tuftChance + (wrack ? 0.85f : onSand ? 0.32f : 0.105f * byPath))
                     {
                         // a patch of pebbles
                         int pebbles = random.Next(5, 12);
@@ -1172,7 +1178,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 8. Ice: the lake, and the creek above and below it (sheets just over the beds players walk on)
         var ice = new MeshBuilder();
         var iceColor = new Color(0.62f, 0.80f, 0.93f);
-        Kit.AddDisc(ice, new Vector3(Lake.x - root.x, LakeLevel - 0.3f - root.y, Lake.y - root.z), LakeRadius + 7f, 0.36f, iceColor, 40);
+        Kit.AddDisc(ice, new Vector3(Lake.x - root.x, LakeLevel - 0.3f - root.y, Lake.y - root.z), LakeRadius + 7f, 0.36f, iceColor, 72);
         for (int s = 0; s + 1 < Creek.Length; s++)
         {
             Vector3 a = Creek[s], c = Creek[s + 1];
@@ -1193,7 +1199,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (inside[k] < -10f && Rf(0f, 1f) > 0.3f) continue;      // most of them hug the shore
                 Vector2 p = At(k) + new Vector2(Rf(-1.5f, 1.5f), Rf(-1.5f, 1.5f));
                 float radius = Rf(0.9f, 3.6f) * Mathf.Lerp(1.2f, 0.6f, Mathf.Clamp01(-inside[k] / 30f));
-                Kit.AddDisc(ice, new Vector3(p.x - root.x, -0.16f - root.y, p.y - root.z), radius, 0.22f, Color.Lerp(iceColor, Color.white, Rf(0.2f, 0.7f)), floeRandom.Next(5, 9));
+                Kit.AddPlate(ice, new Vector3(p.x - root.x, -0.16f - root.y, p.y - root.z), radius, 0.22f, Color.Lerp(iceColor, Color.white, Rf(0.2f, 0.7f)), floeRandom.Next(5, 9), tries);
                 floes++;
             }
             Debug.Log("[BWM] Winter Isle: " + coveList.Count + " coves, " + barList.Count + " sand bar, " + islets.Count + " islets, " + floes + " ice floes");
@@ -1214,9 +1220,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             if (kind == "birch") { Kit.AddBirch(near, Vector3.zero, tall, seed, 1f); Kit.AddBirch(far, Vector3.zero, tall, seed, 0.5f); }
             else
             {
-                float girth = kind == "spruce" ? 0.58f : 1f;
-                Kit.AddFir(near, Vector3.zero, tall, seed, 1f, girth);
-                Kit.AddFir(far, Vector3.zero, tall, seed, 0.5f, girth);
+                float girth = kind == "spruce" ? 0.58f : kind == "pine" ? 0.9f : 1f, clear = kind == "pine" ? 0.5f : 0f;
+                Kit.AddFir(near, Vector3.zero, tall, seed, 1f, girth, clear);
+                Kit.AddFir(far, Vector3.zero, tall, seed, 0.5f, girth, clear);
             }
             models.Add((b.SaveMesh("Fir " + v, near.ToMesh()), b.SaveMesh("Fir " + v + " far", far.ToMesh()), tall, kind == "birch" ? birchMaterial : firMaterial));
         }

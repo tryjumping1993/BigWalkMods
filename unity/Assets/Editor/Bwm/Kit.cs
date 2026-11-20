@@ -313,6 +313,26 @@ namespace Bwm
             }
         }
 
+        // A flat plate with an uneven edge (an ice floe): like AddDisc, each corner at its own distance
+        public static void AddPlate(MeshBuilder mb, Vector3 foot, float radius, float height, Color color, int segments, int seed)
+        {
+            var random = new System.Random(seed * 2741 + 1);
+            float spin = (float)random.NextDouble() * 6.28f;
+            var corner = new Vector3[segments];
+            for (int s = 0; s < segments; s++)
+            {
+                float a = spin + 2f * Mathf.PI * (s + 0.5f * (float)random.NextDouble()) / segments;
+                corner[s] = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * (0.6f + 0.6f * (float)random.NextDouble());
+            }
+            Vector3 top = foot + Vector3.up * height;
+            for (int s = 0; s < segments; s++)
+            {
+                Vector3 d0 = corner[s], d1 = corner[(s + 1) % segments];
+                mb.Tri(top, top + d1, top + d0, color);
+                mb.Quad(foot + d0, foot + d1, top + d1, top + d0, color * 0.85f);
+            }
+        }
+
         // A five-pointed star standing upright, facing along z (a tree-topper)
         public static void AddStar(MeshBuilder mb, Vector3 centre, float radius, float thickness, Color color)
         {
@@ -335,8 +355,9 @@ namespace Bwm
         // and whorls of drooping branch fronds, each frond a shallow roof of two cards so it has a top for snow to
         // lie on and an underside that stays dark. Vertex colour: rgb tints the tree, alpha is 1 at the crown's
         // surface and 0 deep inside it. uv.x below 0 marks bark. girth below 1 makes a slim spruce: a narrow crown of
-        // fewer, more drooping boughs.
-        public static void AddFir(MeshBuilder mb, Vector3 foot, float height, int seed, float detail = 1f, float girth = 1f)
+        // fewer, more drooping boughs. clear above 0 makes a pine: that share of the height is bare trunk, with a
+        // shorter, broader crown above it that a walker passes under.
+        public static void AddFir(MeshBuilder mb, Vector3 foot, float height, int seed, float detail = 1f, float girth = 1f, float clear = 0f)
         {
             var random = new System.Random(seed * 7919 + 3);
             float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
@@ -359,7 +380,7 @@ namespace Bwm
             // the crown's core: a dark cone inside the boughs, so the tree reads as full from a distance (uv.x -2);
             // close up it is only a thin shadow round the trunk
             {
-                float coreBase = height * 0.16f, coreR = (height * 0.36f * 0.5f + 0.2f) * girth * (detail < 0.7f ? 1f : 0.35f);
+                float coreBase = height * Mathf.Max(0.16f, clear), coreR = (height * 0.36f * 0.5f + 0.2f) * girth * (detail < 0.7f ? 1f : 0.35f);
                 for (int s = 0; s < sides; s++)
                 {
                     float a0 = 2f * Mathf.PI * s / sides + spin, a1 = 2f * Mathf.PI * (s + 1) / sides + spin;
@@ -373,13 +394,14 @@ namespace Bwm
 
             // whorls of fronds, longest at the bottom; each frond droops and curves down towards its tip
             // (on a grown tree the boughs start above the head of a walker 70 cm tall, who can then pass under them)
-            float first = height > 5f ? Mathf.Max(height * R(0.12f, 0.2f), R(1.25f, 1.7f)) : height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.34f, 0.54f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
+            float first = clear > 0f ? height * clear * R(0.9f, 1.1f) : height > 5f ? Mathf.Max(height * R(0.12f, 0.2f), R(1.25f, 1.7f)) : height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.34f, 0.54f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
             int whorl = 0;
             for (float y = first; y < height * 0.96f; y += spacing * R(0.85f, 1.15f), whorl++)
             {
                 float t = (y - first) / (height * 0.96f - first);      // 0 bottom ... 1 top
                 // a fuller crown than a straight cone, drawing in to a narrow spire at the top
-                float reach = (height * 0.36f * Mathf.Pow(1f - t, 0.82f) + Mathf.Lerp(0.3f, 0.07f, t)) * girth;
+                // (a pine's crown is widest a third of the way up it, not at its foot, and its boughs hardly droop)
+                float reach = (height * 0.36f * (clear > 0f ? Mathf.Pow(1f - t, 0.7f) * Mathf.Lerp(0.55f, 1f, Mathf.Clamp01(t / 0.3f)) * 0.78f : Mathf.Pow(1f - t, 0.82f)) + Mathf.Lerp(0.3f, 0.07f, t)) * girth;
                 int count = t > 0.88f || detail < 0.7f ? 5 : girth < 0.8f ? random.Next(5, 8) : random.Next(7, 10);
                 float offset = spin + whorl * 2.39996f;      // golden angle between whorls
                 for (int k = 0; k < count; k++)
@@ -387,7 +409,7 @@ namespace Bwm
                     float a = offset + 2f * Mathf.PI * k / count + R(-0.25f, 0.25f);
                     float len = reach * R(0.82f, 1.12f);
                     // radians below horizontal at the base; the youngest shoots, at the top, point upwards
-                    float droop = Mathf.Lerp(0.38f, 0.12f, t) + (1f - girth) * 0.55f - Mathf.Clamp01((t - 0.72f) / 0.28f) * 0.8f + R(-0.06f, 0.06f);
+                    float droop = Mathf.Lerp(0.38f, 0.12f, t) * (clear > 0f ? 0.25f : 1f) + (1f - girth) * 0.55f - Mathf.Clamp01((t - 0.72f) / 0.28f) * 0.8f + R(-0.06f, 0.06f);
                     var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                     var side = new Vector3(-dir.z, 0f, dir.x);
                     Vector3 root = foot + Vector3.up * y + dir * trunkR * 0.8f;
