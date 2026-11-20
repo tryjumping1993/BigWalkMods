@@ -106,8 +106,31 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // broken into lengths, with gaps where one run crosses to the next
         return rib * Smooth((Mathf.PerlinNoise(along * 0.006f + 1.7f, off > 0f ? 9.9f : 4.4f) - 0.38f) / 0.12f) * Smooth((along - 170f) / 80f);
     }
-    // 1 on open piste
-    public static float Piste(Vector2 p) => SkiFace(p) * (1f - Rib(p));
+    // The pistes: above the tree line the whole upper face is open snow; below it three runs wind down through
+    // the forest, each a cleared ribbon 50 to 70 m wide, swinging from side to side and meeting at the bottom.
+    // 1 on a piste, 0 off it.
+    public const float TreeLine = 330f;      // metres above the sea
+    public static float Piste(Vector2 p)
+    {
+        float ski = SkiFace(p);
+        if (ski <= 0f) return 0f;
+        Vector2 d = p - Peak;
+        float along = d.magnitude;
+        float off = Mathf.DeltaAngle(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, SkiBearing * Mathf.Rad2Deg) * Mathf.Deg2Rad;
+        float open = 1f - Smooth((along - 380f) / 140f);      // the bowl under the summit, all open
+        float best = 0f;
+        for (int run = 0; run < 3; run++)
+        {
+            float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f)      // they draw together at the foot
+                + 0.13f * Mathf.Sin(along / (150f + run * 37f) + run * 2.1f) * Smooth((along - 300f) / 200f);
+            float across = Mathf.Abs(off - centre) * along;      // metres from the run's middle
+            float half = 27f + 9f * Mathf.Sin(along / 90f + run * 1.7f);
+            best = Mathf.Max(best, 1f - Smooth((across - half) / 9f));
+        }
+        return ski * Mathf.Max(open * (1f - Rib(p)), best);
+    }
+    // 1 where the ski face is forest: below the tree line, off the pistes
+    public static float SkiForest(Vector2 p, float height) => SkiFace(p) * (1f - Piste(p)) * (1f - Smooth((height - TreeLine + 50f) / 50f)) * Smooth((height - 6f) / 10f);
     static float MountainRadius(Vector2 p) => Mathf.Lerp(SteepRadius, SkiRadius, SkiFace(p));
     // how far the mountain's ground reaches at p (for the island's outline): the main cone or any lesser peak
     static float MountainReach(Vector2 p)
@@ -144,7 +167,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         float rough = (Ridged(p.x * 0.006f + 11.3f, p.y * 0.006f + 4.9f) - 0.4f) * 70f + (Ridged(p.x * 0.017f + 2.1f, p.y * 0.017f + 7.7f) - 0.45f) * 24f + (Ridged(p.x * 0.05f + 6.3f, p.y * 0.05f + 1.2f) - 0.5f) * 7f;
         float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 16f;
         float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 70f);      // none at the foot or on the summit
-        return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, Piste(p)) * body + Rib(p) * ski * 16f * body);      // the ribs stand a little proud
+        float rib = Rib(p) * Smooth((h - TreeLine + 40f) / 60f);      // rock ribs only above the trees; below, the face is even ground under forest
+        return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, ski * (1f - rib)) * body + rib * ski * 16f * body);
     }
 
     static readonly List<(Vector2 at, float radius, float height)> knolls = new List<(Vector2, float, float)>();
@@ -908,6 +932,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         var isletList = new List<(Vector2 at, float radius)>(islets);
         WinterIsleDressing.Dress(new WinterIsleDressing.Land
         {
+            Forest = p => SkiForest(p, HeightAt(p)),
             Woods = woods,
             Islets = isletList,
             Lake = Lake,

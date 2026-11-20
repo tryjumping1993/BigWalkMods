@@ -35,6 +35,7 @@ public static class WinterIsleDressing
         public Action<Vector2, float, float> Bank;   // banks snow against something: at, radius, height
         public List<(Vector2 at, float radius, bool birch)> Woods = new List<(Vector2, float, bool)>();      // dense stands the trails run through
         public List<(Vector2 at, float radius)> Islets = new List<(Vector2, float)>();                       // small islets, to be built of granite
+        public Func<Vector2, float> Forest = p => 0f;      // 1 where the ground is to be dense forest whatever else (between the ski runs)
         public Vector2 Lake;                         // the frozen lake's centre
         public float LakeRadius;
         public float X0, X1, Z0, Z1;
@@ -124,6 +125,7 @@ public static class WinterIsleDressing
     static float Rock(string kind, Vector2 p, float ground, float diameter, float sink, float snow, float tilt = 8f, bool onTerrain = true, bool block = true)
     {
         if (!catalog.TryGetValue(kind, out Kind k)) throw new Exception("No '" + kind + "' in world\\catalog.tsv");
+        if (onTerrain && diameter > 2.5f && land.Forest(p) > 0.4f) return ground;      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
             // never float: the rock's bottom goes below the lowest ground under it, deeper on a slope
@@ -426,10 +428,11 @@ public static class WinterIsleDressing
             {
                 var p = new Vector2(x + R(-2.1f, 2.1f), z + R(-2.1f, 2.1f));
                 float h = l.Height(p);
-                if (float.IsNaN(h) || h < 2.5f || h > 260f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;      // (the tree line is high on the great mountain's ribs)
-                float inGrove = Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 200f) / 60f));
+                if (float.IsNaN(h) || h < 2.5f || h > 340f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;      // (the tree line is high on the great mountain)
+                float forest = l.Forest(p);
+                float inGrove = Mathf.Max(Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 200f) / 60f)), forest);
                 // glades: open ground inside a grove, a few tens of metres across
-                if (inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
+                if (forest < 0.5f && inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
