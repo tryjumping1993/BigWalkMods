@@ -181,7 +181,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | sit?path=Full/Path/To/Seat (or ?stand) | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -203,6 +203,7 @@ namespace BwmCompanion
                 case "move": yield return Move(r); break;
                 case "look": yield return Look(r); break;
                 case "ground": yield return GroundHeight(r); break;
+                case "sit": yield return Sit(r); break;
                 case "walk": { IEnumerator<string> e = Walk(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "obj": yield return Objects.Describe(r); break;
                 case "clone": yield return Objects.Clone(r); break;
@@ -660,6 +661,36 @@ namespace BwmCompanion
 
         // Saves a screenshot to <repo>\shots\<file>.png. With cx,cy,cz (camera) and tx,ty,tz (target) it is taken
         // from a temporary camera at that viewpoint; otherwise it is the player's own view.
+        // Seats the local player in a seat (an SDK Custom Chair, or any object with the game's PlayerPose under it),
+        // as clicking it would: sit?path=Winter Isle root/.../Seat Left. sit?stand gets up. For testing what
+        // carries a seated player (the gondola).
+        static string Sit(Request r)
+        {
+            NetworkIdentity player = NetworkClient.localPlayer;
+            if (player == null) return "ERROR not in a walk";
+            PlayerNetworking net = player.GetComponent<PlayerNetworking>();
+            if (net == null) return "ERROR the player has no PlayerNetworking";
+            var methods = typeof(PlayerNetworking).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            int action = 1;
+            try { action = net.poseReference.actionNumber + 1; } catch (Exception) { }
+            if (r.Has("stand"))
+            {
+                MethodInfo exit = methods.FirstOrDefault(m => m.Name == "CmdExitPose" && m.GetParameters().Length == 1);
+                if (exit == null) return "ERROR no CmdExitPose";
+                exit.Invoke(net, new object[] { action });
+                return "asked to stand (action " + action + ")";
+            }
+            Transform t = Objects.Locate(r);
+            if (t == null) return "ERROR no seat at that path or name";
+            PlayerPose pose = t.GetComponentInChildren<PlayerPose>(true);
+            if (pose == null) return "ERROR no PlayerPose under " + t.name;
+            MethodInfo enter = methods.FirstOrDefault(m => m.Name == "CmdEnterPose" && m.GetParameters().Length == 2);
+            if (enter == null) return "ERROR no CmdEnterPose";
+            enter.Invoke(net, new object[] { pose.shellReference, action });
+            return "asked to sit in " + t.name + " (ticket " + pose.ticket + ", action " + action + "); ServerEnterPoseAuto takes ("
+                + string.Join(", ", methods.Where(m => m.Name == "ServerEnterPoseAuto").SelectMany(m => m.GetParameters()).Select(p => p.ParameterType.Name)) + ")";
+        }
+
         // The height of the ground itself at x, z (terrain or the island's land, not a tree, rock or cabin on it):
         // ground?x=..&z=..  ->  "ground: 12.3" or "ground: none". With &all=1, the highest thing a player could
         // stand on there, rocks included (much of the base game's island is rock, not terrain).

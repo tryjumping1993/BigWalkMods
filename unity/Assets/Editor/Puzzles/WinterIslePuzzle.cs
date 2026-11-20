@@ -40,6 +40,17 @@ public sealed class WinterIslePuzzle : PuzzleDef
     public static readonly Vector2 Plaza = new Vector2(-705f, -795f);   // the open middle, where The Tree stands
     public const float PlazaRadius = 24f;
 
+    // The summit: a level sanctuary ringed by crags, with no trail; the gondola is the only way up. The Tree's
+    // twenty summit plinths stand on it (TheTreePuzzle).
+    public static readonly Vector2 Summit = new Vector2(-1035f, -822f);
+    public const float SummitRadius = 21f;
+    // The gondola: from a station just west of the plaza straight up to the summit's eastern edge
+    static Vector2 GondolaDir => (Summit - Plaza).normalized;
+    public static Vector2 GondolaBottom => Plaza + GondolaDir * 55f;
+    public static Vector2 GondolaTop => Summit - GondolaDir * 12f;
+    public const float GondolaSide = 2f;          // each line runs this far either side of the centre
+    public const int GondolaCabins = 8;
+
     // Ridges: lines of (x, crest height, z), and how far their slopes reach
     static readonly (Vector3[] line, float width)[] Ridges =
     {
@@ -475,7 +486,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         // 3. Level the plaza and every puzzle site on the island, each at the height the land has at its centre
         var sites = new List<Vector2>();
-        var flats = new List<(Vector2 at, float radius, float blend)> { (Plaza, PlazaRadius, 16f) };
+        var flats = new List<(Vector2 at, float radius, float blend)> { (Plaza, PlazaRadius, 16f), (Summit, SummitRadius, 4f), (GondolaBottom, 10f, 9f) };
         foreach (Vector3 site in b.OtherSites)
         {
             var at = new Vector2(site.x, site.y);
@@ -587,7 +598,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         var trailEnds = new List<int>
         {
-            Highest(p => true),                                       // the summit (as near as walking gets)
             Highest(p => p.x < -1400f),                               // the western range
             Highest(p => p.x > -1400f && p.x < -1000f && p.y < -1250f),   // the southern ridge
             Highest(p => p.x > -800f && p.y < -900f),                 // the southern headland
@@ -656,6 +666,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Spread(toPath, row, nz + 1);      // now in cells; times Cell for metres
         float PathDistance(Vector2 p) => toPath[Cell_(p)] * Cell;
         var structures = new List<(Vector2 at, float radius)>();      // cabins and the like: the dressing keeps off them
+        // the gondola's stations, the summit, and a corridor under the cable, kept clear of trees and rocks
+        structures.Add((Summit, SummitRadius + 1f));
+        structures.Add((GondolaBottom, 14f));
+        for (float t = 0f; t <= 1f; t += 0.02f) structures.Add((Vector2.Lerp(GondolaBottom, GondolaTop, t), 7f));
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
             if (PathDistance(p) < 3.5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
@@ -686,6 +700,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     if (i >= 0 && j >= 0 && i <= nx && j <= nz && oi * oi + oj * oj <= r * r) blocked[j * row + i] = true;
                 }
         }
+
+        foreach (var st in structures) Block(st.at, st.radius + 3f);
 
         // 6. The set dressing: the game's own rocks and plants, placed here and made by the Winter Walk plugin
         var toWater = new float[count];
@@ -1349,6 +1365,165 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         System.IO.File.WriteAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "world", "winter-viewpoints.tsv")), views.ToString());
         Debug.Log("[BWM] Winter Isle: " + cabins.Count + " cabins, " + lanterns + " lanterns, " + poles + " snow poles");
+
+        // 11. The gondola: two stations, pylons and the cable between, and the cabins. Winter Walk moves the cabins
+        //     (GondolaDriver): it reads the cable's line from the "Gondola Line" markers, P0 at the bottom station.
+        //     Until The Tree's five plinths hold gourds they wait in the bottom station.
+        {
+            Vector2 dir2 = (GondolaTop - GondolaBottom).normalized, side2 = new Vector2(dir2.y, -dir2.x);
+            float bottomDeck = HeightAt(GondolaBottom), topDeck = HeightAt(GondolaTop);
+            const float CableOverDeck = 5.6f, Clearance = 7.5f;
+            float length = (GondolaTop - GondolaBottom).magnitude;
+            int spans = Mathf.Max(2, Mathf.CeilToInt(length / 58f));
+            // cable points: the stations, and a pylon top at each span's end, raised until every point of the cable
+            // between clears the ground (and the trees beside it) by Clearance
+            var line = new List<Vector3>();
+            for (int i = 0; i <= spans; i++)
+            {
+                Vector2 p = Vector2.Lerp(GondolaBottom, GondolaTop, (float)i / spans);
+                float y = i == 0 ? bottomDeck + CableOverDeck : i == spans ? topDeck + CableOverDeck : HeightAt(p) + 12f;
+                line.Add(new Vector3(p.x, y, p.y));
+            }
+            for (int pass = 0; pass < 20; pass++)
+            {
+                bool raised = false;
+                for (int i = 0; i < spans; i++)
+                    for (float t = 0.05f; t < 1f; t += 0.05f)
+                    {
+                        Vector3 c = Vector3.Lerp(line[i], line[i + 1], t);
+                        float need = HeightAt(new Vector2(c.x, c.z)) + Clearance - c.y;
+                        if (need <= 0f) continue;
+                        if (i > 0) line[i] += Vector3.up * (need + 0.5f);
+                        if (i + 1 < spans) line[i + 1] += Vector3.up * (need + 0.5f);
+                        raised = true;
+                    }
+                if (!raised) break;
+            }
+            var markers = new GameObject("Gondola Line");
+            markers.transform.SetParent(b.Root.transform, false);
+            for (int i = 0; i < line.Count; i++)
+            {
+                var m = new GameObject("P" + i);
+                m.transform.SetParent(markers.transform, false);
+                m.transform.position = line[i];
+            }
+
+            var gm = new MeshBuilder();
+            var red = new Color(0.72f, 0.09f, 0.08f); var green = new Color(0.1f, 0.33f, 0.18f); var gold = new Color(0.95f, 0.72f, 0.2f);
+            var steel = new Color(0.32f, 0.33f, 0.36f); var timber = new Color(0.42f, 0.29f, 0.18f); var cream = new Color(0.9f, 0.86f, 0.76f);
+            Vector3 L(Vector2 p, float y) => new Vector3(p.x - root.x, y - root.y, p.y - root.z);
+            float yaw2 = Mathf.Atan2(dir2.x, dir2.y) * Mathf.Rad2Deg;
+            // pylons: a tapering steel mast with a crossarm carrying both lines, a ladder of rungs, a lamp
+            for (int i = 1; i < spans; i++)
+            {
+                Vector2 p = new Vector2(line[i].x, line[i].z);
+                float foot = HeightAt(p) - 0.6f, mastTop = line[i].y + 0.6f;
+                Kit.AddBox(gm, L(p, foot), new Vector3(1.6f, 0.8f, 1.6f), cream * 0.8f, yaw2);                // footing
+                Kit.AddBox(gm, L(p, foot + 0.8f), new Vector3(0.7f, mastTop - foot - 0.8f, 0.7f), steel, yaw2);  // mast
+                Kit.AddBox(gm, L(p, mastTop), new Vector3(0.5f, 0.5f, 0.5f) + new Vector3(0f, 0f, 0f), steel, yaw2);
+                Vector2 armA = p + side2 * (GondolaSide + 0.6f), armB = p - side2 * (GondolaSide + 0.6f);
+                Kit.AddBox(gm, L(Vector2.Lerp(armA, armB, 0.5f), mastTop + 0.2f), new Vector3(2f * GondolaSide + 1.4f, 0.35f, 0.4f), steel, yaw2 + 90f);
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                    Kit.AddBox(gm, L(p + side2 * GondolaSide * sgn, mastTop - 0.15f), new Vector3(0.5f, 0.35f, 1.6f), red, yaw2);    // sheaves
+                for (float y = foot + 1.5f; y < mastTop - 1f; y += 0.6f)
+                    Kit.AddBox(gm, L(p + dir2 * 0.4f, y), new Vector3(0.45f, 0.05f, 0.05f), steel * 1.2f, yaw2 + 90f);       // rungs
+                Kit.AddBall(gm, L(p, mastTop + 0.75f), 0.22f, gold);
+            }
+            // stations: a timber platform under a pitched roof, open at the ends, the bullwheel overhead, garlands
+            void Station(Vector2 at, float deck, bool bottom)
+            {
+                float w = 2f * GondolaSide + 4.2f, d = 13f, roofY = deck + CableOverDeck + 1.2f;
+                Kit.AddBox(gm, L(at, deck - 1.2f), new Vector3(w + 1f, 1.2f, d + 1f), cream * 0.75f, yaw2);       // plinth
+                Kit.AddBox(gm, L(at, deck), new Vector3(w, 0.25f, d), timber, yaw2);                              // deck
+                for (int cx = -1; cx <= 1; cx += 2)
+                    for (int cz = -1; cz <= 1; cz += 2)
+                        Kit.AddBox(gm, L(at + side2 * (w * 0.5f - 0.3f) * cx + dir2 * (d * 0.5f - 0.4f) * cz, deck + 0.25f), new Vector3(0.45f, roofY - deck - 0.25f, 0.45f), timber, yaw2);
+                // roof: two slopes meeting over the middle
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                {
+                    Vector2 at2 = at + side2 * (w * 0.27f) * sgn;
+                    for (int seg = 0; seg < 4; seg++)
+                    {
+                        Vector3 c = L(at2, roofY + 0.9f - 0.45f * Mathf.Abs(sgn));
+                        Kit.AddBox(gm, c + Quaternion.Euler(0f, yaw2, 0f) * new Vector3(0f, 0f, (seg - 1.5f) * (d + 1.6f) / 4f), new Vector3(w * 0.6f, 0.25f, (d + 1.6f) / 4f + 0.05f), seg % 2 == 0 ? red : red * 0.9f, yaw2);
+                    }
+                }
+                Kit.AddBox(gm, L(at, roofY + 1.25f), new Vector3(0.5f, 0.4f, d + 1.8f), gold, yaw2);              // ridge
+                // the bullwheel at the far end, where the cable turns
+                Vector2 wheel = at + dir2 * (d * 0.5f) * (bottom ? -1f : 1f);
+                Kit.AddDisc(gm, L(wheel, deck + CableOverDeck - 0.1f), GondolaSide + 0.3f, 0.3f, steel, 20);
+                // a sign board over the boarding side, and wreaths on the posts
+                Kit.AddBox(gm, L(at - dir2 * (d * 0.5f - 0.4f) * (bottom ? -1f : 1f), roofY - 0.9f), new Vector3(w * 0.7f, 0.8f, 0.12f), green, yaw2);
+                for (int cx = -1; cx <= 1; cx += 2)
+                    Kit.AddBall(gm, L(at + side2 * (w * 0.5f - 0.3f) * cx - dir2 * (d * 0.5f - 0.1f) * (bottom ? -1f : 1f), deck + 2.1f), 0.32f, green);
+            }
+            Station(GondolaBottom, bottomDeck, true);
+            Station(GondolaTop, topDeck, false);
+            // the cables: thin dark boxes run each line (and round the bullwheels)
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+                for (int i = 0; i < spans; i++)
+                {
+                    Vector3 a = line[i] + new Vector3(side2.x, 0f, side2.y) * GondolaSide * sgn, c = line[i + 1] + new Vector3(side2.x, 0f, side2.y) * GondolaSide * sgn;
+                    Vector3 cableMid = (a + c) * 0.5f, run = c - a;
+                    var turn = Quaternion.LookRotation(run.normalized, Vector3.up);
+                    // a box from a to c, 6 cm thick
+                    Vector3 u = turn * Vector3.right * 0.03f, v = turn * Vector3.up * 0.03f;
+                    Vector3 a0 = a - root, c0 = c - root;
+                    gm.Quad(a0 - u - v, c0 - u - v, c0 - u + v, a0 - u + v, steel * 0.5f);
+                    gm.Quad(a0 + u + v, c0 + u + v, c0 + u - v, a0 + u - v, steel * 0.5f);
+                    gm.Quad(a0 - u + v, c0 - u + v, c0 + u + v, a0 + u + v, steel * 0.5f);
+                    gm.Quad(a0 + u - v, c0 + u - v, c0 - u - v, a0 - u - v, steel * 0.5f);
+                }
+            b.MeshPiece("Gondola", gm.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true);
+
+            // cabins: an open-fronted car on a hanger, red with gold trim and a wreath, two chairlift seats facing
+            // forward. Built facing +z with the grip at the origin; Winter Walk turns and moves them.
+            var car = new MeshBuilder();
+            const float Drop = 3.6f;      // grip to floor
+            Kit.AddBox(car, new Vector3(0f, -Drop, 0f), new Vector3(1.9f, 0.12f, 1.5f), timber);                        // floor
+            Kit.AddBox(car, new Vector3(0f, -Drop + 0.12f, -0.68f), new Vector3(1.9f, 1.75f, 0.12f), red);              // back wall
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+            {
+                Kit.AddBox(car, new Vector3(0.9f * sgn, -Drop + 0.12f, -0.1f), new Vector3(0.12f, 0.75f, 1.3f), red);  // low sides
+                Kit.AddBox(car, new Vector3(0.9f * sgn, -Drop + 0.87f, 0.68f), new Vector3(0.1f, 1.0f, 0.1f), gold);   // front posts
+                Kit.AddBox(car, new Vector3(0.9f * sgn, -Drop + 0.87f, -0.62f), new Vector3(0.1f, 1.0f, 0.1f), gold);
+            }
+            Kit.AddBox(car, new Vector3(0f, -Drop + 1.87f, 0f), new Vector3(2.1f, 0.14f, 1.7f), red);                   // roof
+            Kit.AddBox(car, new Vector3(0f, -Drop + 2.01f, 0f), new Vector3(1.7f, 0.1f, 1.3f), gold);
+            Kit.AddBox(car, new Vector3(0f, -Drop + 0.12f, -0.45f), new Vector3(1.7f, 0.42f, 0.42f), timber * 1.15f); // bench
+            Kit.AddBox(car, new Vector3(0f, -Drop + 2.11f, -0.05f), new Vector3(0.14f, Drop - 2.11f, 0.14f), steel); // hanger
+            Kit.AddBox(car, new Vector3(0f, -0.25f, -0.05f), new Vector3(0.3f, 0.35f, 0.5f), steel * 0.8f);         // grip
+            Kit.AddBox(car, new Vector3(0f, -Drop + 0.5f, 0.66f), new Vector3(1.8f, 0.06f, 0.06f), gold);           // safety bar
+            Kit.AddDisc(car, new Vector3(0f, -Drop + 1.2f, -0.75f), 0.3f, 0.06f, green, 12);                      // wreath (lies flat on the wall's back)
+            Kit.AddBall(car, new Vector3(0f, -Drop + 0.98f, -0.78f), 0.07f, red);
+            Mesh carMesh = b.SaveMesh("Gondola Cabin", car.ToMesh());
+            Material carMaterial = b.ShaderMaterial("BWM/Snowy", "Cabin", m => m.SetFloat("_SnowLine", 0.8f));
+            var cabinsRoot = new GameObject("Gondola Cabins");
+            cabinsRoot.transform.SetParent(b.Root.transform, false);
+            for (int i = 0; i < GondolaCabins; i++)
+            {
+                var cabin = new GameObject("Gondola Cabin " + i);
+                cabin.transform.SetParent(cabinsRoot.transform, false);
+                // parked in the bottom station until Winter Walk takes them
+                cabin.transform.position = new Vector3(GondolaBottom.x, bottomDeck + Drop + 0.3f, GondolaBottom.y) + new Vector3(dir2.x, 0f, dir2.y) * ((i - GondolaCabins / 2f) * 0.2f) + Vector3.up * i * 0.01f;
+                cabin.transform.rotation = Quaternion.Euler(0f, yaw2, 0f);
+                var body = new GameObject("Body");
+                body.transform.SetParent(cabin.transform, false);
+                body.AddComponent<MeshFilter>().sharedMesh = carMesh;
+                body.AddComponent<MeshRenderer>().sharedMaterial = carMaterial;
+                body.AddComponent<MeshCollider>().sharedMesh = carMesh;
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                {
+                    var seat = new Piece(new GameObject(sgn < 0 ? "Seat Left" : "Seat Right"));
+                    seat.Transform.SetParent(cabin.transform, false);
+                    seat.Transform.localPosition = new Vector3(0.42f * sgn, -Drop + 0.54f, -0.45f);
+                    b.AddScript(seat, "PuzzleSeat");
+                    seat.Set("PuzzleSeat", "pose", sgn < 0 ? 12 : 13);      // ChairliftLeft, ChairliftRight
+                    seat.Set("PuzzleSeat", "clickSize", new Vector3(0.7f, 0.7f, 0.7f));
+                }
+            }
+            Debug.Log("[BWM] Winter Isle gondola: " + Sdk.F(length) + " m, " + (spans - 1) + " pylons, cable from " + Sdk.F(line[0].y) + " to " + Sdk.F(line[spans].y) + " m, " + GondolaCabins + " cabins");
+        }
 
         b.RegisterLand(X0, Z0, Cell, nx, nz, land, blocked);
 

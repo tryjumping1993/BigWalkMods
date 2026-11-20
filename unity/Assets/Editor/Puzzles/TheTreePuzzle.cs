@@ -1,9 +1,14 @@
 // The Tree: the winter edition's gourd tower, a great Christmas tree in the island's central plaza.
 //
-// Every puzzle on the island rewards a gourd, and the gourds are the tree's ornaments: round its foot is a ring
-// of plinths, one per puzzle, and holding the button opens the next empty one. The SDK keeps only as many
-// plinths as there are puzzles installed. With this pack present it replaces the game's red tower for modded
-// gourds. Lights wind up the tree and ring the plaza.
+// Every puzzle on the island rewards a gourd. The first five go round the tree's foot: five plinths, and holding
+// the button opens the next empty one. When all five hold a gourd the gondola opens (Winter Walk's
+// GondolaDriver watches "Tree Plinth 1".."5"), and the next twenty go to the summit, reached only by the
+// gondola, where a ring of plinths stands round a great gold star with its own hold button.
+//
+// All 25 plinths are in this one pack and in one Tower Button list (tree first), because the SDK puts gourds
+// back from a save only into the plinths of a single Tower-type pack; a summit in a pack of its own would lose
+// its gourds on every reload. The SDK shows only as many plinths as there are modded puzzles installed, first
+// first, so the summit's plinths appear as puzzles are added. Lights wind up the tree and ring the plaza.
 using System.Collections.Generic;
 using Bwm;
 using UnityEngine;
@@ -16,7 +21,8 @@ public sealed class TheTreePuzzle : PuzzleDef
     public override Vector2? FixedSite => WinterIslePuzzle.Plaza;
 
     const float TreeHeight = 19f;
-    const int Plinths = 24;
+    const int TreePlinths = 5, SummitPlinths = 20;
+    const float SummitRing = 9f;
     const float RingRadius = 6.2f;
     static readonly Color Stone = new Color(0.50f, 0.52f, 0.56f);
     static readonly Color Wood = new Color(0.36f, 0.25f, 0.17f);
@@ -78,16 +84,18 @@ public sealed class TheTreePuzzle : PuzzleDef
         }
         Kit.LightString(b, "Tree Lights", spiral, 0.06f, 0.42f, false, false, 5);
 
-        // ---- the ornaments' places: a ring of plinths facing outwards, filled clockwise from the south ----
+        // ---- the first five: a ring of plinths round the tree, facing outwards, filled clockwise from the south ----
         var plinths = new List<UnityEngine.Object>();
-        for (int i = 0; i < Plinths; i++)
+        for (int i = 0; i < TreePlinths; i++)
         {
-            float a = Mathf.PI * 1.5f - 2f * Mathf.PI * i / Plinths;      // start at -z (south), go clockwise seen from above
+            float a = Mathf.PI * 1.5f - 2f * Mathf.PI * i / TreePlinths;      // start at -z (south), go clockwise seen from above
             float x = Mathf.Cos(a) * RingRadius, z = Mathf.Sin(a) * RingRadius;
-            Piece plinth = b.Empty("Gourd Plinth " + (i + 1), x, z, 0.3f, false);
+            Piece plinth = b.Empty("Tree Plinth " + (i + 1), x, z, 0.3f, false);
             plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(x, z) * Mathf.Rad2Deg, 0f);
             plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
         }
+        var summitPlinths = Summit(b, stone, bare, snowy);
+        plinths.AddRange(summitPlinths);
 
         // ---- the button that opens the next plinth, on a post in front of the tree ----
         b.Box("Button Post", 0f, -(RingRadius + 3.2f), new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, 0f, false);
@@ -103,5 +111,57 @@ public sealed class TheTreePuzzle : PuzzleDef
             ring.Add(new Vector3(Mathf.Cos(a) * outer, 3f, Mathf.Sin(a) * outer));
         }
         Kit.LightString(b, "Plaza Lights", ring, 0.3f, 0.5f, true, true, 9);
+    }
+
+    // The summit sanctuary, at WinterIslePuzzle.Summit: twenty plinths in a ring round a great gold star on a
+    // stone column, a hold button that opens every summit plinth while it is held, lanterns and a ring of lights.
+    // Local coordinates here are from the plaza (this pack's root).
+    static List<UnityEngine.Object> Summit(PuzzleBuilder b, Material stone, Material bare, Material snowy)
+    {
+        Vector2 c = WinterIslePuzzle.Summit - WinterIslePuzzle.Plaza;
+        var built = new MeshBuilder();
+        Vector3 Here(float x, float z, float up) => b.WorldPoint(c.x + x, c.y + z, up) - b.Root.transform.position;
+        // a round stone floor, two steps, the column and the star
+        Kit.AddDisc(built, Here(0f, 0f, -0.3f), SummitRing + 2.2f, 0.45f, Stone, 40);
+        Kit.AddDisc(built, Here(0f, 0f, 0.15f), 3.2f, 0.35f, Stone * 0.92f, 28);
+        Kit.AddDisc(built, Here(0f, 0f, 0.5f), 1.6f, 4.5f, Stone * 0.85f, 16);
+        b.MeshPiece("Summit Floor", built.ToMesh(), stone);
+        var star = new MeshBuilder();
+        Kit.AddStar(star, Here(0f, 0f, 7.4f), 2.4f, 0.5f, Gold);
+        b.MeshPiece("Summit Star", star.ToMesh(), bare, false);
+        // a second star crossing the first, so it reads from every side
+        var star2 = new MeshBuilder();
+        Kit.AddStar(star2, Vector3.zero, 2.4f, 0.5f, Gold);
+        Piece cross = b.MeshPiece("Summit Star Cross", star2.ToMesh(), bare, false);
+        cross.Transform.position = b.Root.transform.position + Here(0f, 0f, 7.4f);
+        cross.Transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+        var plinths = new List<UnityEngine.Object>();
+        for (int i = 0; i < SummitPlinths; i++)
+        {
+            float a = Mathf.PI * 0.5f + 2f * Mathf.PI * i / SummitPlinths;      // from the east (the gondola's side), clockwise
+            float x = Mathf.Cos(a) * SummitRing, z = Mathf.Sin(a) * SummitRing;
+            Piece plinth = b.Empty("Summit Plinth " + (i + 1), c.x + x, c.y + z, 0.15f, true);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(x, z) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        // the hold button, on a post on the gondola's side, just inside the ring
+        Vector2 toGondola = (WinterIslePuzzle.GondolaTop - WinterIslePuzzle.Summit).normalized;
+        Vector2 post = toGondola * (SummitRing - 3f);
+        b.Box("Summit Button Post", c.x + post.x, c.y + post.y, new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, Mathf.Atan2(toGondola.x, toGondola.y) * Mathf.Rad2Deg, true);
+        Vector2 face = post + toGondola * 0.11f;
+        Piece button = b.Part("Button Hold", c.x + face.x, c.y + face.y, 1.15f, Mathf.Atan2(toGondola.x, toGondola.y) * Mathf.Rad2Deg, true);
+        foreach (UnityEngine.Object p in plinths) button.On("PuzzleButton", "onPressed", p, "HoldToOpen");
+
+        // lights: a ring round the sanctuary on short posts
+        var ring = new List<Vector3>();
+        for (int i = 0; i < 24; i++)
+        {
+            float a = 2f * Mathf.PI * i / 24f;
+            ring.Add(new Vector3(c.x + Mathf.Cos(a) * (SummitRing + 1.6f), 1.8f, c.y + Mathf.Sin(a) * (SummitRing + 1.6f)));
+        }
+        ring.Add(ring[0]);
+        Kit.LightString(b, "Summit Lights", ring, 0.3f, 0.5f, true, true, 24);
+        return plinths;
     }
 }
