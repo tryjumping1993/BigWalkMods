@@ -294,3 +294,11 @@ and finished assets for the puzzles.
 - The gondola must run much faster than the base game's lift, because it climbs so much higher.
 - Order of work: finish the terrain review goal first (tools\review\README.md), then this. The forked session's
   untested gondola, summit and plinth work is on branch `gondola-wip`.
+- **The mine** (added by the user later the same day): a complete underground coal mine under the island, partly
+  lit, with vehicles players ride to get around it. It is unlocked by a second tower on the island that takes
+  another five gourds. The vehicle is modelled on a mine "mantrip": the user's reference picture is
+  `docs\reference\mantrip.jpg` (a long, very low, open white personnel carrier on four road wheels, flat decks
+  front and back, a sunken blue seating well in the middle with a chain along each side). Not started; nothing
+  about how a tunnel under a heightfield island would be built, lit or driven has been tried yet.
+- Order of work as of this note: the great mountain (first pass in game), then the gondola, skiing and
+  snowboarding, the towers, the mine, and last the rework of trees and ground and a fresh review.
