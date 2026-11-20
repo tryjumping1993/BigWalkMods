@@ -9,6 +9,7 @@ Shader "BWM/Snowy"
         _Tint ("Tint", Color) = (1, 1, 1, 1)
         _SnowColor ("Snow", Color) = (0.94, 0.96, 1, 1)
         _ShadeColor ("Shade", Color) = (0.50, 0.60, 0.85, 1)
+        _SnowShade ("Snow in shade", Color) = (0.58, 0.70, 0.93, 1)
         _SnowLine ("Snow line (0 = everything, 1 = only flat tops)", Range(0, 1)) = 0.55
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.12
         _SnowNoise ("Snow edge raggedness", Range(0, 1)) = 0.35
@@ -25,6 +26,7 @@ Shader "BWM/Snowy"
             half4 _Tint;
             half4 _SnowColor;
             half4 _ShadeColor;
+            half4 _SnowShade;
             float _SnowLine;
             float _SnowEdge;
             float _SnowNoise;
@@ -62,6 +64,7 @@ Shader "BWM/Snowy"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSnowCommon.hlsl"
 
             struct Attributes
             {
@@ -96,10 +99,15 @@ Shader "BWM/Snowy"
                 float3 positionWS = i.positionWS;
                 float3 n = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
 
-                // Snow on what faces up, with a ragged edge
-                float ragged = (Noise3(positionWS * 3.1) - 0.5) * _SnowNoise;
+                // Snow on what faces up, with a ragged edge that follows the snow's own relief (the same maps as the
+                // ground's, at the size of a roof or a post's cap)
+                float3 viewVector = GetWorldSpaceViewDir(positionWS);
+                float viewDistance = length(viewVector);
+                float3 v = viewVector / max(viewDistance, 1e-4);
+                BwmSnowDetail detail = BwmSnowDetailOn(positionWS, viewDistance, 5.0);
+                float ragged = (Noise3(positionWS * 3.1) - 0.5) * _SnowNoise + (detail.cavity - 0.5) * 0.2 * _SnowNoise;
                 float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + ragged);
-                float3 albedo = lerp(i.color.rgb * _Tint.rgb, _SnowColor.rgb, snow);
+                float3 albedo = i.color.rgb * _Tint.rgb;
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -112,6 +120,9 @@ Shader "BWM/Snowy"
                 float3 ambient = SampleSH(n);
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
                 float3 color = lerp(shade, albedo * sun.color, lit);
+                // the snow itself, lit as all the island's snow is (BwmSnowCommon)
+                color = lerp(color, BwmSnowOn(_SnowColor.rgb, _SnowShade.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, 1.0), snow);
+                albedo = lerp(albedo, _SnowColor.rgb, snow);      // for the lamps
 
                 #if defined(_ADDITIONAL_LIGHTS)
                 {

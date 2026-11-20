@@ -131,6 +131,7 @@ Shader "BWM/Snow"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSnowCommon.hlsl"
 
             struct Attributes
             {
@@ -260,19 +261,12 @@ Shader "BWM/Snow"
                 #endif
                 Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
 
-                // Wrapped diffuse keeps slopes facing away from the sun soft; shadow pulls towards the shade colour
-                float wrap = saturate(dot(n, sun.direction) * 0.82 + 0.18);
-                float lit = wrap * sun.shadowAttenuation;
-                // a low sun leaves the troughs between the wind's ridges in shade
-                lit *= lerp(1.0, smoothstep(0.1, 0.5, windH.g), (1.0 - saturate(sun.direction.y * 1.5)) * 0.5 * relief);
+                // Light, shade, colour, sheen and glints are the island's shared snow (BwmSnowCommon.hlsl): the snow on
+                // rocks, trees and roofs is lit by the same functions
+                float lit = BwmSnowLight(n, sun.direction, windH.g, relief) * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
-                float3 shade = _ShadeColor.rgb * (ambient * 1.1 + 0.18);
-                // snow is not one white: faintly bluer and greyer crusts, warmer fresh patches
-                float crust = ValueNoise(positionWS.xz * 0.07 + 3.0) * 0.6 + ValueNoise(positionWS.xz * 0.35 + 9.0) * 0.4;
-                float3 snowAlbedo = _Color.rgb * lerp(float3(0.9, 0.93, 0.98), float3(1.0, 1.0, 1.0), smoothstep(0.25, 0.75, crust));
-                // the troughs between the wind's ridges are a little bluer and darker, their crests brightest; the
-                // scoured, rippled flats are wind crust, a touch greyer than fresh snow
-                snowAlbedo *= lerp(float3(0.86, 0.91, 0.99), float3(1.0, 1.0, 1.0), smoothstep(0.2, 0.6, windH.g)) * (1.0 - 0.04 * windH.b);
+                float3 shade = BwmSnowShade(_ShadeColor.rgb, ambient);
+                float3 snowAlbedo = BwmSnowAlbedo(_Color.rgb, positionWS, windH.g, windH.b);
                 // trodden snow: packed and a little greyer, each print bluer and darker than the snow round it
                 float3 pathAlbedo = _PathColor.rgb * (0.94 + 0.06 * ValueNoise(positionWS.xz * 1.3)) * lerp(float3(0.80, 0.86, 0.97), float3(1.0, 1.0, 1.0), smoothstep(0.15, 0.5, trackCavity));
                 float3 snowColor = lerp(lerp(lerp(snowAlbedo, pathAlbedo, path), earth, earthy), rockColor, rock);
@@ -301,24 +295,10 @@ Shader "BWM/Snow"
                 }
                 #endif
 
-                // A soft sheen where the surface mirrors the sun, strongest on wind crust: it is what shows the relief
-                // when looking towards the light
                 float snowOnly = (1.0 - path * 0.5) * (1.0 - rock) * (1.0 - earthy);
-                color += pow(saturate(dot(n, normalize(sun.direction + v))), 48.0) * (0.05 + 0.15 * windH.b) * snowOnly * sun.color * sun.shadowAttenuation;
-
-                // Glints: each small cell of the surface has a random facet; it flashes when it mirrors the sun
-                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path) * (1.0 - rock) * (1.0 - earthy);
-                if (sparkleFade > 0.0)
-                {
-                    float3 scaled = positionWS * _SparkleScale;
-                    float3 cell = floor(scaled);
-                    float3 random = Hash33(cell);
-                    float3 facet = normalize(n + (random * 2.0 - 1.0) * 0.75);
-                    float glint = pow(saturate(dot(reflect(-sun.direction, facet), v)), 90.0);
-                    // a round grain in the middle of the cell, and only some cells hold one
-                    float grain = smoothstep(0.42, 0.12, length(frac(scaled) - 0.5)) * step(0.55, random.x);
-                    color += glint * grain * _SparkleAmount * sparkleFade * sparkleFade * sun.color * sun.shadowAttenuation;
-                }
+                color += BwmSnowSheen(n, v, sun.direction, windH.b) * snowOnly * sun.color * sun.shadowAttenuation;
+                color += BwmSnowGlints(positionWS, n, v, sun.direction, viewDistance, _SparkleScale, _SparkleAmount, _SparkleDistance)
+                    * (1.0 - path) * (1.0 - rock) * (1.0 - earthy) * sun.color * sun.shadowAttenuation;
 
                 color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1) * (1.0 - earthy);
                 color = MixFog(color, i.fogFactor);

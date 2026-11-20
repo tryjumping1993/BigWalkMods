@@ -12,6 +12,7 @@ Shader "BWM/Fir"
         _Cutoff ("Cut-out", Range(0, 1)) = 0.42
         _SnowColor ("Snow", Color) = (0.94, 0.96, 1, 1)
         _ShadeColor ("Shade", Color) = (0.50, 0.60, 0.85, 1)
+        _SnowShade ("Snow in shade", Color) = (0.58, 0.70, 0.93, 1)
         _SnowLine ("Snow line", Range(-0.5, 1)) = 0.35
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.18
         _Translucency ("Light through the needles", Range(0, 1)) = 0.25
@@ -30,6 +31,7 @@ Shader "BWM/Fir"
             float _Cutoff;
             half4 _SnowColor;
             half4 _ShadeColor;
+            half4 _SnowShade;
             float _SnowLine;
             float _SnowEdge;
             float _Translucency;
@@ -78,6 +80,7 @@ Shader "BWM/Fir"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSnowCommon.hlsl"
 
             struct Attributes
             {
@@ -124,11 +127,15 @@ Shader "BWM/Fir"
                 float3 albedo = bark ? _BarkColor.rgb * (0.8 + 0.4 * Noise3(positionWS * float3(8, 1.5, 8))) : needles * lerp(0.45, 1.0, depth);
                 if (core) albedo = i.color.rgb * float3(0.05, 0.13, 0.07) * (0.8 + 0.4 * Noise3(positionWS * 2.0));
 
-                // Snow: on what faces up, clumped by noise, thickest on the outer parts of the boughs
+                // Snow: on what faces up, clumped by noise, thickest on the outer parts of the boughs; its edge follows
+                // the snow's own relief (the same maps as the ground's, at a bough's size)
+                float3 viewVector = GetWorldSpaceViewDir(positionWS);
+                float viewDistance = length(viewVector);
+                float3 v = viewVector / max(viewDistance, 1e-4);
+                BwmSnowDetail detail = BwmSnowDetailOn(positionWS, viewDistance, 4.0);
                 float clumps = Noise3(positionWS * 1.7) * 0.6 + Noise3(positionWS * 6.0) * 0.4;
-                float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + (clumps - 0.5) * 0.9) * smoothstep(0.15, 0.6, depth);
+                float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + (clumps - 0.5) * 0.9 + (detail.cavity - 0.5) * 0.3) * smoothstep(0.15, 0.6, depth);
                 if (bark) snow *= smoothstep(0.6, 0.9, n.y);
-                albedo = lerp(albedo, _SnowColor.rgb * (0.92 + 0.08 * clumps), snow);
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -142,6 +149,9 @@ Shader "BWM/Fir"
                 float3 ambient = SampleSH(n);
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.14) * lerp(0.6, 1.0, depth);
                 float3 color = lerp(shade, albedo * sun.color, lit) + needles * sun.color * through;
+                // the snow itself, lit as all the island's snow is (BwmSnowCommon); deep in the crown it is in shade
+                color = lerp(color, BwmSnowOn(_SnowColor.rgb, _SnowShade.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, lerp(0.6, 1.0, depth)), snow);
+                albedo = lerp(albedo, _SnowColor.rgb, snow);      // for the lamps
 
                 #if defined(_ADDITIONAL_LIGHTS)
                 {

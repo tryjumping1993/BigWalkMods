@@ -274,6 +274,20 @@ namespace WinterWalk
             Plugin.L.LogInfo("Winter Walk: lent the snow " + (granite != null ? "granite " : "") + (heath != null ? "heath " : "") + (sand != null ? "sand " : "") + "to " + lent + " material(s)");
         }
 
+        // Our trees, roofs and props draw their snow with the same surface maps as the ground (BwmSnowCommon.hlsl)
+        // and read them as globals, so the maps ride in the island's pack once: hand over the ones on the rocks'
+        // snow material
+        void LendSnowMaps()
+        {
+            Texture wind = overlay.GetTexture("_WindNormal"), height = overlay.GetTexture("_WindHeight"), grain = overlay.GetTexture("_GrainNormal");
+            if (wind == null || height == null || grain == null) { Plugin.L.LogWarning("Winter Walk: the snow maps are not on the island's material; snow on trees and roofs stays smooth"); return; }
+            Shader.SetGlobalTexture("_BwmWindNormal", wind);
+            Shader.SetGlobalTexture("_BwmWindHeight", height);
+            Shader.SetGlobalTexture("_BwmGrainNormal", grain);
+            Shader.SetGlobalFloat("_BwmSnowMaps", 1f);
+            Plugin.L.LogInfo("Winter Walk: lent the snow's surface maps to trees, roofs and props");
+        }
+
         void Begin()
         {
             dirty = false;
@@ -281,6 +295,7 @@ namespace WinterWalk
             rockSnow.Clear(); stilled.Clear(); leafSnow.Clear(); warned.Clear();
             Templates();
             try { LendTextures(); } catch (Exception ex) { Plugin.L.LogWarning("Winter Walk: textures not lent: " + ex.Message); }
+            try { LendSnowMaps(); } catch (Exception ex) { Plugin.L.LogWarning("Winter Walk: snow maps not lent: " + ex.GetType().Name + ": " + ex.Message); }
             holder = new GameObject("Winter Dressing");
             holder.SetActive(false);      // nothing wakes until every copy is cleaned
             next = 0; made = 0; missing = 0;
