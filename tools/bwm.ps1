@@ -20,6 +20,18 @@ $Repo = Split-Path $PSScriptRoot -Parent
 $Unity = 'Z:\Unity\6000.3.17f1\Editor\Unity.exe'
 $HubApp = 'shell:AppsFolder\UnityTechnologies.UnityHub_2vrhnee42bhxm!UnityHub'
 
+# Settings for this machine only (not committed), e.g.  $env:BWM_AFFINITY = 'FFFFFFCF'
+$local = Join-Path $Repo 'bwm.local.ps1'
+if (Test-Path $local) { . $local }
+
+# Optional, for a machine with a faulty CPU core: BWM_AFFINITY is a hex mask of the logical CPUs Unity and the game
+# may use (FFFFFFCF leaves out CPUs 4 and 5); processes they start inherit it. Unset, nothing changes.
+function Set-BwmAffinity($process) {
+    if (-not $env:BWM_AFFINITY -or -not $process) { return }
+    try { $process.ProcessorAffinity = [IntPtr][Convert]::ToInt64($env:BWM_AFFINITY, 16) }
+    catch { Write-Warning ("Could not set the CPU affinity: " + $_.Exception.Message) }
+}
+
 function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     if (-not (Test-Path $Unity)) { Write-Output "Unity editor not found at $Unity"; return 2 }
     if (Get-Process Unity -ErrorAction SilentlyContinue) { Write-Output 'A Unity editor is already running; close it first (two editors cannot open one project).'; return 2 }
@@ -37,6 +49,7 @@ function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     # Not -Wait: that also waits for Unity's compiler server (VBCSCompiler), which lingers for minutes after the editor exits
     $p = Start-Process -FilePath $Unity -ArgumentList $unityArgs -PassThru
+    Set-BwmAffinity $p
     $p.WaitForExit()
     $seen = @{}
     Select-String -Path $log -Pattern '\[BWM\]|error CS\d+|\[PuzzleExporter\]|No valid Unity Editor license|Scripts have compiler errors' |
@@ -82,13 +95,22 @@ switch ($Command) {
         if (-not (Get-Process 'Big Walk' -ErrorAction SilentlyContinue)) {
             Start-Process -FilePath 'C:\Program Files (x86)\Steam\steam.exe' -ArgumentList '-applaunch', '1478500', '--doorstop-enabled', 'true'
         }
-        $deadline = (Get-Date).AddSeconds(180); $state = ''
+        $deadline = (Get-Date).AddSeconds(180); $state = ''; $pinned = $false
         while ((Get-Date) -lt $deadline) {
+            if (-not $pinned) { $game = Get-Process 'Big Walk' -ErrorAction SilentlyContinue | Select-Object -First 1; if ($game) { Set-BwmAffinity $game; $pinned = $true } }
             try { $state = (Invoke-WebRequest -Uri 'http://127.0.0.1:17361/menu' -UseBasicParsing -TimeoutSec 5).Content; if ($state -match 'title|in a walk') { break } } catch { }
             Start-Sleep -Seconds 2
         }
         if ($state -notmatch 'title|in a walk') { Write-Output 'The game did not reach its menu (is Steam signed in? is the companion built?).'; exit 1 }
         (Invoke-WebRequest -Uri 'http://127.0.0.1:17361/host' -UseBasicParsing -TimeoutSec 240).Content
+        # Test runs are capped at 30 fps (BWM_FPS overrides; 0 leaves the game's own limit): less heat and power
+        # for screenshots that do not need more
+        $fps = if ($env:BWM_FPS) { [int]$env:BWM_FPS } else { 30 }
+        if ($fps -gt 0) {
+            foreach ($q in @('set?path=UnityEngine.QualitySettings.vSyncCount&value=0', "set?path=UnityEngine.Application.targetFrameRate&value=$fps")) {
+                try { (Invoke-WebRequest -Uri ("http://127.0.0.1:17361/" + $q) -UseBasicParsing -TimeoutSec 30).Content } catch { Write-Output ("frame cap not set: " + $_.Exception.Message) }
+            }
+        }
         exit 0
     }
     'game' {

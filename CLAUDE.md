@@ -15,8 +15,8 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `build <Puzzle>` | Builds one puzzle, renders previews, runs the SDK's checks, exports the pack. About 25 s. |
 | `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
 | `build-all` / `list` | All puzzle definitions. |
-| `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save. Unattended, about 80 s. |
-| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `quit`; `game help` lists all. |
+| `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save, capped at 30 fps (`BWM_FPS` overrides, 0 = no cap). Unattended, about 80 s. |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `quit`; `game help` lists all. |
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
@@ -131,6 +131,10 @@ the user and friends, who must all have the same packs and SDK version.
 
 ## Things that are easy to get wrong
 
+- **This PC's CPU (2026-11-20):** one core of the i9-13900K (logical CPUs 4 and 5) logs machine-check errors, and
+  the PC has frozen twice under bursty load (game + teleport-and-screenshot loops + Unity builds). `bwm.local.ps1`
+  (not committed) sets `BWM_AFFINITY` so `bwm.ps1` keeps Unity and the game off that core. Never run a Unity build
+  while the game is up (`game quit` first), keep the frame cap, and leave a few seconds between teleports.
 - **Unity licence:** batch mode only finds the licence while Unity Hub is running and signed in. `bwm.ps1`
   starts the Hub if needed. Only editor 6000.3.17f1 (at `Z:\Unity\6000.3.17f1`) is wanted; never let the Hub
   install another version (it defaults to C:, which is nearly full).

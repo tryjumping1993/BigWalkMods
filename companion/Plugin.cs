@@ -181,7 +181,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -201,6 +201,7 @@ namespace BwmCompanion
                 case "terrainset": yield return TerrainSet(r); break;
                 case "snowtest": yield return SnowTest(r); break;
                 case "move": yield return Move(r); break;
+                case "look": yield return Look(r); break;
                 case "obj": yield return Objects.Describe(r); break;
                 case "clone": yield return Objects.Clone(r); break;
                 case "overlay": yield return Objects.Overlay(r); break;
@@ -657,6 +658,28 @@ namespace BwmCompanion
 
         // Saves a screenshot to <repo>\shots\<file>.png. With cx,cy,cz (camera) and tx,ty,tz (target) it is taken
         // from a temporary camera at that viewpoint; otherwise it is the player's own view.
+        // How far the view is open along the level from an eye position, in n directions (yaw 0 = +z, 90 = +x):
+        // look?x=..&y=..&z=..&n=12  ->  "open: 3.2 60 60 ..." (metres to the first thing in the way, at most 60)
+        static string Look(Request r)
+        {
+            var eye = new Vector3(r.Num("x"), r.Num("y"), r.Num("z"));
+            int n = r.Has("n") ? Mathf.Max(1, (int)r.Num("n")) : 12;
+            PlayerCharacter me = LocalCharacter();
+            Transform self = me != null ? me.transform.root : null;
+            var sb = new StringBuilder("open:");
+            for (int i = 0; i < n; i++)
+            {
+                float a = i * 2f * Mathf.PI / n, best = 60f;
+                foreach (RaycastHit hit in Physics.RaycastAll(eye, new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)), 60f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.collider == null || (self != null && hit.collider.transform.root == self)) continue;
+                    best = Mathf.Min(best, hit.distance);
+                }
+                sb.Append(' ').Append(F(best));
+            }
+            return sb.ToString();
+        }
+
         static IEnumerator<string> Shot(Request r)
         {
             string dir = Path.Combine(Plugin.RepoDir, "shots");
