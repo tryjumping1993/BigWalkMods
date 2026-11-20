@@ -181,7 +181,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | get?path=Type.member... | set?path=...&value=v | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -192,6 +192,7 @@ namespace BwmCompanion
                 case "season": yield return Season(r); break;
                 case "snow": yield return Snow(r); break;
                 case "find": yield return Find(r); break;
+                case "crest": yield return CrestInputs(r); break;
                 case "menu": yield return Host.Menus(); break;
                 case "call": yield return Call(r); break;
                 case "env": yield return Env(); break;
@@ -591,6 +592,58 @@ namespace BwmCompanion
                 sb.AppendLine(PathOf(t) + " | " + V(t.position) + (t.gameObject.activeInHierarchy ? "" : " | inactive"));
             }
             sb.AppendLine(n + " match(es)" + (n > max ? ", first " + max + " shown" : ""));
+            return sb.ToString();
+        }
+
+        // Crest's water inputs (water level, depth, clip and so on): /crest[?kind=Level] lists them with an index,
+        // &off=N / &on=N switches one (the index is into the same filtered list)
+        static string CrestInputs(Request r)
+        {
+            string kind = r.Str("kind", "");
+            var found = new List<MonoBehaviour>();
+            foreach (MonoBehaviour mb in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>(true))
+            {
+                if (mb == null) continue;
+                string tn = mb.GetIl2CppType().Name;
+                if (!tn.EndsWith("LodInput") && tn != "WaterBody" && tn != "DepthProbe") continue;
+                if (kind != "" && tn.IndexOf(kind, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                found.Add(mb);
+            }
+            found.Sort((a, b) => string.CompareOrdinal(PathOf(a.transform), PathOf(b.transform)));
+            if (r.Has("off") || r.Has("on"))
+            {
+                int i = (int)r.Num(r.Has("off") ? "off" : "on");
+                if (i < 0 || i >= found.Count) return "ERROR no input " + i;
+                found[i].enabled = r.Has("on");
+                return (r.Has("on") ? "enabled " : "disabled ") + i + " " + PathOf(found[i].transform);
+            }
+            var sb = new StringBuilder();
+            for (int i = 0; i < found.Count; i++)
+            {
+                MonoBehaviour mb = found[i];
+                sb.Append(i + " " + mb.GetIl2CppType().Name + " | " + PathOf(mb.transform) + " | " + (mb.isActiveAndEnabled ? "on" : mb.enabled ? "inactive" : "off")
+                    + " | at " + V(mb.transform.position) + " scale " + V(mb.transform.lossyScale));
+                string full = mb.GetIl2CppType().FullName;
+                Type managed = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(full)).FirstOrDefault(x => x != null);
+                if (managed != null)
+                {
+                    try
+                    {
+                        object w = Activator.CreateInstance(managed, mb.Pointer);
+                        foreach (string p in new[] { "Mode", "Weight", "Queue", "Blend", "HeightRange", "FeatherWidth" })
+                        {
+                            PropertyInfo pi = managed.GetProperty(p, Any | BindingFlags.FlattenHierarchy);
+                            if (pi == null) continue;
+                            try { sb.Append(" | " + p + " " + pi.GetValue(w)); } catch { }
+                        }
+                    }
+                    catch (Exception e) { sb.Append(" | (" + e.GetType().Name + ")"); }
+                }
+                Renderer rend = mb.GetComponent<Renderer>();
+                if (rend != null) sb.Append(" | renderer " + V(rend.bounds.min) + " .. " + V(rend.bounds.max) + (rend.enabled ? "" : " (off)"));
+                sb.AppendLine();
+            }
+            sb.AppendLine(found.Count + " input(s)");
             return sb.ToString();
         }
 

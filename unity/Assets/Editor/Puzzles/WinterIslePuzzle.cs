@@ -142,19 +142,28 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // Height above sea level at a point 'inside' metres in from the coastline, before any levelling
     static float RawHeight(float x, float z, float inside)
     {
-        if (inside <= -Skirt) return float.NaN;
+        // the submerged rim runs out further in some places than others, so the shallows round the coast vary
+        float skirt = Skirt * (0.45f + 1.1f * Mathf.PerlinNoise(x * 0.008f + 17.7f, z * 0.008f + 4.4f));
+        if (inside <= -skirt) return float.NaN;
         var p = new Vector2(x, z);
         float beach = BeachAmount(p);
         if (inside <= 0f)
         {
-            float t = Smooth((inside + Skirt) / Skirt);
+            float t = Smooth((inside + skirt) / skirt);
             return Mathf.Lerp(Mathf.Lerp(-11f, 0.4f, t), Mathf.Lerp(-3.2f, 0.25f, t), beach);      // beaches shelve gently
         }
 
         // rolling lowland, rising from the shore (slowly behind a beach)
         float rise = Smooth(inside / Mathf.Lerp(26f, 75f, beach));
         float lowland = 0.9f + (2f + 10f * Fbm(x * 0.0045f + 40.2f, z * 0.0045f + 17.9f, 3) + 3f * Mathf.PerlinNoise(x * 0.018f + 9.1f, z * 0.018f + 61.4f)) * rise;
-        float beachY = 0.35f + inside * 0.035f;
+        // ...broken up so that no view across it stays open for long: sharp-crested ridgelets (like moraines),
+        // hummocks, dells, and a fine unevenness underfoot
+        float ridgelets = (Ridged(x * 0.0105f + 3.3f, z * 0.0105f + 7.7f) - 0.35f) * 8f;
+        float hummocks = (Fbm(x * 0.042f + 21.7f, z * 0.042f + 5.3f, 2) - 0.5f) * 4f;
+        float dells = Smooth((Mathf.PerlinNoise(x * 0.019f + 77.1f, z * 0.019f + 12.9f) - 0.6f) / 0.12f) * 3.5f;
+        float fine = (Mathf.PerlinNoise(x * 0.09f + 3.9f, z * 0.09f + 44.2f) - 0.5f) * 1.1f + (Mathf.PerlinNoise(x * 0.21f + 8.1f, z * 0.21f + 1.7f) - 0.5f) * 0.45f;
+        lowland += (Mathf.Max(ridgelets, -1.5f) + hummocks - dells) * Smooth(inside / 45f) + fine * Smooth(inside / 8f);
+        float beachY = 0.35f + inside * 0.035f + fine * 0.3f;
         float y = Mathf.Lerp(lowland, Mathf.Min(lowland, beachY), beach * (1f - Smooth((inside - 30f) / 40f)));
 
         // the mountains: ridges, crested with crags, cut into cliff bands; straight from the sea where they meet it
@@ -287,10 +296,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 0. Granite knolls, kept off the plaza and the puzzle sites
         knolls.Clear();
         var knollRandom = new System.Random(1717);
-        for (int tries = 0; tries < 800 && knolls.Count < 85; tries++)
+        for (int tries = 0; tries < 1600 && knolls.Count < 170; tries++)
         {
             var at = new Vector2(X0 + (float)knollRandom.NextDouble() * (X1 - X0), Z0 + (float)knollRandom.NextDouble() * (Z1 - Z0));
             float radius = 14f + (float)knollRandom.NextDouble() * 22f, tall = 4f + (float)knollRandom.NextDouble() * 9f;
+            if (tries % 2 == 1) { radius *= 0.6f; tall *= 0.7f; }      // half of them smaller: humps and hillocks
             bool clear = (at - Plaza).magnitude > PlazaRadius + radius + 25f && (at - Lake).magnitude > LakeRadius + radius + 10f;
             foreach (Vector3 site in b.OtherSites)
                 if ((at - new Vector2(site.x, site.y)).magnitude < site.z + radius + 15f) clear = false;
@@ -323,8 +333,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             toEdge = Mathf.Min(toEdge, shape);
             float coves = (Mathf.PerlinNoise(p.x * 0.0032f + 13.1f, p.y * 0.0032f + 2.7f) - 0.5f) * 150f
-                + (Mathf.PerlinNoise(p.x * 0.006f + 3.3f, p.y * 0.006f + 8.8f) - 0.5f) * 70f + (Mathf.PerlinNoise(p.x * 0.02f + 1.3f, p.y * 0.02f + 4.1f) - 0.5f) * 24f;
-            float inside = Mathf.Min(toMainland, toEdge) + coves;
+                + (Mathf.PerlinNoise(p.x * 0.006f + 3.3f, p.y * 0.006f + 8.8f) - 0.5f) * 100f + (Mathf.PerlinNoise(p.x * 0.02f + 1.3f, p.y * 0.02f + 4.1f) - 0.5f) * 34f
+                + (Mathf.PerlinNoise(p.x * 0.05f + 6.6f, p.y * 0.05f + 2.4f) - 0.5f) * 14f * (1f - BeachAmount(p));      // rocky shores ragged, beaches smooth
+            // the coves can push the coast outwards, but never off the grid (the land would end there in a straight
+            // cut): the coast stays about 45 m inside it, wavering, with room for the submerged rim
+            float toGrid = Mathf.Min(Mathf.Min(p.x - X0, X1 - p.x), Mathf.Min(p.y - Z0, Z1 - p.y));
+            float rim = toGrid - 45f + (Mathf.PerlinNoise(p.x * 0.013f + 5.1f, p.y * 0.013f + 9.4f) - 0.5f) * 30f;
+            float inside = Mathf.Min(Mathf.Min(toMainland, toEdge) + coves, rim);
             height[k] = RawHeight(p.x, p.y, inside);
             beach[k] = BeachAmount(p);
         }
@@ -374,36 +389,44 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Vector2 landing = At(landingCell);
         var cost = new float[count];
         var from = new int[count];
-        for (int k = 0; k < count; k++) { cost[k] = float.MaxValue; from[k] = -1; }
-        var open = new SortedSet<(float cost, int cell)>();
         int start = Cell_(Plaza);
-        cost[start] = 0f;
-        open.Add((0f, start));
         int[] di = { 1, -1, 0, 0, 1, 1, -1, -1 }, dj = { 0, 0, 1, -1, 1, -1, 1, -1 };
-        while (open.Count > 0)
+        // The easiest way from any of 'sources' to every cell, or until 'goal' is reached: steep ground costs more,
+        // too steep is impassable, and a slow noise makes routes meander rather than run in straight lines
+        void Search(List<int> sources, int goal)
         {
-            var current = open.Min;
-            open.Remove(current);
-            int k = current.cell, i = k % row, j = k / row;
-            if (current.cost > cost[k]) continue;
-            for (int n = 0; n < 8; n++)
+            for (int k = 0; k < count; k++) { cost[k] = float.MaxValue; from[k] = -1; }
+            var open = new SortedSet<(float cost, int cell)>();
+            foreach (int s in sources) { cost[s] = 0f; open.Add((0f, s)); }
+            while (open.Count > 0)
             {
-                int ni = i + di[n], nj = j + dj[n];
-                if (ni < 0 || nj < 0 || ni > nx || nj > nz) continue;
-                int nk = nj * row + ni;
-                if (!(height[nk] > 0.4f)) continue;
-                float run = Cell * (n < 4 ? 1f : diag), grade = Mathf.Abs(height[nk] - height[k]) / run;
-                if (grade > 0.5f) continue;
-                float lakeside = (At(nk) - Lake).magnitude < LakeRadius ? 4f : 1f;      // go round the lake, not over it
-                Vector2 q = At(nk);
-                float wander = 0.75f + 0.5f * Mathf.PerlinNoise(q.x * 0.03f + 7.1f, q.y * 0.03f + 3.3f);      // so routes meander, not run in straight lines
-                float c = cost[k] + run * (1f + 40f * grade * grade) * lakeside * wander;
-                if (c >= cost[nk]) continue;
-                open.Remove((cost[nk], nk));
-                cost[nk] = c; from[nk] = k;
-                open.Add((c, nk));
+                var current = open.Min;
+                open.Remove(current);
+                int k = current.cell, i = k % row, j = k / row;
+                if (k == goal) return;
+                if (current.cost > cost[k]) continue;
+                for (int n = 0; n < 8; n++)
+                {
+                    int ni = i + di[n], nj = j + dj[n];
+                    if (ni < 0 || nj < 0 || ni > nx || nj > nz) continue;
+                    int nk = nj * row + ni;
+                    if (!(height[nk] > 0.4f)) continue;
+                    float run = Cell * (n < 4 ? 1f : diag), grade = Mathf.Abs(height[nk] - height[k]) / run;
+                    if (grade > 0.5f) continue;
+                    float lakeside = (At(nk) - Lake).magnitude < LakeRadius ? 4f : 1f;      // go round the lake, not over it
+                    Vector2 q = At(nk);
+                    float wander = 0.6f + 0.8f * Mathf.PerlinNoise(q.x * 0.026f + 7.1f, q.y * 0.026f + 3.3f);
+                    float c = cost[k] + run * (1f + 40f * grade * grade) * lakeside * wander;
+                    if (c >= cost[nk]) continue;
+                    open.Remove((cost[nk], nk));
+                    cost[nk] = c; from[nk] = k;
+                    open.Add((c, nk));
+                }
             }
         }
+        Search(new List<int> { start }, -1);
+        var reachable = new bool[count];      // walkable from the plaza at all
+        for (int k = 0; k < count; k++) reachable[k] = from[k] >= 0 || k == start;
         var toPath = new float[count];
         for (int k = 0; k < count; k++) toPath[k] = 1e6f;
         int routed = 0;
@@ -416,7 +439,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         {
             int bestCell = -1; float bestHeight = 0f;
             for (int k = 0; k < count; k++)
-                if (from[k] >= 0 && height[k] > bestHeight && where(At(k))) { bestHeight = height[k]; bestCell = k; }
+                if (reachable[k] && height[k] > bestHeight && where(At(k))) { bestHeight = height[k]; bestCell = k; }
             return bestCell;
         }
         var trailEnds = new List<int>
@@ -427,24 +450,35 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Highest(p => p.x > -800f && p.y < -900f),                 // the southern headland
         };
         int lakeShore = Cell_(Lake + (Plaza - Lake).normalized * (LakeRadius + 10f));
-        if (from[lakeShore] >= 0) trailEnds.Add(lakeShore);
+        if (reachable[lakeShore]) trailEnds.Add(lakeShore);
         var beachEnds = new List<Vector2>();
         for (int k = 0; k < count; k += 7)
         {
-            if (from[k] < 0 || !(beach[k] > 0.6f) || !(height[k] > 0.8f && height[k] < 2.5f)) continue;
+            if (!reachable[k] || !(beach[k] > 0.6f) || !(height[k] > 0.8f && height[k] < 2.5f)) continue;
             Vector2 p = At(k);
             bool far = true;
             foreach (Vector2 e in beachEnds) if ((e - p).magnitude < 260f) far = false;
             if (far) { beachEnds.Add(p); trailEnds.Add(k); }
         }
         foreach (int end in trailEnds) if (end >= 0 && !targets.Contains(end)) { targets.Add(end); trails++; }
+        // Each route is found from the whole network laid so far, so it branches off the nearest path instead of
+        // running all the way back to the plaza beside the others (which made the paths spokes of a wheel)
+        var network = new List<int> { start };
+        var onNetwork = new bool[count];
+        onNetwork[start] = true;
         foreach (int target in targets)
         {
-            if (from[target] < 0 && target != start) { Debug.LogWarning("[BWM] Winter Isle: no walkable route from the plaza to " + At(target)); continue; }
+            if (!reachable[target]) { Debug.LogWarning("[BWM] Winter Isle: no walkable route from the plaza to " + At(target)); continue; }
+            if (onNetwork[target]) continue;
+            Search(network, target);
             // the route as points, smoothed into curves (Chaikin), then drawn into the grid
             var route = new List<Vector2>();
             bool isTrail = !(target == landingCell || sites.Exists(s => Cell_(s) == target));
-            for (int k = target; k >= 0; k = from[k]) route.Add(At(k));
+            for (int k = target; k >= 0; k = from[k])
+            {
+                route.Add(At(k));
+                if (!onNetwork[k]) { onNetwork[k] = true; network.Add(k); }
+            }
             for (int pass = 0; pass < 4 && route.Count > 2; pass++)
             {
                 var smooth = new List<Vector2> { route[0] };
@@ -469,7 +503,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         var structures = new List<(Vector2 at, float radius)>();      // cabins and the like: the dressing keeps off them
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
-            if (PathDistance(p) < 5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
+            if (PathDistance(p) < 3.5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
             foreach (var s in structures) if ((p - s.at).magnitude < s.radius + margin) return false;
             foreach (Vector3 site in b.OtherSites)
                 if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 3f + margin) return false;
@@ -484,7 +518,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             if (float.IsNaN(height[k])) continue;
             Vector2 p = At(k);
             float pathDistance = Mathf.Min(PathDistance(p), Mathf.Max(0f, (p - Plaza).magnitude - PlazaRadius + 3f));
-            trodden[k] = 1f - Smooth((pathDistance - 1.5f) / 4f);
+            trodden[k] = 1f - Smooth((pathDistance - 0.8f + (Mathf.PerlinNoise(p.x * 0.15f, p.y * 0.15f) - 0.5f) * 1.2f) / 2.4f);      // a narrow, ragged-edged track
             blocked[k] = pathDistance < 7f || (p - Lake).magnitude < LakeRadius + 8f;
         }
         void Block(Vector2 p, float radius)
@@ -595,10 +629,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float convex = n > 0 ? height[k] - around / n : 0f;
             float slope = Slope(k);
             float heath = Smooth((Mathf.PerlinNoise(p.x * 0.035f + 7.7f, p.y * 0.035f + 2.2f) - 0.64f) / 0.12f) * 0.45f * (1f - Smooth((height[k] - 28f) / 14f));
-            float shoreline = height[k] > 0f && height[k] < 1.4f ? 0.55f * (1f - beach[k]) : 0f;
+            float shoreline = height[k] > 0f && height[k] < 1.4f ? 0.55f * (1f - beach[k]) * Smooth((Mathf.PerlinNoise(p.x * 0.022f + 8.8f, p.y * 0.022f + 1.9f) - 0.38f) / 0.25f) : 0f;      // in stretches: elsewhere snow lies to the water
             float bare = Mathf.Clamp01(Mathf.Clamp01((slope - 0.45f) * 1.2f) + Mathf.Clamp01(convex * 0.15f) + heath + bareUnder[k] * 0.8f + shoreline) * (1f - trodden[k]);
             float sand = beach[k] * (1f - Smooth((height[k] - 0.7f) / 1.5f));
-            colors.Add(new Color(1f - trodden[k], bare, sand, 1f));
+            colors.Add(new Color(1f - trodden[k], bare, sand, Mathf.Clamp01(0.5f + convex * 0.11f)));      // alpha: hollow (0) .. crest (1)
         }
         var tris = new List<int>();
         float area = 0f;
@@ -614,12 +648,50 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
         var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
         mesh.SetVertices(verts);
-        mesh.SetUVs(0, uvs);
-        mesh.SetColors(colors);
         mesh.SetTriangles(tris, 0);
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        b.MeshPiece("Island", mesh, b.ShaderMaterial("BWM/Snow", "Snow", m => { m.SetFloat("_RockLine", 0.55f); m.SetFloat("_RockTiling", 0.3f); }));
+        mesh.RecalculateNormals();      // over the whole island, so the tiles below share their seam normals
+        var normals = mesh.normals;
+        Object.DestroyImmediate(mesh);
+
+        // The ground goes in as tiles of TileCells x TileCells cells (each well under 65,535 vertices) rather than one
+        // mesh: as one 121,000-vertex mesh, the game left out whole stretches of it near a player standing on them.
+        const int TileCells = 96;
+        foreach (string guid in UnityEditor.AssetDatabase.FindAssets("Island t:Mesh", new[] { "Assets/Puzzles/WinterIsle/Meshes" }))
+        {
+            string old = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+            if (System.IO.Path.GetFileNameWithoutExtension(old).StartsWith("Island")) UnityEditor.AssetDatabase.DeleteAsset(old);
+        }
+        Material groundMaterial = b.ShaderMaterial("BWM/Snow", "Snow", m => { m.SetFloat("_RockLine", 0.55f); m.SetFloat("_RockTiling", 0.3f); });
+        int tiles = 0;
+        for (int tj = 0; tj * TileCells < nz; tj++)
+            for (int ti = 0; ti * TileCells < nx; ti++)
+            {
+                var local = new Dictionary<int, int>();
+                var tv = new List<Vector3>(); var tn = new List<Vector3>(); var tu = new List<Vector2>(); var tc = new List<Color>(); var tt = new List<int>();
+                int Local(int g)
+                {
+                    if (local.TryGetValue(g, out int l)) return l;
+                    l = tv.Count; local[g] = l;
+                    tv.Add(verts[g]); tn.Add(normals[g]); tu.Add(uvs[g]); tc.Add(colors[g]);
+                    return l;
+                }
+                for (int j = tj * TileCells; j < Mathf.Min(nz, (tj + 1) * TileCells); j++)
+                    for (int i = ti * TileCells; i < Mathf.Min(nx, (ti + 1) * TileCells); i++)
+                    {
+                        int k = j * row + i;
+                        int a = index[k], bb = index[k + 1], c = index[k + row], d = index[k + row + 1];
+                        if (a < 0 || bb < 0 || c < 0 || d < 0) continue;
+                        tt.Add(Local(a)); tt.Add(Local(c)); tt.Add(Local(bb));
+                        tt.Add(Local(bb)); tt.Add(Local(c)); tt.Add(Local(d));
+                    }
+                if (tt.Count == 0) continue;
+                var tile = new Mesh();
+                tile.SetVertices(tv); tile.SetNormals(tn); tile.SetUVs(0, tu); tile.SetColors(tc);
+                tile.SetTriangles(tt, 0);
+                tile.RecalculateBounds();
+                b.MeshPiece("Island " + ti + "-" + tj, tile, groundMaterial);
+                tiles++;
+            }
 
         // 8. Ice: the lake, and the creek above and below it (sheets just over the beds players walk on)
         var ice = new MeshBuilder();
@@ -693,28 +765,35 @@ public sealed class WinterIslePuzzle : PuzzleDef
             box.transform.localRotation = Quaternion.Euler(0f, cabin.yaw, 0f);
             box.AddComponent<BoxCollider>().size = new Vector3(cabin.size.x, 3.6f, cabin.size.y);
         }
+        // Lanterns: a waymark now and then, not a street. Close together near the plaza and the hamlet, further
+        // apart out on the trails, on whichever side, and never two near each other where trails share a stretch.
         int lanterns = 0;
+        var lit = new List<Vector2>();
+        var lanternRandom = new System.Random(2512);
+        float Rl(float lo, float hi) => lo + (hi - lo) * (float)lanternRandom.NextDouble();
         foreach (var r in routes)
         {
             if (!r.trail) continue;
-            float run = 0f, next = 18f;
-            int side = 1;
-            for (int i = 0; i + 1 < r.points.Count; i++)
+            var pts = new List<Vector2>(r.points);
+            pts.Reverse();      // from where the trail leaves the network, outwards
+            float run = 0f, next = Rl(15f, 35f);
+            for (int i = 0; i + 1 < pts.Count; i++)
             {
-                Vector2 a = r.points[i], c = r.points[i + 1];
+                Vector2 a = pts[i], c = pts[i + 1];
                 float seg = (c - a).magnitude;
                 while (run + seg >= next)
                 {
                     Vector2 p = Vector2.Lerp(a, c, (next - run) / Mathf.Max(seg, 0.001f));
-                    Vector2 dir = (c - a).normalized, offset = new Vector2(dir.y, -dir.x) * (3.3f * side);
+                    Vector2 dir = (c - a).normalized, offset = new Vector2(dir.y, -dir.x) * (Rl(0f, 1f) < 0.5f ? -1f : 1f) * Rl(2.6f, 4f);
                     Vector2 q = p + offset;
-                    if ((q - Plaza).magnitude > PlazaRadius + 4f && HeightAt(q) > 0.8f)
+                    float fromPlaza = (q - Plaza).magnitude;
+                    if (fromPlaza > PlazaRadius + 4f && HeightAt(q) > 0.8f && !lit.Exists(o => (o - q).magnitude < 30f))
                     {
                         Kit.AddLantern(cabinMesh, glowMesh, new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z), lanterns);
+                        lit.Add(q);
                         lanterns++;
                     }
-                    next += 34f;
-                    side = -side;
+                    next += Mathf.Lerp(38f, 120f, Smooth((fromPlaza - 120f) / 450f)) * Rl(0.75f, 1.35f);
                 }
                 run += seg;
             }
@@ -792,6 +871,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Debug.Log("[BWM] Winter Isle: " + knolls.Count + " knolls; " + routed + " of " + targets.Count + " paths routed from the plaza (" + trails + " of them trails); the base game's island is " + Sdk.F(mainland * 64f / 1e6f) + " km2");
         Debug.Log("[BWM] Winter Isle: " + Sdk.F(area / 1e6f) + " km2 above the sea, summit " + Sdk.F(top) + " m at " + Sdk.F(topAt.x) + ", " + Sdk.F(topAt.y)
             + "; level ground " + Sdk.F(flat * Cell * Cell / 1e6f) + " km2, cliff " + Sdk.F(steep * Cell * Cell / 1e6f) + " km2, beach " + Sdk.F(sandy * Cell * Cell / 1e6f)
-            + " km2; plaza at " + Sdk.F(level[0]) + " m; mesh " + verts.Count + " vertices");
+            + " km2; plaza at " + Sdk.F(level[0]) + " m; mesh " + verts.Count + " vertices in " + tiles + " tiles");
     }
 }
