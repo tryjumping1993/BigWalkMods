@@ -110,6 +110,8 @@ Shader "BWM/SnowOverlay"
                 // Snow on what faces up: ragged at three scales, so the line wanders like drifted snow
                 float ragged = (Noise3(positionWS * 0.45) - 0.5) * 0.8 + (Noise3(positionWS * 2.3) - 0.5) * 0.45 + (Noise3(positionWS * 9.0) - 0.5) * 0.2;
                 float cover = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + ragged * _SnowNoise);
+                // a crisp edge: snow lies or it does not (a soft one reads as a white haze over the rock)
+                cover = smoothstep(0.38, 0.62, cover + (Noise3(positionWS * 14.0) - 0.5) * 0.25);
                 if (cover < 0.01) discard;
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
@@ -121,11 +123,11 @@ Shader "BWM/SnowOverlay"
                 float wrap = saturate(dot(n, sun.direction) * 0.6 + 0.4);
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
-                float3 albedo = _SnowColor.rgb * (0.93 + 0.07 * Noise3(positionWS * 5.0));
+                float3 albedo = _SnowColor.rgb * (0.93 + 0.07 * Noise3(positionWS * 5.0)) * lerp(0.86, 1.0, cover);      // thinner at the edge
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
                 float3 color = lerp(shade, albedo * sun.color, lit);
                 color = MixFog(color, i.fogFactor);
-                return half4(color, saturate(cover * 1.15));
+                return half4(color, cover);
             }
             ENDHLSL
         }

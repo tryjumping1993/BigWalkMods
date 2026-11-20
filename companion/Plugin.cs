@@ -624,8 +624,26 @@ namespace BwmCompanion
                 cam.targetTexture = null;
                 cam.depth = main.depth + 50f;
                 if (r.Has("fov")) cam.fieldOfView = r.Num("fov");
-                camGo.transform.position = new Vector3(r.Num("cx"), r.Num("cy"), r.Num("cz"));
-                camGo.transform.LookAt(new Vector3(r.Num("tx"), r.Num("ty"), r.Num("tz")));
+                // ch / th: the camera's / target's height above the ground there (found by a ray from high up),
+                // instead of cy / ty, so eye-level shots are never taken from inside a hill
+                float GroundAt(float x, float z)
+                {
+                    // the ground itself: the highest hit that is not a tree, a rock or one of Winter Walk's copies
+                    float best = float.MinValue;
+                    foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(x, 3000f, z), Vector3.down, 6000f, ~0, QueryTriggerInteraction.Ignore))
+                    {
+                        Collider col = hit.collider;
+                        if (col == null || col.TryCast<CapsuleCollider>() != null || col.TryCast<SphereCollider>() != null) continue;
+                        string root = col.transform.root.name, name = col.name;
+                        if (root == "Winter Dressing" || name.StartsWith("rock") || name == "collider" || name.StartsWith("Cabin")) continue;
+                        best = Mathf.Max(best, hit.point.y);
+                    }
+                    return best > float.MinValue ? best : 0f;
+                }
+                float cy = r.Has("ch") ? Mathf.Max(GroundAt(r.Num("cx"), r.Num("cz")), 0.3f) + r.Num("ch") : r.Num("cy");
+                float ty = r.Has("th") ? GroundAt(r.Num("tx"), r.Num("tz")) + r.Num("th") : r.Num("ty");
+                camGo.transform.position = new Vector3(r.Num("cx"), cy, r.Num("cz"));
+                camGo.transform.LookAt(new Vector3(r.Num("tx"), ty, r.Num("tz")));
             }
             for (int i = 0; i < 4; i++) yield return null;      // let the view settle
             ScreenCapture.CaptureScreenshot(file);

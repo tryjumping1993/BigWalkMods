@@ -407,6 +407,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         var toPath = new float[count];
         for (int k = 0; k < count; k++) toPath[k] = 1e6f;
         int routed = 0;
+        var routes = new List<(List<Vector2> points, bool trail)>();
         var targets = new List<int> { landingCell };
         foreach (Vector2 site in sites) targets.Add(Cell_(site));
         // Trails for exploring: to the highest ground walkable in each part of the island, the lake, and the beaches
@@ -442,6 +443,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             if (from[target] < 0 && target != start) { Debug.LogWarning("[BWM] Winter Isle: no walkable route from the plaza to " + At(target)); continue; }
             // the route as points, smoothed into curves (Chaikin), then drawn into the grid
             var route = new List<Vector2>();
+            bool isTrail = !(target == landingCell || sites.Exists(s => Cell_(s) == target));
             for (int k = target; k >= 0; k = from[k]) route.Add(At(k));
             for (int pass = 0; pass < 4 && route.Count > 2; pass++)
             {
@@ -460,12 +462,15 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 for (float s = 0f; s <= length; s += 1f) toPath[Cell_(Vector2.Lerp(route[i], route[i + 1], s / Mathf.Max(length, 0.001f)))] = 0f;
             }
             routed++;
+            routes.Add((route, isTrail));
         }
         Spread(toPath, row, nz + 1);      // now in cells; times Cell for metres
         float PathDistance(Vector2 p) => toPath[Cell_(p)] * Cell;
-        bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake and every puzzle site
+        var structures = new List<(Vector2 at, float radius)>();      // cabins and the like: the dressing keeps off them
+        bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
             if (PathDistance(p) < 5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
+            foreach (var s in structures) if ((p - s.at).magnitude < s.radius + margin) return false;
             foreach (Vector3 site in b.OtherSites)
                 if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 3f + margin) return false;
             return true;
@@ -514,6 +519,27 @@ public sealed class WinterIslePuzzle : PuzzleDef
             return Mathf.Lerp(Mathf.Lerp(a, b2, tx), Mathf.Lerp(c, d, tx), tz);
         }
         float ToShore(Vector2 p) { int k = Cell_(p); return toWater[k] > 0f ? toWater[k] * Cell : -toLandCells[k] * Cell; }
+        // 6a. A hamlet of cabins near the plaza, on gentle ground off the paths, facing the nearest path
+        var cabins = new List<(Vector2 at, float yaw, Vector2 size)>();
+        var cabinRandom = new System.Random(1903);
+        for (int tries = 0; tries < 4000 && cabins.Count < 9; tries++)
+        {
+            float a = (float)cabinRandom.NextDouble() * Mathf.PI * 2f, d = 45f + (float)cabinRandom.NextDouble() * 75f;
+            Vector2 p = Plaza + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * d;
+            int k = Cell_(p);
+            if (!(height[k] > 1.5f) || Slope(k) > 0.14f || PathDistance(p) > 16f || !Free(p, -6f)) continue;
+            bool apart = true;
+            foreach (var c in cabins) if ((c.at - p).magnitude < 17f) apart = false;
+            if (!apart) continue;
+            // face the path: the downhill direction of the path distance
+            Vector2 toward = new Vector2(PathDistance(p + Vector2.left * 3f) - PathDistance(p + Vector2.right * 3f), PathDistance(p + Vector2.down * 3f) - PathDistance(p + Vector2.up * 3f));
+            float facing = toward.sqrMagnitude > 0.01f ? Mathf.Atan2(toward.x, toward.y) * Mathf.Rad2Deg : 0f;
+            var size = new Vector2(5.5f + (float)cabinRandom.NextDouble() * 2.5f, 6.5f + (float)cabinRandom.NextDouble() * 3f);
+            cabins.Add((p, facing, size));
+            structures.Add((p, size.magnitude * 0.5f + 9f));      // a clearing round each cabin: no trees or rocks
+            Block(p, size.magnitude * 0.5f + 4f);
+        }
+
         string dressingFile = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.dressing"));
         WinterIsleDressing.Dress(new WinterIsleDressing.Land
         {
@@ -649,6 +675,73 @@ public sealed class WinterIslePuzzle : PuzzleDef
             trunk.radius = Mathf.Max(0.25f, model.height * 0.03f);
             trunk.height = model.height * 0.6f;
         }
+
+        // 10. The hamlet's cabins, and lanterns along the trails
+        var cabinMesh = new MeshBuilder();
+        var glowMesh = new MeshBuilder();
+        var cabinColliders = new GameObject("Cabin Walls");
+        cabinColliders.transform.SetParent(b.Root.transform, false);
+        int seedCabin = 0;
+        foreach (var cabin in cabins)
+        {
+            float ground = Mathf.Min(HeightAt(cabin.at), Mathf.Min(HeightAt(cabin.at + Vector2.one * 3f), HeightAt(cabin.at - Vector2.one * 3f)));
+            var foot = new Vector3(cabin.at.x - root.x, ground - root.y, cabin.at.y - root.z);
+            Kit.AddCabin(cabinMesh, glowMesh, foot, cabin.size, cabin.yaw, ++seedCabin);
+            var box = new GameObject("Cabin");
+            box.transform.SetParent(cabinColliders.transform, false);
+            box.transform.localPosition = foot + Vector3.up * 1.8f;
+            box.transform.localRotation = Quaternion.Euler(0f, cabin.yaw, 0f);
+            box.AddComponent<BoxCollider>().size = new Vector3(cabin.size.x, 3.6f, cabin.size.y);
+        }
+        int lanterns = 0;
+        foreach (var r in routes)
+        {
+            if (!r.trail) continue;
+            float run = 0f, next = 18f;
+            int side = 1;
+            for (int i = 0; i + 1 < r.points.Count; i++)
+            {
+                Vector2 a = r.points[i], c = r.points[i + 1];
+                float seg = (c - a).magnitude;
+                while (run + seg >= next)
+                {
+                    Vector2 p = Vector2.Lerp(a, c, (next - run) / Mathf.Max(seg, 0.001f));
+                    Vector2 dir = (c - a).normalized, offset = new Vector2(dir.y, -dir.x) * (3.3f * side);
+                    Vector2 q = p + offset;
+                    if ((q - Plaza).magnitude > PlazaRadius + 4f && HeightAt(q) > 0.8f)
+                    {
+                        Kit.AddLantern(cabinMesh, glowMesh, new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z), lanterns);
+                        lanterns++;
+                    }
+                    next += 34f;
+                    side = -side;
+                }
+                run += seg;
+            }
+        }
+        b.MeshPiece("Hamlet and Lanterns", cabinMesh.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), false);
+        b.MeshPiece("Warm Windows", glowMesh.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+
+        // Viewpoints for review shots: along every path, every 130 m, looking the way the path goes
+        var views = new System.Text.StringBuilder("x\tz\tdx\tdz\n");
+        foreach (var r in routes)
+        {
+            float run = 0f, next = 60f;
+            for (int i = 0; i + 1 < r.points.Count; i++)
+            {
+                float seg = (r.points[i + 1] - r.points[i]).magnitude;
+                while (run + seg >= next)
+                {
+                    Vector2 p = Vector2.Lerp(r.points[i], r.points[i + 1], (next - run) / Mathf.Max(seg, 0.001f));
+                    Vector2 dir = (r.points[0] - r.points[r.points.Count - 1]).normalized;      // routes run from the end back to the plaza: look outwards
+                    views.Append(Sdk.F(p.x)).Append('\t').Append(Sdk.F(p.y)).Append('\t').Append(Sdk.F(dir.x)).Append('\t').Append(Sdk.F(dir.y)).Append('\n');
+                    next += 130f;
+                }
+                run += seg;
+            }
+        }
+        System.IO.File.WriteAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "world", "winter-viewpoints.tsv")), views.ToString());
+        Debug.Log("[BWM] Winter Isle: " + cabins.Count + " cabins, " + lanterns + " lanterns");
 
         b.RegisterLand(X0, Z0, Cell, nx, nz, land, blocked);
 

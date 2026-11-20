@@ -121,8 +121,9 @@ namespace WinterWalk
             int key = Mathf.RoundToInt(line * 20f);
             if (rockSnow.TryGetValue(key, out Material m)) return m;
             m = new Material(overlay) { name = "SnowOverlay rock " + key };
-            m.SetFloat("_SnowLine", key / 20f);
+            m.SetFloat("_SnowLine", key / 20f + Plugin.RockSnowRaise);
             m.SetFloat("_Cull", 2f);
+            m.SetFloat("_SnowEdge", 0.1f);
             rockSnow[key] = m;
             return m;
         }

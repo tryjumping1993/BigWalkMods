@@ -22,6 +22,7 @@ namespace WinterWalk
     {
         internal static ManualLogSource L;
         internal static ConfigEntry<bool> Enabled;
+        internal const float RockSnowRaise = 0.2f;      // rocks keep more bare granite than the list's snow line says
 
         public override void Load()
         {

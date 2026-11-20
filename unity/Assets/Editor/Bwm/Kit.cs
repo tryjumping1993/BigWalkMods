@@ -162,6 +162,72 @@ namespace Bwm
                 }
         }
 
+        // A glowing box for windows and lantern lights (into a mesh drawn with BWM/FairyLight: uv.x 1 = lit, uv.y = phase)
+        public static void AddGlow(MeshBuilder mb, Vector3 centre, Vector3 size, float yaw, Color color, float phase)
+        {
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            Vector3 h = size * 0.5f;
+            var p = new Vector3[8];
+            for (int i = 0; i < 8; i++) p[i] = centre + turn * new Vector3((i & 1) == 0 ? -h.x : h.x, (i & 2) == 0 ? -h.y : h.y, (i & 4) == 0 ? -h.z : h.z);
+            var uv = new Vector2(1f, phase);
+            int[][] faces = { new[] { 0, 2, 3, 1 }, new[] { 4, 5, 7, 6 }, new[] { 0, 1, 5, 4 }, new[] { 2, 6, 7, 3 }, new[] { 0, 4, 6, 2 }, new[] { 1, 3, 7, 5 } };
+            foreach (int[] f in faces) mb.QuadUV(p[f[0]], p[f[1]], p[f[2]], p[f[3]], uv, uv, uv, uv, color, color, color, color);
+        }
+
+        // A log cabin: stone footing, log walls, a steep gable roof that takes snow, a chimney, a door and warm lit
+        // windows (into 'glow'). 'foot' is the middle of its floor; size is width (x) by depth (z); it faces +z by yaw.
+        public static void AddCabin(MeshBuilder mb, MeshBuilder glow, Vector3 foot, Vector2 size, float yaw, int seed)
+        {
+            var random = new System.Random(seed * 131 + 7);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            Vector3 P(float x, float y, float z) => foot + turn * new Vector3(x, y, z);
+            var logs = new Color(R(0.32f, 0.42f), R(0.21f, 0.27f), R(0.12f, 0.16f));
+            var stone = new Color(0.45f, 0.46f, 0.48f);
+            var roofColour = random.NextDouble() < 0.5 ? new Color(0.45f, 0.12f, 0.1f) : new Color(0.2f, 0.27f, 0.2f);
+            float w = size.x, d = size.y, wallH = 2.6f, ridge = wallH + w * 0.55f;
+            AddBox(mb, foot + Vector3.down * 2f, new Vector3(w + 0.4f, 2.3f, d + 0.4f), stone, yaw);           // footing, sunk into the slope
+            // log walls in courses, alternating shade
+            for (int c = 0; c < 8; c++)
+            {
+                float y0 = 0.3f + c * (wallH - 0.3f) / 8f;
+                var shade = logs * (c % 2 == 0 ? 1f : 0.86f); shade.a = 1f;
+                AddBox(mb, foot + Vector3.up * y0, new Vector3(w, (wallH - 0.3f) / 8f, d), shade, yaw);
+            }
+            // gables
+            mb.Tri(P(-w / 2f, wallH, d / 2f), P(w / 2f, wallH, d / 2f), P(0f, ridge, d / 2f), logs);
+            mb.Tri(P(w / 2f, wallH, -d / 2f), P(-w / 2f, wallH, -d / 2f), P(0f, ridge, -d / 2f), logs);
+            // roof: two slabs overhanging the walls
+            float o = 0.5f;
+            Vector3 eaveL = P(-w / 2f - o, wallH - o * 0.9f, 0f), eaveR = P(w / 2f + o, wallH - o * 0.9f, 0f), top = P(0f, ridge + 0.15f, 0f);
+            Vector3 along = turn * Vector3.forward * (d / 2f + o);
+            Vector3 thick = Vector3.up * 0.18f;
+            mb.Quad(eaveL - along, top - along, top + along, eaveL + along, roofColour);
+            mb.Quad(top - along, eaveR - along, eaveR + along, top + along, roofColour);
+            mb.Quad(eaveL + along - thick, top + along - thick, top - along - thick, eaveL - along - thick, roofColour * 0.7f);
+            mb.Quad(top + along - thick, eaveR + along - thick, eaveR - along - thick, top - along - thick, roofColour * 0.7f);
+            // chimney
+            AddBox(mb, P(w * 0.25f, wallH, -d * 0.2f), new Vector3(0.7f, ridge - wallH + 0.9f, 0.7f), stone, yaw);
+            // door and windows on the front, a window on each side
+            AddBox(mb, P(-w * 0.18f, 0.3f, d / 2f + 0.02f), new Vector3(1.05f, 2.0f, 0.12f), logs * 0.6f, yaw);
+            var warm = new Color(1f, 0.72f, 0.36f);
+            AddGlow(glow, P(w * 0.22f, 1.55f, d / 2f + 0.03f), new Vector3(1.0f, 0.85f, 0.06f), yaw, warm, R(0f, 1f));
+            AddGlow(glow, P(w / 2f + 0.03f, 1.55f, 0f), new Vector3(0.06f, 0.85f, 1.1f), yaw, warm, R(0f, 1f));
+            AddGlow(glow, P(-w / 2f - 0.03f, 1.55f, d * 0.15f), new Vector3(0.06f, 0.85f, 1.1f), yaw, warm, R(0f, 1f));
+            // a wreath on the door
+            AddGlow(glow, P(-w * 0.18f, 1.75f, d / 2f + 0.1f), new Vector3(0.45f, 0.45f, 0.05f), yaw, new Color(0.15f, 0.5f, 0.2f), 0.5f);
+        }
+
+        // A lantern on a post beside a trail: a dark iron post with a warm glowing lamp under a little snow-capped hood
+        public static void AddLantern(MeshBuilder mb, MeshBuilder glow, Vector3 foot, int seed)
+        {
+            var iron = new Color(0.12f, 0.12f, 0.13f);
+            AddBox(mb, foot + Vector3.down * 0.4f, new Vector3(0.11f, 2.4f, 0.11f), iron);
+            AddBox(mb, foot + Vector3.up * 2.42f, new Vector3(0.42f, 0.08f, 0.42f), iron);       // hood, takes snow
+            AddBox(mb, foot + Vector3.up * 1.92f, new Vector3(0.34f, 0.05f, 0.34f), iron);
+            AddGlow(glow, foot + Vector3.up * 2.18f, new Vector3(0.26f, 0.42f, 0.26f), 0f, new Color(1f, 0.78f, 0.42f), (seed * 0.618f) % 1f);
+        }
+
         // A small round ball (a bauble) added to a mesh being built, flat-shaded
         public static void AddBall(MeshBuilder mb, Vector3 centre, float radius, Color color)
         {
