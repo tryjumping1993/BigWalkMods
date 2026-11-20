@@ -426,8 +426,8 @@ public static class WinterIsleDressing
             {
                 var p = new Vector2(x + R(-2.1f, 2.1f), z + R(-2.1f, 2.1f));
                 float h = l.Height(p);
-                if (float.IsNaN(h) || h < 2.5f || h > 62f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;
-                float inGrove = Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 50f) / 14f));
+                if (float.IsNaN(h) || h < 2.5f || h > 260f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;      // (the tree line is high on the great mountain's ribs)
+                float inGrove = Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 200f) / 60f));
                 // glades: open ground inside a grove, a few tens of metres across
                 if (inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges

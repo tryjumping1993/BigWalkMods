@@ -86,18 +86,65 @@ public sealed class WinterIslePuzzle : PuzzleDef
         float off = Mathf.Abs(Mathf.DeltaAngle(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, SkiBearing * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
         return 1f - Smooth((off - SkiHalfWidth * 0.55f) / (SkiHalfWidth * 0.45f));
     }
+    // Two lesser peaks on the steep sides, joined to the main one by high saddles: (offset from the peak, height, radius)
+    static readonly (Vector2 off, float height, float radius)[] LesserPeaks =
+    {
+        (new Vector2(-330f, 215f), 440f, 400f),
+        (new Vector2(95f, -430f), 365f, 350f),
+        (new Vector2(-470f, -250f), 300f, 300f),
+    };
+    // The ski face is not one plane: two rocky ribs run down it from under the summit, wandering, and split it into
+    // three runs. 1 on a rib, 0 on open piste (and off the ski face).
+    public static float Rib(Vector2 p)
+    {
+        Vector2 d = p - Peak;
+        float along = d.magnitude;
+        if (along < 170f || along > SkiRadius - 120f) return 0f;
+        float off = Mathf.DeltaAngle(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, SkiBearing * Mathf.Rad2Deg) * Mathf.Deg2Rad;
+        off += (Mathf.PerlinNoise(along * 0.004f + 7.1f, 3.3f) - 0.5f) * 0.3f;      // the ribs wander as they descend
+        float rib = Mathf.Max(1f - Smooth(Mathf.Abs(off - 0.27f) / 0.075f), 1f - Smooth(Mathf.Abs(off + 0.25f) / 0.065f));
+        // broken into lengths, with gaps where one run crosses to the next
+        return rib * Smooth((Mathf.PerlinNoise(along * 0.006f + 1.7f, off > 0f ? 9.9f : 4.4f) - 0.38f) / 0.12f) * Smooth((along - 170f) / 80f);
+    }
+    // 1 on open piste
+    public static float Piste(Vector2 p) => SkiFace(p) * (1f - Rib(p));
     static float MountainRadius(Vector2 p) => Mathf.Lerp(SteepRadius, SkiRadius, SkiFace(p));
+    // how far the mountain's ground reaches at p (for the island's outline): the main cone or any lesser peak
+    static float MountainReach(Vector2 p)
+    {
+        float reach = MountainRadius(p) - (p - Peak).magnitude;
+        foreach (var lesser in LesserPeaks) reach = Mathf.Max(reach, lesser.radius - (p - Peak - lesser.off).magnitude);
+        return reach;
+    }
+    static float SoftMax(float a, float b, float k) { float h = Mathf.Clamp01(0.5f + 0.5f * (a - b) / k); return Mathf.Lerp(b, a, h) + k * h * (1f - h); }
     static float MountainHeight(Vector2 p)
     {
-        float d = Mathf.Max(0f, (p - Peak).magnitude - SummitFlat), radius = MountainRadius(p);
-        if (d >= radius) return 0f;
-        float ski = SkiFace(p), t = 1f - d / radius;
+        float ski = SkiFace(p);
+        // off the ski face the whole mass is pushed about by a slow noise, so no contour is a circle
+        Vector2 q = p + new Vector2(Mathf.PerlinNoise(p.x * 0.0021f + 5.5f, p.y * 0.0021f + 1.1f) - 0.5f, Mathf.PerlinNoise(p.x * 0.0021f + 9.2f, p.y * 0.0021f + 6.6f) - 0.5f) * (230f * (1f - ski));
+        Vector2 dq = q - Peak;
+        float d = Mathf.Max(0f, dq.magnitude - SummitFlat), radius = MountainRadius(p);
+        float t = Mathf.Clamp01(1f - d / radius);
         float h = PeakHeight * Mathf.Pow(t, Mathf.Lerp(1.45f, 1.12f, ski));
+        // aretes and cirques: five spurs run out from the summit with bowls hollowed between them (steep sides only)
+        float angle = Mathf.Atan2(dq.y, dq.x);
+        float spur = Mathf.Pow(0.5f + 0.5f * Mathf.Cos(angle * 5f + 1.3f + (Mathf.PerlinNoise(q.x * 0.003f, q.y * 0.003f) - 0.5f) * 3f), 2.2f);
+        float carve = Mathf.Sin(Mathf.Clamp01(t) * Mathf.PI);      // most half-way down, none at the top or the foot
+        h *= 1f - (1f - spur) * 0.34f * carve * (1f - ski);
+        // on the ski face, a wide bowl under the summit and a shoulder lower down, so the run is not one plane
+        h += ski * (-34f * Mathf.Exp(-Mathf.Pow((t - 0.72f) / 0.13f, 2f)) + 22f * Mathf.Exp(-Mathf.Pow((t - 0.38f) / 0.1f, 2f)));
+        // the lesser peaks, melted into the main one
+        foreach (var lesser in LesserPeaks)
+        {
+            float ld = (q - Peak - lesser.off).magnitude;
+            if (ld < lesser.radius) h = SoftMax(h, lesser.height * Mathf.Pow(1f - ld / lesser.radius, 1.35f) * (1f - ski), 45f);
+        }
+        if (h <= 0.5f) return Mathf.Max(0f, h);
         // crags and spurs on the steep sides; the ski face only rolls a little
         float rough = (Ridged(p.x * 0.006f + 11.3f, p.y * 0.006f + 4.9f) - 0.4f) * 70f + (Ridged(p.x * 0.017f + 2.1f, p.y * 0.017f + 7.7f) - 0.45f) * 24f + (Ridged(p.x * 0.05f + 6.3f, p.y * 0.05f + 1.2f) - 0.5f) * 7f;
         float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 16f;
-        float body = Smooth(t / 0.12f) * Smooth(d / 60f);      // none at the foot or on the summit
-        return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, ski) * body);
+        float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 70f);      // none at the foot or on the summit
+        return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, Piste(p)) * body + Rib(p) * ski * 16f * body);      // the ribs stand a little proud
     }
 
     static readonly List<(Vector2 at, float radius, float height)> knolls = new List<(Vector2, float, float)>();
@@ -424,7 +471,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 float wobble = 1f + 0.08f * Mathf.Sin(Mathf.Atan2(d.y, d.x) * 3f + oval.centre.x) + 0.05f * Mathf.Sin(Mathf.Atan2(d.y, d.x) * 5f + oval.centre.y);
                 shape = Mathf.Max(shape, (wobble - d.magnitude) * Mathf.Min(oval.radius.x, oval.radius.y));
             }
-            shape = Mathf.Max(shape, MountainRadius(p) + 80f - (p - Peak).magnitude);      // the mountain's own ground
+            shape = Mathf.Max(shape, MountainReach(p) + 80f);      // the mountain's own ground
             toEdge = Mathf.Min(toEdge, shape);
             float coves = Mathf.Lerp(CoastBroad(p), CoastFull(p), Smooth((Guard(p) - 30f) / 55f))
                 + (Mathf.PerlinNoise(p.x * 0.05f + 6.6f, p.y * 0.05f + 2.4f) - 0.5f) * 14f * (1f - BeachAmount(p));      // rocky shores ragged, beaches smooth
@@ -703,7 +750,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
             if (PathDistance(p) < 3.5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
-            if (MountainHeight(p) > 4f && SkiFace(p) > 0.3f) return false;      // the ski face is kept clear
+            if (MountainHeight(p) > 4f && Piste(p) > 0.3f) return false;      // the pistes are kept clear; the ribs between them take rocks and trees
             foreach (var s in structures) if ((p - s.at).magnitude < s.radius + margin) return false;
             foreach (Vector3 site in b.OtherSites)
                 if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 3f + margin) return false;
