@@ -18,6 +18,7 @@ using UnityEngine;
 namespace WinterWalk
 {
     [BepInPlugin("bwm.winterwalk", "Winter Walk", "0.1.0")]
+    [BepInDependency("markviews.BigPuzzleSDK")]      // the gondola reads The Tree's plinths
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -33,12 +34,14 @@ namespace WinterWalk
             Tracks = Config.Bind("General", "SnowTracks", true, "Players leave tracks in the Winter Isle's snow.");
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
             ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
+            ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
             go.AddComponent<SkyDriver>();
             go.AddComponent<Dresser>();
             go.AddComponent<SnowTrails>();
+            go.AddComponent<GondolaDriver>();
             L.LogInfo("Winter Walk loaded");
         }
     }
