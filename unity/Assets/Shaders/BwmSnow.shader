@@ -22,8 +22,8 @@ Shader "BWM/Snow"
         _SparkleAmount ("Sparkle amount", Range(0, 4)) = 2.4
         _SparkleDistance ("Sparkle distance", Float) = 22
         _Rim ("Rim", Range(0, 1)) = 0.18
-        _PathColor ("Trodden path", Color) = (0.74, 0.80, 0.90, 1)
-        _RockColor ("Rock", Color) = (0.36, 0.36, 0.40, 1)
+        _PathColor ("Trodden path", Color) = (0.66, 0.71, 0.80, 1)
+        _RockColor ("Rock", Color) = (0.47, 0.43, 0.39, 1)
         _RockLine ("Rock line (how steep before rock shows)", Range(0.3, 0.95)) = 0.72
         _RockTex ("Rock texture", 2D) = "white" {}
         _RockTiling ("Rock tiling (per metre)", Float) = 0.12
@@ -176,14 +176,26 @@ Shader "BWM/Snow"
                 float3 rockTex = SAMPLE_TEXTURE2D(_RockTex, sampler_RockTex, positionWS.zy * _RockTiling).rgb * tw.x
                     + SAMPLE_TEXTURE2D(_RockTex, sampler_RockTex, positionWS.xz * _RockTiling).rgb * tw.y
                     + SAMPLE_TEXTURE2D(_RockTex, sampler_RockTex, positionWS.xy * _RockTiling).rgb * tw.z;
-                float3 rockColor = _RockColor.rgb * lerp(0.82, 1.1, strata) * rockTex * 1.6;
+                // big-scale mottling and dark cracks, so a cliff reads as granite from a distance too
+                float mottle = (ValueNoise(positionWS.zy * 0.05) * 0.6 + ValueNoise(positionWS.zy * 0.15 + 4.0) * 0.4) * tw.x
+                    + (ValueNoise(positionWS.xz * 0.05) * 0.6 + ValueNoise(positionWS.xz * 0.15 + 4.0) * 0.4) * tw.y
+                    + (ValueNoise(positionWS.xy * 0.05) * 0.6 + ValueNoise(positionWS.xy * 0.15 + 4.0) * 0.4) * tw.z;
+                // joints as granite has them: long vertical cracks, and fainter horizontal sheeting, drawn on each
+                // face from its own side (noise over plain height would draw contour lines)
+                float2 faceX = positionWS.zy, faceZ = positionWS.xy;
+                float jointX = smoothstep(0.9, 0.985, 1.0 - abs(ValueNoise(float2(faceX.x * 0.12, faceX.y * 0.035) + 3.0) * 2.0 - 1.0))
+                    + 0.6 * smoothstep(0.92, 0.99, 1.0 - abs(ValueNoise(float2(faceX.x * 0.03, faceX.y * 0.14) + 8.0) * 2.0 - 1.0));
+                float jointZ = smoothstep(0.9, 0.985, 1.0 - abs(ValueNoise(float2(faceZ.x * 0.12, faceZ.y * 0.035) + 5.0) * 2.0 - 1.0))
+                    + 0.6 * smoothstep(0.92, 0.99, 1.0 - abs(ValueNoise(float2(faceZ.x * 0.03, faceZ.y * 0.14) + 1.0) * 2.0 - 1.0));
+                float cracks = saturate((jointX * tw.x + jointZ * tw.z) / max(tw.x + tw.z, 0.001)) * saturate(1.0 - tw.y * 1.5);
+                float3 rockColor = _RockColor.rgb * lerp(0.82, 1.1, strata) * rockTex * 1.6 * lerp(0.72, 1.18, mottle) * (1.0 - cracks * 0.45);
                 // a dusting of snow on the rock's flatter parts
                 rockColor = lerp(rockColor, _Color.rgb * 0.92, saturate((ground.y - 0.3) * 2.5) * smoothstep(0.4, 0.7, strata) * 0.8);
 
                 // bare ground and sand where the snow is thin
                 float2 groundUV = positionWS.xz * _GroundTiling;
                 float patchy = ValueNoise(positionWS.xz * 0.21) * 0.6 + ValueNoise(positionWS.xz * 0.9) * 0.4;
-                float bare = smoothstep(0.45, 0.85, i.ground.x * 0.85 + (patchy - 0.5) * 0.6) * (1.0 - path);
+                float bare = smoothstep(0.45, 0.85, i.ground.x * 0.85 + (patchy - 0.5) * 0.6) * (1.0 - path * 0.45);
                 float sand = smoothstep(0.3, 0.6, i.ground.y + (patchy - 0.5) * 0.25);
                 float3 bareColor = _BareColor.rgb * SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * 1.7;
                 bareColor = lerp(bareColor, _Color.rgb * 0.9, 0.25 + smoothstep(0.45, 0.85, patchy) * 0.5);      // snow lying in the hollows of the heath
@@ -219,10 +231,11 @@ Shader "BWM/Snow"
                 // snow is not one white: faintly bluer and greyer crusts, warmer fresh patches
                 float crust = ValueNoise(positionWS.xz * 0.07 + 3.0) * 0.6 + ValueNoise(positionWS.xz * 0.35 + 9.0) * 0.4;
                 float3 snowAlbedo = _Color.rgb * lerp(float3(0.9, 0.93, 0.98), float3(1.0, 1.0, 1.0), smoothstep(0.25, 0.75, crust));
-                float3 pathAlbedo = _PathColor.rgb * (0.9 + 0.1 * ValueNoise(positionWS.xz * 1.3));
+                // trodden snow: packed and greyer, pocked with prints
+                float3 pathAlbedo = _PathColor.rgb * (0.9 + 0.1 * ValueNoise(positionWS.xz * 1.3)) * (1.0 - 0.14 * smoothstep(0.62, 0.8, ValueNoise(positionWS.xz * 2.3 + 5.0)));
                 float3 snowColor = lerp(lerp(lerp(snowAlbedo, pathAlbedo, path), earth, earthy), rockColor, rock);
                 float3 earthShade = earth * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
-                shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * _ShadeColor.rgb * (ambient * 1.1 + 0.16), rock);
+                shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * lerp(float3(1, 1, 1), _ShadeColor.rgb, 0.35) * (ambient * 1.1 + 0.16), rock);      // rock in shade stays grey, not snow-blue
                 float3 color = lerp(shade, snowColor * sun.color, lit);
 
                 // Hollows between drifts are a touch bluer; so is every dip in the land, and crests catch more light

@@ -32,6 +32,7 @@ public static class WinterIsleDressing
         public Func<Vector2, float, bool> Free;      // clear of paths, plaza, lake and puzzle sites by a margin
         public Func<Vector2, bool> Beach;            // part of a sandy cove: no rocks
         public Action<Vector2, float> Block;         // marks ground no puzzle may be sited on
+        public Action<Vector2, float, float> Bank;   // banks snow against something: at, radius, height
         public float X0, X1, Z0, Z1;
         public int Seed = 1224;
     }
@@ -58,6 +59,7 @@ public static class WinterIsleDressing
     static Land land;
     static int rocks, plants;
     static readonly List<(Vector2 at, float radius)> solids = new List<(Vector2, float)>();      // rocks placed, to keep plants out of them
+    static readonly List<(Vector2 at, float diameter)> big = new List<(Vector2, float)>();     // rocks big enough to bank snow against
     public static readonly List<(Vector2 at, float radius)> Cover = new List<(Vector2, float)>();  // plants placed: the ground under them shows through the snow
     public static readonly List<(Vector2 at, float height, int seed)> Firs = new List<(Vector2, float, int)>();   // our own firs, built into the island's pack
 
@@ -104,6 +106,8 @@ public static class WinterIsleDressing
             .Append(F(scale)).Append('\t').Append(F(snow)).Append('\n');
         solids.Add((p, diameter * 0.45f));
         if (block) land.Block(p, diameter * 0.55f + 2f);
+        if (onTerrain && diameter >= 3.5f) big.Add((p, diameter));
+        if (onTerrain && diameter >= 1.5f) Cover.Add((p, diameter * 0.55f));      // the wind scours the ground bare at a rock's foot
         rocks++;
         return y + (k.centre.y + k.size.y / 2f) * scale;
     }
@@ -168,7 +172,7 @@ public static class WinterIsleDressing
             Vector2 p = at + across * ((i / (float)(n - 1) - 0.5f) * length) + new Vector2(R(-2.5f, 2.5f), R(-2.5f, 2.5f));
             if (float.IsNaN(land.Height(p)) || !land.Free(p, 2f) || InsideRock(p, 1.5f)) continue;
             float d = R(8f, 16f);
-            Rock(Pick(Masses), p, LowGround(p, d * 0.4f), d, R(0.45f, 0.6f), 0.55f, 5f);
+            Rock(Pick(Masses), p, LowGround(p, d * 0.4f), d, R(0.2f, 0.35f), 0.55f, 5f);
         }
     }
 
@@ -179,11 +183,27 @@ public static class WinterIsleDressing
         output = new StringBuilder();
         random = new System.Random(l.Seed);
         solids.Clear();
+        big.Clear();
         Cover.Clear();
         Firs.Clear();
         rocks = plants = 0;
         output.Append("# Winter Isle set dressing, written by WinterIslePuzzle's build. kind, x, y, z, yaw, pitch, roll, scale, snow line\n");
         output.Append("@bounds\t").Append(F(l.X0)).Append('\t').Append(F(l.X1)).Append('\t').Append(F(l.Z0)).Append('\t').Append(F(l.Z1)).Append('\n');
+
+        // ---- the massif: the high ground built of granite, big masses sunk deep, so the mountain is rock with
+        //      snow between rather than a snowy hill with boulders on it (placed first, so nothing crowds them) ----
+        int massif = 0;
+        for (float z = l.Z0; z < l.Z1; z += 15f)
+            for (float x = l.X0; x < l.X1; x += 15f)
+            {
+                var p = new Vector2(x + R(-6f, 6f), z + R(-6f, 6f));
+                float h = l.Height(p), s = l.Slope(p);
+                if (float.IsNaN(h) || h < 38f || !l.Free(p, 3f) || InsideRock(p, 4f)) continue;
+                if (R(0f, 1f) > 0.45f + Mathf.Clamp01(s - 0.3f) * 0.5f + Mathf.Clamp01((h - 60f) / 40f) * 0.3f) continue;
+                float d = R(18f, 36f) * (h > 70f ? 1.15f : 1f);
+                Rock(Pick(Masses), p, LowGround(p, d * 0.4f), d, R(0.12f, 0.25f), 0.5f, 6f);      // already lowered to the foot of its slope
+                massif++;
+            }
 
         // ---- tors: on knolls (higher than the ground round them) and in rocky ground ----
         int tors = 0;
@@ -226,16 +246,35 @@ public static class WinterIsleDressing
 
         // ---- outcrops: granite masses on the cliff bands and steepest slopes ----
         int outcrops = 0;
-        for (float z = l.Z0; z < l.Z1; z += 19f)
-            for (float x = l.X0; x < l.X1; x += 19f)
+        for (float z = l.Z0; z < l.Z1; z += 13f)
+            for (float x = l.X0; x < l.X1; x += 13f)
             {
-                var p = new Vector2(x + R(-7f, 7f), z + R(-7f, 7f));
+                var p = new Vector2(x + R(-5f, 5f), z + R(-5f, 5f));
                 float h = l.Height(p), s = l.Slope(p);
-                if (float.IsNaN(h) || s < 0.7f || h < 1f || !l.Free(p, 4f) || InsideRock(p, 2f)) continue;
-                if (R(0f, 1f) > Mathf.Clamp01((s - 0.7f) * 2.2f)) continue;
+                if (float.IsNaN(h) || s < 0.5f || h < 1f || !l.Free(p, 4f) || InsideRock(p, 2f)) continue;
+                if (R(0f, 1f) > Mathf.Clamp01((s - 0.5f) * 2.5f)) continue;
                 string kind = Pick(Masses);
-                float d = R(14f, 28f);
-                Rock(kind, p, LowGround(p, d * 0.45f), d, R(0.25f, 0.4f), 0.5f, 6f);
+                float d = R(14f, 32f);
+                Rock(kind, p, LowGround(p, d * 0.45f), d, R(0.08f, 0.2f), 0.5f, 6f);
+                outcrops++;
+            }
+
+        // ---- crests: the high ground's tops built of granite, big masses sunk deep along every rise ----
+        for (float z = l.Z0; z < l.Z1; z += 14f)
+            for (float x = l.X0; x < l.X1; x += 14f)
+            {
+                var p = new Vector2(x + R(-5f, 5f), z + R(-5f, 5f));
+                float h = l.Height(p);
+                if (float.IsNaN(h) || h < 30f || !l.Free(p, 4f) || InsideRock(p, 3f)) continue;
+                float around = 0f; int n = 0;
+                for (int i = 0; i < 8; i++)
+                {
+                    float a = i * Mathf.PI / 4f, hh = l.Height(p + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 22f);
+                    if (!float.IsNaN(hh)) { around += hh; n++; }
+                }
+                if (n == 0 || h - around / n < 2f || R(0f, 1f) > 0.7f) continue;
+                float d = R(16f, 30f);
+                Rock(Pick(Masses), p, LowGround(p, d * 0.4f), d, R(0.25f, 0.4f), 0.5f, 5f);
                 outcrops++;
             }
 
@@ -249,7 +288,10 @@ public static class WinterIsleDressing
                 if (float.IsNaN(h) || h > 2.5f || h < -2.5f || l.Beach(p) || !l.Free(p, 2f) || InsideRock(p, 0.5f)) continue;
                 float rough = Mathf.PerlinNoise(p.x * 0.03f + 5.5f, p.y * 0.03f + 91.2f);
                 if (R(0f, 1f) > 0.12f + rough * 0.5f) continue;
-                Rock(Pick(BigRound), p, Mathf.Min(h, 0.5f), R(3f, 11f) * (0.6f + rough), R(0.25f, 0.45f), 0.45f, 18f);
+                if (rough > 0.5f && R(0f, 1f) < 0.22f)
+                    Rock("rock-cliff01", p, Mathf.Min(h, 0.3f), R(8f, 15f), R(0.5f, 0.62f), 0.5f, 5f);      // a shelf of rock running into the sea
+                else
+                    Rock(Pick(BigRound), p, Mathf.Min(h, 0.5f), R(3f, 11f) * (0.6f + rough), R(0.25f, 0.45f), 0.45f, 18f);
                 coast++;
             }
         // skerries: sea stacks and half-drowned boulders off the rocky shores, in little clusters
@@ -284,6 +326,9 @@ public static class WinterIsleDressing
                 loose++;
             }
 
+        // ---- snow banked against the bigger rocks, before anything else is stood on that ground ----
+        if (l.Bank != null) foreach (var r in big) l.Bank(r.at, r.diameter * 0.75f + 1.5f, Mathf.Min(0.22f * r.diameter, 1.4f));
+
         // ---- firs: groves on the middle slopes, thinning at their edges, and a few standing alone ----
         for (float z = l.Z0; z < l.Z1; z += 4.6f)
             for (float x = l.X0; x < l.X1; x += 4.6f)
@@ -315,7 +360,7 @@ public static class WinterIsleDressing
         // where only their impostors draw), a few hardy evergreens, and thickets
         string[] woodland = { "SheoakDrooping_Short", "Paperbark_Thicket", "KangarooApple", "HazelPomaderris", "AustralianBlackthorn_Bush", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short" };
         string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead", "SheoakDrooping", "Blackwood" };
-        string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "FernMan_Short", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath" };
+        string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath" };
         string[] tops = { "GrassTree", "GrassTree_Short", "GrassTree_NoFlower", "ButtonGrass", "PricklyMoses", "TreeEverlasting" };
         string[] dead = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "LillyPilly_ForestTall_Dead" };
         string[] logs = { "Litter_Log_Dry", "Litter_Log_Dry_Small", "Litter_Log_Wet", "Litter_Log_Wet_Small", "Litter_Stump_Wet" };
@@ -370,7 +415,7 @@ public static class WinterIsleDressing
                 if (toPath < 2.2f || InsideRock(p, 0.3f) || !l.Free(p, -1.3f)) continue;
                 float near = 1f - Smooth01((toPath - 4f) / 40f);
                 float patch = Mathf.PerlinNoise(p.x * 0.05f + 91.3f, p.y * 0.05f + 27.7f);
-                if (R(0f, 1f) > (0.09f + 0.14f * near) * (0.4f + patch * 1.2f)) continue;
+                if (R(0f, 1f) > (0.13f + 0.18f * near) * (0.4f + patch * 1.2f)) continue;
                 float pick = R(0f, 1f);
                 if (pick < 0.5f) Plant(Pick(tufts), p, R(0.28f, 0.5f), 0.3f);
                 else if (pick < 0.75f) Rock(Pick(SmallRound), p, LowGround(p, 0.3f), R(0.35f, 1.1f), R(0.45f, 0.65f), 0.35f, 25f, true, false);
@@ -380,7 +425,7 @@ public static class WinterIsleDressing
             }
 
         File.WriteAllText(outputFile, output.ToString());
-        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs, " + rocks + " rocks (" + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
+        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs, " + rocks + " rocks (" + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
             + plants + " plants (" + scattered + " of them scatter); written to " + outputFile);
     }
 }

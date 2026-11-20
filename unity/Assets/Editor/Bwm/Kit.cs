@@ -228,6 +228,19 @@ namespace Bwm
             AddGlow(glow, foot + Vector3.up * 2.18f, new Vector3(0.26f, 0.42f, 0.26f), 0f, new Color(1f, 0.78f, 0.42f), (seed * 0.618f) % 1f);
         }
 
+        // A trail marker: a thin wooden snow pole with a painted top, leaning a little, as set out along winter
+        // trails so they can be followed when the path is drifted over
+        public static void AddSnowPole(MeshBuilder mb, Vector3 foot, int seed)
+        {
+            var random = new System.Random(seed * 92821 + 5);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            float tall = R(1.5f, 2.1f), yaw = R(0f, 360f);
+            var wood = new Color(R(0.36f, 0.44f), R(0.27f, 0.32f), R(0.18f, 0.22f));
+            var paint = random.Next(3) == 0 ? new Color(0.9f, 0.75f, 0.15f) : new Color(0.78f, 0.12f, 0.1f);
+            AddBox(mb, foot + Vector3.down * 0.3f, new Vector3(0.07f, tall * 0.72f + 0.3f, 0.07f), wood, yaw);
+            AddBox(mb, foot + Vector3.up * (tall * 0.72f), new Vector3(0.075f, tall * 0.28f, 0.075f), paint, yaw);
+        }
+
         // A small round ball (a bauble) added to a mesh being built, flat-shaded
         public static void AddBall(MeshBuilder mb, Vector3 centre, float radius, Color color)
         {
@@ -321,7 +334,7 @@ namespace Bwm
                 float a0 = 2f * Mathf.PI * s / sides, a1 = 2f * Mathf.PI * (s + 1) / sides;
                 Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
                 Vector3 b0 = foot + d0 * trunkR + Vector3.down * 0.4f, b1 = foot + d1 * trunkR + Vector3.down * 0.4f;
-                Vector3 t0 = foot + d0 * trunkR * 0.15f + Vector3.up * height * 0.97f, t1 = foot + d1 * trunkR * 0.15f + Vector3.up * height * 0.97f;
+                Vector3 t0 = foot + d0 * trunkR * 0.15f + Vector3.up * height * 0.93f, t1 = foot + d1 * trunkR * 0.15f + Vector3.up * height * 0.93f;
                 mb.QuadUV(b0, b1, t1, t0, new Vector2(-1f, 0f), new Vector2(-1f, 0f), new Vector2(-1f, 1f), new Vector2(-1f, 1f), bark, bark, bark, bark);
             }
 
@@ -341,13 +354,13 @@ namespace Bwm
             }
 
             // whorls of fronds, longest at the bottom; each frond droops and curves down towards its tip
-            float first = height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.42f, 0.66f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
+            float first = height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.34f, 0.54f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
             int whorl = 0;
-            for (float y = first; y < height * 0.93f; y += spacing * R(0.85f, 1.15f), whorl++)
+            for (float y = first; y < height * 0.9f; y += spacing * R(0.85f, 1.15f), whorl++)
             {
-                float t = (y - first) / (height * 0.93f - first);      // 0 bottom ... 1 top
-                float reach = height * 0.36f * Mathf.Pow(1f - t, 0.95f) + 0.25f;
-                int count = t > 0.85f || detail < 0.7f ? 4 : random.Next(5, 7);
+                float t = (y - first) / (height * 0.9f - first);      // 0 bottom ... 1 top
+                float reach = height * 0.36f * Mathf.Pow(1f - t, 0.82f) + 0.3f;      // a fuller crown than a straight cone
+                int count = t > 0.88f || detail < 0.7f ? 5 : random.Next(7, 10);
                 float offset = spin + whorl * 2.39996f;      // golden angle between whorls
                 for (int k = 0; k < count; k++)
                 {
@@ -362,7 +375,7 @@ namespace Bwm
                     Vector3 p1 = p0 + (dir * Mathf.Cos(droop) + Vector3.down * Mathf.Sin(droop)) * len * 0.5f;
                     float droop2 = droop + 0.32f;
                     Vector3 p2 = p1 + (dir * Mathf.Cos(droop2) + Vector3.down * Mathf.Sin(droop2)) * len * 0.5f;
-                    float width = len * (detail < 0.7f ? 0.8f : 0.62f);
+                    float width = len * (detail < 0.7f ? 0.72f : 0.46f);      // narrow sprays, not paddles
                     float roof = 0.32f;      // how far each half of the frond tilts down from its spine
                     Vector3 wingL = (side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
                     Vector3 wingR = (-side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
@@ -385,14 +398,16 @@ namespace Bwm
                     }
                 }
             }
-            // the leader: two crossed fronds standing up at the top
-            Vector3 tipBase = foot + Vector3.up * height * 0.88f, tip = foot + Vector3.up * height * 1.02f;
+            // the top: a tuft of short fronds splaying upwards (a single upright leader read as a diamond spike)
+            Vector3 tipBase = foot + Vector3.up * height * 0.88f;
             var top = new Color(tint.r, tint.g, tint.b, 1f);
-            for (int k = 0; k < 2; k++)
+            for (int k = 0; k < 4; k++)
             {
-                float a = spin + k * Mathf.PI * 0.5f;
-                var side = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * height * 0.045f;
-                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.1f, tip - side * 0.1f, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.55f), new Vector2(1f, 0.45f), top, top, top, top);
+                float a = spin + k * Mathf.PI * 0.5f + 0.4f;
+                var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                var side = new Vector3(-outward.z, 0f, outward.x) * height * 0.03f;
+                Vector3 tip = tipBase + (Vector3.up * 0.8f + outward * 0.6f).normalized * height * R(0.07f, 0.1f);
+                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.15f, tip - side * 0.15f, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.55f), new Vector2(1f, 0.45f), top, top, top, top);
             }
         }
 
