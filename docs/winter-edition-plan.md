@@ -241,3 +241,42 @@ slip costs puzzles at the end, not the edition.
 - **Solo testing proves little about multiplayer.** Budget a short playtest after every batch.
 - **Performance.** Recolouring 47,000 trees and adding snowfall must be measured on the weakest PC in the group.
 - **Scope.** 24 distinct puzzles is a large design job; variety will suffer before quality should.
+
+## Mountain, towers and gondola (2026-11-20)
+
+What the user asked for: the large mountain; a Christmas tower that takes the first five gourds; a secret area
+that takes twenty more; a high-speed gondola that unlocks once the tower is complete; slopes made for skiing;
+and finished assets for the puzzles.
+
+### What the SDK allows (read from its source)
+
+- Only modded gourds go in plinths, one gourd per modded puzzle.
+- Only one Tower-type pack has its gourds put back from a save. A gourd in a plinth of any other pack is saved
+  as "lost" and returns to its puzzle's pillow. So both gourd places live in one pack: **The Tree**.
+- A Tower Button shows only as many plinths as there are modded puzzles loaded, first plinths first. With
+  fewer than 25 puzzles the last summit plinths simply are not there yet.
+- `onGourdPlaced` does not fire when a save puts gourds back, so anything that depends on the tower polls
+  `HasGourd` instead of counting events.
+
+### The plan
+
+- **The Tree** (plaza) keeps its scene root and id. Its Tower Button's list is 25 plinths: the first 5 ring the
+  tree, the next 20 stand in the summit sanctuary. The tree's hold button opens the next of its five; a
+  second hold button at the summit opens the summit plinths while held.
+- **Gondola**: a bottom station beside the plaza and a top station on the summit plateau, pylons and a cable
+  between, cabins with two chairlift seats each (the SDK's Custom Chair with the game's chairlift poses, the
+  way the base game's own chairlift carries players). Winter Walk moves the cabins: each one's place on the
+  loop is worked out from the network clock (`Mirror.NetworkTime.time`), so every player sees the same cabin
+  in the same place with nothing sent. Cabins slow through the stations and run fast on the line. Until the
+  tree's five plinths hold gourds the cabins stand still in the bottom station.
+- **Mountain**: the summit plateau is ringed by ground too steep to climb and has no trail, so the gondola is
+  the only way up. A corridor under the cable is kept clear of trees and rocks.
+- **Skiing**: there are no skis in the game. Pistes are wide, even runs from the top station down to the
+  bottom station, on their own low-friction collider, clear of rocks and scatter, ending in a run-out, so
+  sliding down is the way back. Nobody can be trapped: every piste ends where walking works again.
+
+### Open questions for the user
+
+- Is the summit's 20 on top of the tree's 5 (25 puzzles in all), or 20 in all?
+- "Complete assets for the puzzles": finish the look of the four built puzzles, or build the unbuilt ones in
+  the list above?
