@@ -503,6 +503,49 @@ namespace Bwm
             return UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
         }
 
+        // One of the snow surface maps that tools/snowtex.py writes into Assets/Textures/Snow (bwm.ps1 runs it when
+        // they are missing or older than the script), imported for tiling: normals as a normal map, the rest as
+        // linear data, with full anisotropic filtering (the ground is mostly seen at a grazing angle). Settings are
+        // only re-applied when they differ, so a build does not recompress the maps each time. Null, with a
+        // warning, when the file is missing; the shaders then draw plain snow.
+        public static Texture2D SnowMap(string file, bool normal)
+        {
+            string assetPath = "Assets/Textures/Snow/" + file;
+            if (!System.IO.File.Exists(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", assetPath))))
+            {
+                Debug.LogWarning("[BWM] " + assetPath + " is missing: run python tools/snowtex.py (bwm.ps1 build does)");
+                return null;
+            }
+            UnityEditor.AssetDatabase.ImportAsset(assetPath);      // picks up a regenerated file
+            var importer = (UnityEditor.TextureImporter)UnityEditor.AssetImporter.GetAtPath(assetPath);
+            var type = normal ? UnityEditor.TextureImporterType.NormalMap : UnityEditor.TextureImporterType.Default;
+            if (importer.textureType != type || importer.sRGBTexture || !importer.mipmapEnabled || importer.wrapMode != TextureWrapMode.Repeat
+                || importer.filterMode != FilterMode.Trilinear || importer.anisoLevel != 16 || importer.maxTextureSize != 2048
+                || importer.textureCompression != UnityEditor.TextureImporterCompression.CompressedHQ)
+            {
+                importer.textureType = type;
+                importer.sRGBTexture = false;
+                importer.mipmapEnabled = true;
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Trilinear;
+                importer.anisoLevel = 16;
+                importer.maxTextureSize = 2048;
+                importer.textureCompression = UnityEditor.TextureImporterCompression.CompressedHQ;
+                importer.SaveAndReimport();
+            }
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        // The snow surface maps on a material that has them (BWM/Snow, BWM/SnowOverlay): each map the shader asks for
+        public static void SetSnowMaps(Material m)
+        {
+            foreach (string map in new[] { "Wind", "Grain", "Track" })
+            {
+                if (m.HasProperty("_" + map + "Normal")) m.SetTexture("_" + map + "Normal", SnowMap("Snow" + map + "_N.png", true));
+                if (m.HasProperty("_" + map + "Height")) m.SetTexture("_" + map + "Height", SnowMap("Snow" + map + "_H.png", false));
+            }
+        }
+
         // ---- decorations ----
 
         // A string of Christmas lights hung between posts. Each post is (local x, height of the wire there, local z);

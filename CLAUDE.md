@@ -90,6 +90,14 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   snow on whatever faces up; a material with `_SnowLine` 2 never takes snow. `LightTheTreePuzzle.cs` and
   `BellRingersPuzzle.cs` are the models for a winter puzzle; prefer this to `b.Box`, which uses the stock
   shader and takes no snow.
+- **Snow surface maps** are generated, not painted: `tools\snowtex.py` (Python with numpy, scipy and Pillow) writes
+  tileable height fields and the normal, cavity and mask maps made from them into `unity\Assets\Textures\Snow\`
+  (PNGs not committed; `bwm.ps1 build` regenerates them when the script is newer). `SnowWind` is the wind-carved
+  surface (2048 px over 12 m), `SnowGrain` the crust (1024 px over 1.6 m), `SnowTrack` trodden snow with boot
+  prints (1024 px over 3 m). `Kit.SetSnowMaps(material)` gives them to a material; `BWM/Snow` (ground) and
+  `BWM/SnowOverlay` (caps on the game's rocks) use them. Run it with `--preview <dir>` for shaded renders of each
+  surface to look at before a build. Change the snow's look there, not with noise in the shader: shader value
+  noise gave the blur and the evenly spaced bands the reviews complained of.
 - **Loose snow** is items: `b.Item(name, mesh, material, x, z, height, mass)` makes something players can pick
   up, carry and throw. A Presence Sensor with `type` 2 (Specific Item), the items in `acceptedCustom` and
   `requiredPlayers` set to how many are needed counts the ones inside it; wire its `onPressed` to

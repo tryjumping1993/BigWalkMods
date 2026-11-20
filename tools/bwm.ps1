@@ -32,8 +32,26 @@ function Set-BwmAffinity($process) {
     catch { Write-Warning ("Could not set the CPU affinity: " + $_.Exception.Message) }
 }
 
+# The snow surface maps are generated, not committed: make them when they are missing or older than their generator
+# (needs Python with numpy, scipy and Pillow:  pip install --user numpy scipy pillow)
+function Update-BwmSnowMaps {
+    $script = Join-Path $Repo 'tools\snowtex.py'
+    $dir = Join-Path $Repo 'unity\Assets\Textures\Snow'
+    $stale = $false
+    foreach ($f in 'SnowWind_N.png', 'SnowWind_H.png', 'SnowGrain_N.png', 'SnowGrain_H.png', 'SnowTrack_N.png', 'SnowTrack_H.png') {
+        $file = Join-Path $dir $f
+        if (-not (Test-Path $file) -or (Get-Item $file).LastWriteTimeUtc -lt (Get-Item $script).LastWriteTimeUtc) { $stale = $true }
+    }
+    if (-not $stale) { return }
+    $p = Start-Process -FilePath python -ArgumentList ('"' + $script + '"') -PassThru -NoNewWindow
+    Set-BwmAffinity $p
+    $p.WaitForExit()
+    if ($p.ExitCode -ne 0) { Write-Warning 'tools\snowtex.py failed; the snow will be drawn without its surface maps.' }
+}
+
 function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     if (-not (Test-Path $Unity)) { Write-Output "Unity editor not found at $Unity"; return 2 }
+    if ($Method -like 'Build*') { Update-BwmSnowMaps }
     if (Get-Process Unity -ErrorAction SilentlyContinue) { Write-Output 'A Unity editor is already running; close it first (two editors cannot open one project).'; return 2 }
     # The editor only finds its licence through Unity Hub's licensing service, so the Hub must be running and signed in.
     if (-not (Get-Process 'Unity.Licensing.Client' -ErrorAction SilentlyContinue)) {

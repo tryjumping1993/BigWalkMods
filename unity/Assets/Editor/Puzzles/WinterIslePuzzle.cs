@@ -707,7 +707,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             string old = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
             if (System.IO.Path.GetFileNameWithoutExtension(old).StartsWith("Island")) UnityEditor.AssetDatabase.DeleteAsset(old);
         }
-        Material groundMaterial = b.ShaderMaterial("BWM/Snow", "Snow", m => { m.SetFloat("_RockLine", 0.55f); m.SetFloat("_RockTiling", 0.3f); });
+        Material groundMaterial = b.ShaderMaterial("BWM/Snow", "Snow", m => { m.SetFloat("_RockLine", 0.6f); m.SetFloat("_RockTiling", 0.3f); Kit.SetSnowMaps(m); });
         int tiles = 0;
         for (int tj = 0; tj * TileCells < nz; tj++)
             for (int ti = 0; ti * TileCells < nx; ti++)
@@ -925,7 +925,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // game inside a pack if something in the pack uses it, so a speck deep under the island carries them.
         var speck = new MeshBuilder();
         Kit.AddBox(speck, new Vector3(landing.x - root.x, -30f - root.y, landing.y - root.z), Vector3.one * 0.01f, Color.white);
-        b.MeshPiece("Material Store", speck.ToMesh(), b.ShaderMaterial("BWM/SnowOverlay", "SnowOverlay"), false);
+        b.MeshPiece("Material Store", speck.ToMesh(), b.ShaderMaterial("BWM/SnowOverlay", "SnowOverlay", Kit.SetSnowMaps), false);
 
         b.Empty("Debug Teleport", topAt.x - root.x, topAt.y - root.z, top + 2f - root.y, false);
         Sdk.Set(b.Puzzle, "debugTeleport", b.Root.transform.Find("Debug Teleport"));

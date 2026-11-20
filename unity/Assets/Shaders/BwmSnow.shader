@@ -1,10 +1,11 @@
 // Snow ground for the Winter Isle. Made for this edition; nothing from the game.
-//  - soft wind-drift relief from layered noise, so flat ground is not flat-looking
+//  - a wind-carved surface from generated maps (tools/snowtex.py): sastrugi, ripples, pillows and crust, over
+//    slow swells of noise, so flat ground is not flat-looking and nothing repeats
 //  - shadows and unlit sides go blue instead of black, as snow does under an open sky
 //  - glints that switch on and off with the view angle, fading with distance so they never shimmer far away
 //  - a faint bright rim at grazing angles
 //  - bare rock where the ground is too steep to hold snow, in rough horizontal bands, with a ragged snow line
-//  - trodden paths (the mesh's vertex colour marks them): packed, bluer, no glints
+//  - trodden paths (the mesh's vertex colour marks them): packed snow covered in boot prints, no glints
 //  - bare ground where the snow is thin (vertex green): heath and grass showing through, dusted with snow
 //  - beach sand (vertex blue): pale dry sand, darker and wet at the waterline, with a dusting of snow
 // The rock, heath and sand textures are the game's own, lent at runtime by the Winter Walk plugin; without it
@@ -17,12 +18,23 @@ Shader "BWM/Snow"
         _Color ("Snow", Color) = (0.94, 0.96, 1, 1)
         _ShadeColor ("Shade", Color) = (0.58, 0.70, 0.93, 1)
         _DriftScale ("Drift scale", Float) = 0.11
-        _DriftStrength ("Drift strength", Range(0, 2)) = 0.85
+        _DriftStrength ("Drift strength", Range(0, 2)) = 0.3
+        _WindNormal ("Wind-carved snow: normals", 2D) = "bump" {}
+        _WindHeight ("Wind-carved snow: height (R), cavity (G), scoured flats (B)", 2D) = "gray" {}
+        _WindTile ("Wind-carved snow: tile (metres)", Float) = 12
+        _WindStrength ("Wind-carved snow: relief", Range(0, 3)) = 1
+        _GrainNormal ("Crust: normals", 2D) = "bump" {}
+        _GrainHeight ("Crust: height (R), cavity (G)", 2D) = "gray" {}
+        _GrainTile ("Crust: tile (metres)", Float) = 1.6
+        _GrainStrength ("Crust: relief", Range(0, 3)) = 1
+        _TrackNormal ("Trodden snow: normals", 2D) = "bump" {}
+        _TrackHeight ("Trodden snow: height (R), cavity (G)", 2D) = "gray" {}
+        _TrackTile ("Trodden snow: tile (metres)", Float) = 3
         _SparkleScale ("Sparkle scale", Float) = 70
         _SparkleAmount ("Sparkle amount", Range(0, 4)) = 2.4
         _SparkleDistance ("Sparkle distance", Float) = 22
         _Rim ("Rim", Range(0, 1)) = 0.18
-        _PathColor ("Trodden path", Color) = (0.66, 0.71, 0.80, 1)
+        _PathColor ("Trodden path", Color) = (0.80, 0.84, 0.91, 1)
         _RockColor ("Rock", Color) = (0.47, 0.43, 0.39, 1)
         _RockLine ("Rock line (how steep before rock shows)", Range(0.3, 0.95)) = 0.72
         _RockTex ("Rock texture", 2D) = "white" {}
@@ -57,7 +69,18 @@ Shader "BWM/Snow"
             half4 _BareColor;
             half4 _SandColor;
             float _GroundTiling;
+            float _WindTile;
+            float _WindStrength;
+            float _GrainTile;
+            float _GrainStrength;
+            float _TrackTile;
         CBUFFER_END
+        TEXTURE2D(_TrackNormal); SAMPLER(sampler_TrackNormal);
+        TEXTURE2D(_TrackHeight); SAMPLER(sampler_TrackHeight);
+        TEXTURE2D(_WindNormal); SAMPLER(sampler_WindNormal);
+        TEXTURE2D(_WindHeight); SAMPLER(sampler_WindHeight);
+        TEXTURE2D(_GrainNormal); SAMPLER(sampler_GrainNormal);
+        TEXTURE2D(_GrainHeight); SAMPLER(sampler_GrainHeight);
         TEXTURE2D(_RockTex); SAMPLER(sampler_RockTex);
         TEXTURE2D(_BareTex); SAMPLER(sampler_BareTex);
         TEXTURE2D(_SandTex); SAMPLER(sampler_SandTex);
@@ -90,17 +113,6 @@ Shader "BWM/Snow"
             return ValueNoise(p) * 0.65 + ValueNoise(p * 3.1 + 17.0) * 0.25 + ValueNoise(p * 9.7 + 5.0) * 0.10;
         }
 
-        // Wind-carved surface, in metres of height, everything lying with the wind (from the north-west):
-        // sastrugi (sharp-crested ridges a metre or so long, in patches) and fine ripples across the wind
-        float WindDetail(float2 xz, float rippleAmount)
-        {
-            float2 q = float2(dot(xz, float2(0.8, -0.6)), dot(xz, float2(0.6, 0.8)));      // along the wind, across it
-            float s = ValueNoise(float2(q.x * 0.33, q.y * 1.35) + 31.0);
-            s = 1.0 - abs(s * 2.0 - 1.0);
-            s *= s * smoothstep(0.3, 0.7, ValueNoise(xz * 0.11 + 7.0));
-            float ripple = sin(q.x * 10.0 + ValueNoise(q * 0.7) * 5.0) * 0.5 + 0.5;
-            return s * 0.2 + ripple * 0.025 * rippleAmount;
-        }
         ENDHLSL
 
         Pass
@@ -155,19 +167,37 @@ Shader "BWM/Snow"
             half4 Frag(Varyings i) : SV_Target
             {
                 float3 positionWS = i.positionWS;
-                // Paths: a ragged-edged band of packed snow, flatter, bluer and without glints
-                float path = smoothstep(0.35, 0.65, i.path + (ValueNoise(positionWS.xz * 0.9) - 0.5) * 0.35);
+                // Paths: trodden snow, packed and covered in boot prints, without glints. The edge is ragged and
+                // follows the prints themselves, so stray ones wander off it
+                float2 trackUV = positionWS.xz / _TrackTile;
+                float3 trackN = UnpackNormal(SAMPLE_TEXTURE2D(_TrackNormal, sampler_TrackNormal, trackUV));
+                float trackCavity = SAMPLE_TEXTURE2D(_TrackHeight, sampler_TrackHeight, trackUV).g;      // 0 in a print
+                float path = smoothstep(0.42, 0.58, i.path + (ValueNoise(positionWS.xz * 0.9) - 0.5) * 0.35 + (0.5 - trackCavity) * 0.25);
                 float3 viewVector = GetWorldSpaceViewDir(positionWS);
                 float viewDistance = length(viewVector);
                 float3 v = viewVector / max(viewDistance, 1e-4);
 
-                // Drift relief: tilt the normal by the slope of the drift height (finite differences)
+                // The snow's surface, from the generated maps (tools/snowtex.py), laid over the ground from above:
+                // the wind-carved map at its own size; the same map four times larger and blurred, for the shapes
+                // of drifts further off, where the first has faded into its mips; and the crust, for the last metres
+                float2 windUV = positionWS.xz / _WindTile;
+                float3 windN = UnpackNormal(SAMPLE_TEXTURE2D(_WindNormal, sampler_WindNormal, windUV));
+                float3 windH = SAMPLE_TEXTURE2D(_WindHeight, sampler_WindHeight, windUV).rgb;      // height, cavity, scoured flats
+                float3 farN = UnpackNormal(SAMPLE_TEXTURE2D_BIAS(_WindNormal, sampler_WindNormal, windUV / 4.3 + float2(0.37, 0.61), 3.5));
+                float3 grainN = UnpackNormal(SAMPLE_TEXTURE2D(_GrainNormal, sampler_GrainNormal, positionWS.xz / _GrainTile));
+                float grainFade = saturate(1.0 - viewDistance / 10.0);
+
+                // Slow swells from noise, which never repeats: tilt the normal by the slope of their height
                 float2 dp = positionWS.xz * _DriftScale;
                 float h0 = Drift(dp), hx = Drift(dp + float2(0.35, 0)), hz = Drift(dp + float2(0, 0.35));
-                // Rock where the ground itself (not the drift relief) is steep
+                // Rock where the ground itself (not the snow's relief) is steep. The snow line is ragged at three
+                // scales and follows the snow's own relief, and its edge is crisp: thin snow lies or it does not
                 float3 ground = normalize(i.normalWS);
-                float ragged = (ValueNoise(positionWS.xz * 0.45 + positionWS.y * 0.3) - 0.5) * 0.16;
-                float rock = 1.0 - smoothstep(_RockLine - 0.07, _RockLine + 0.07, ground.y + ragged);
+                float ragged = (ValueNoise(positionWS.xz * 0.13 + positionWS.y * 0.11 + 2.0) - 0.5) * 0.26
+                    + (ValueNoise(positionWS.xz * 0.45 + positionWS.y * 0.3) - 0.5) * 0.16
+                    + (ValueNoise(positionWS.xz * 1.9 + positionWS.y * 1.3) - 0.5) * 0.07
+                    + (windH.g - 0.5) * 0.1;
+                float rock = 1.0 - smoothstep(_RockLine - 0.035, _RockLine + 0.035, ground.y + ragged);
                 float strata = ValueNoise(positionWS.xz * 0.11 + positionWS.y * 0.17) * 0.7 + ValueNoise(positionWS.xz * 0.5 - positionWS.y * 0.4) * 0.3;
                 // granite: the texture projected from all three sides, blended by how much the face looks each way
                 // (one projection stretches on faces between them)
@@ -195,26 +225,30 @@ Shader "BWM/Snow"
                 // bare ground and sand where the snow is thin
                 float2 groundUV = positionWS.xz * _GroundTiling;
                 float patchy = ValueNoise(positionWS.xz * 0.21) * 0.6 + ValueNoise(positionWS.xz * 0.9) * 0.4;
-                float bare = smoothstep(0.45, 0.85, i.ground.x * 0.85 + (patchy - 0.5) * 0.6) * (1.0 - path * 0.45);
+                // where the snow is thin the ground shows first in the troughs between the wind's ridges
+                float bare = smoothstep(0.55, 0.75, i.ground.x * 0.85 + (patchy - 0.5) * 0.5 + (0.5 - windH.g) * 0.35) * (1.0 - path * 0.45);
                 float sand = smoothstep(0.3, 0.6, i.ground.y + (patchy - 0.5) * 0.25);
-                float3 bareColor = _BareColor.rgb * SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * 1.7;
-                bareColor = lerp(bareColor, _Color.rgb * 0.9, 0.25 + smoothstep(0.45, 0.85, patchy) * 0.5);      // snow lying in the hollows of the heath
+                // (from three sides, like the rock: laid from above alone it smears down a slope)
+                float3 bareTex = SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.zy * _GroundTiling).rgb * tw.x
+                    + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * tw.y
+                    + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.xy * _GroundTiling).rgb * tw.z;
+                float3 bareColor = _BareColor.rgb * bareTex * 1.7;
+                // snow lying among the heath in small pockets, each with an edge (an even mix reads as grey plastic)
+                float pockets = smoothstep(0.5, 0.6, ValueNoise(positionWS.xz * 2.7 + 11.0) * 0.5 + windH.g * 0.5 + (patchy - 0.5) * 0.45);
+                bareColor = lerp(bareColor, _Color.rgb * 0.92, pockets * 0.85);
                 float wet = 1.0 - smoothstep(0.15, 0.9, positionWS.y);
                 float3 sandColor = _SandColor.rgb * SAMPLE_TEXTURE2D(_SandTex, sampler_SandTex, groundUV * 0.7).rgb * 1.5 * lerp(1.0, 0.62, wet);
                 sandColor = lerp(sandColor, _Color.rgb * 0.95, (0.2 + smoothstep(0.4, 0.8, patchy) * 0.6) * (1.0 - wet));      // drifted snow on the upper beach
                 float3 earth = lerp(bareColor, sandColor, sand);
                 float earthy = saturate(max(bare, sand));
                 float snowy = (1.0 - rock) * (1.0 - earthy * 0.8);
-                float3 n = normalize(ground + _DriftStrength * (1.0 - path * 0.85) * snowy * float3(h0 - hx, 0, h0 - hz));
-                // the wind-carved detail, near the eye only (it would shimmer further off)
-                float detailFade = saturate(1.0 - viewDistance / 40.0);
-                if (detailFade > 0.0)
-                {
-                    float rf = saturate(1.0 - viewDistance / 16.0), e = 0.08;
-                    float d0 = WindDetail(positionWS.xz, rf);
-                    float dx = WindDetail(positionWS.xz + float2(e, 0), rf), dz = WindDetail(positionWS.xz + float2(0, e), rf);
-                    n = normalize(n + float3(d0 - dx, 0, d0 - dz) / e * detailFade * (1.0 - path * 0.7) * snowy);
-                }
+                // calmer and rougher stretches, so no two places look the same; packed paths are nearly flat
+                float calm = lerp(0.55, 1.15, ValueNoise(positionWS.xz * 0.021 + 13.0));
+                float relief = (1.0 - path * 0.85) * snowy;
+                float2 tilt = _DriftStrength * float2(h0 - hx, h0 - hz)
+                    + _WindStrength * calm * (windN.xy + farN.xy * 0.5)
+                    + _GrainStrength * grainN.xy * grainFade;
+                float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(trackN.x, 0, trackN.y) * (path * snowy));
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -226,13 +260,18 @@ Shader "BWM/Snow"
                 // Wrapped diffuse keeps slopes facing away from the sun soft; shadow pulls towards the shade colour
                 float wrap = saturate(dot(n, sun.direction) * 0.82 + 0.18);
                 float lit = wrap * sun.shadowAttenuation;
+                // a low sun leaves the troughs between the wind's ridges in shade
+                lit *= lerp(1.0, smoothstep(0.1, 0.5, windH.g), (1.0 - saturate(sun.direction.y * 1.5)) * 0.5 * relief);
                 float3 ambient = SampleSH(n);
                 float3 shade = _ShadeColor.rgb * (ambient * 1.1 + 0.18);
                 // snow is not one white: faintly bluer and greyer crusts, warmer fresh patches
                 float crust = ValueNoise(positionWS.xz * 0.07 + 3.0) * 0.6 + ValueNoise(positionWS.xz * 0.35 + 9.0) * 0.4;
                 float3 snowAlbedo = _Color.rgb * lerp(float3(0.9, 0.93, 0.98), float3(1.0, 1.0, 1.0), smoothstep(0.25, 0.75, crust));
-                // trodden snow: packed and greyer, pocked with prints
-                float3 pathAlbedo = _PathColor.rgb * (0.9 + 0.1 * ValueNoise(positionWS.xz * 1.3)) * (1.0 - 0.14 * smoothstep(0.62, 0.8, ValueNoise(positionWS.xz * 2.3 + 5.0)));
+                // the troughs between the wind's ridges are a little bluer and darker, their crests brightest; the
+                // scoured, rippled flats are wind crust, a touch greyer than fresh snow
+                snowAlbedo *= lerp(float3(0.86, 0.91, 0.99), float3(1.0, 1.0, 1.0), smoothstep(0.2, 0.6, windH.g)) * (1.0 - 0.04 * windH.b);
+                // trodden snow: packed and a little greyer, each print bluer and darker than the snow round it
+                float3 pathAlbedo = _PathColor.rgb * (0.94 + 0.06 * ValueNoise(positionWS.xz * 1.3)) * lerp(float3(0.80, 0.86, 0.97), float3(1.0, 1.0, 1.0), smoothstep(0.15, 0.5, trackCavity));
                 float3 snowColor = lerp(lerp(lerp(snowAlbedo, pathAlbedo, path), earth, earthy), rockColor, rock);
                 float3 earthShade = earth * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
                 shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * lerp(float3(1, 1, 1), _ShadeColor.rgb, 0.35) * (ambient * 1.1 + 0.16), rock);      // rock in shade stays grey, not snow-blue
@@ -240,6 +279,8 @@ Shader "BWM/Snow"
 
                 // Hollows between drifts are a touch bluer; so is every dip in the land, and crests catch more light
                 color = lerp(color, color * float3(0.90, 0.95, 1.0), saturate(0.55 - h0));
+                // a trail is trodden down into the snow: the low wall along each side of it is in shade
+                color *= lerp(float3(1, 1, 1), float3(0.80, 0.86, 0.97), path * (1.0 - path) * 4.0 * 0.7 * (1.0 - rock) * (1.0 - earthy));
                 float hollow = saturate((0.5 - i.form) * 2.0), crest = saturate((i.form - 0.5) * 2.0);
                 color *= lerp(float3(1, 1, 1), float3(0.80, 0.87, 0.98), hollow * (1.0 - rock)) * (1.0 + crest * 0.07);
 
@@ -256,6 +297,11 @@ Shader "BWM/Snow"
                     LIGHT_LOOP_END
                 }
                 #endif
+
+                // A soft sheen where the surface mirrors the sun, strongest on wind crust: it is what shows the relief
+                // when looking towards the light
+                float snowOnly = (1.0 - path * 0.5) * (1.0 - rock) * (1.0 - earthy);
+                color += pow(saturate(dot(n, normalize(sun.direction + v))), 48.0) * (0.05 + 0.15 * windH.b) * snowOnly * sun.color * sun.shadowAttenuation;
 
                 // Glints: each small cell of the surface has a random facet; it flashes when it mirrors the sun
                 float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path) * (1.0 - rock) * (1.0 - earthy);

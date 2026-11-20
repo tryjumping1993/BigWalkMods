@@ -13,6 +13,12 @@ Shader "BWM/SnowOverlay"
         _SnowLine ("Snow line (0 = everything, 1 = only flat tops)", Range(-0.5, 1)) = 0.45
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.16
         _SnowNoise ("Snow edge raggedness", Range(0, 1.5)) = 0.55
+        _WindNormal ("Wind-carved snow: normals", 2D) = "bump" {}
+        _WindHeight ("Wind-carved snow: height (R), cavity (G), scoured flats (B)", 2D) = "gray" {}
+        _WindTile ("Wind-carved snow: tile (metres)", Float) = 5
+        _GrainNormal ("Crust: normals", 2D) = "bump" {}
+        _GrainHeight ("Crust: height (R), cavity (G)", 2D) = "gray" {}
+        _GrainTile ("Crust: tile (metres)", Float) = 1.6
         _AlphaTex ("Cut-out source (foliage)", 2D) = "white" {}
         _Cutoff ("Cut-out threshold", Range(0, 1)) = 0
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull (0 off for leaves, 2 back for solids)", Float) = 2
@@ -33,7 +39,12 @@ Shader "BWM/SnowOverlay"
             float _SnowNoise;
             float4 _AlphaTex_ST;
             float _Cutoff;
+            float _WindTile;
+            float _GrainTile;
         CBUFFER_END
+        TEXTURE2D(_WindNormal); SAMPLER(sampler_WindNormal);
+        TEXTURE2D(_WindHeight); SAMPLER(sampler_WindHeight);
+        TEXTURE2D(_GrainNormal); SAMPLER(sampler_GrainNormal);
         TEXTURE2D(_AlphaTex); SAMPLER(sampler_AlphaTex);
 
         float Hash31(float3 p)
@@ -108,11 +119,22 @@ Shader "BWM/SnowOverlay"
                 float3 n = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
 
                 // Snow on what faces up: ragged at three scales, so the line wanders like drifted snow
+                // (and by the generated snow maps, laid from above at a smaller size than on the ground: a rock's cap
+                // is a few metres across)
+                float2 windUV = positionWS.xz / _WindTile;
+                float3 windN = UnpackNormal(SAMPLE_TEXTURE2D(_WindNormal, sampler_WindNormal, windUV));
+                float cavity = SAMPLE_TEXTURE2D(_WindHeight, sampler_WindHeight, windUV).g;
+                float3 grainN = UnpackNormal(SAMPLE_TEXTURE2D(_GrainNormal, sampler_GrainNormal, positionWS.xz / _GrainTile));
                 float ragged = (Noise3(positionWS * 0.45) - 0.5) * 0.8 + (Noise3(positionWS * 2.3) - 0.5) * 0.45 + (Noise3(positionWS * 9.0) - 0.5) * 0.2;
                 float cover = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + ragged * _SnowNoise);
-                // a crisp edge: snow lies or it does not (a soft one reads as a white haze over the rock)
-                cover = smoothstep(0.38, 0.62, cover + (Noise3(positionWS * 14.0) - 0.5) * 0.25);
+                // a crisp edge: snow lies or it does not (a soft one reads as a white haze over the rock); the edge
+                // follows the snow's own relief, so it is scalloped, not a smooth curve
+                cover = smoothstep(0.38, 0.62, cover + (Noise3(positionWS * 14.0) - 0.5) * 0.2 + (cavity - 0.5) * 0.3);
                 if (cover < 0.01) discard;
+                // the snow's own surface, on what faces up
+                float up = saturate(n.y);
+                float grainFade = saturate(1.0 - length(GetWorldSpaceViewDir(positionWS)) / 10.0);
+                n = normalize(n + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * up);
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -123,7 +145,8 @@ Shader "BWM/SnowOverlay"
                 float wrap = saturate(dot(n, sun.direction) * 0.6 + 0.4);
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
-                float3 albedo = _SnowColor.rgb * (0.93 + 0.07 * Noise3(positionWS * 5.0)) * lerp(0.86, 1.0, cover);      // thinner at the edge
+                float3 albedo = _SnowColor.rgb * (0.93 + 0.07 * Noise3(positionWS * 5.0)) * lerp(0.86, 1.0, cover)      // thinner at the edge
+                    * lerp(float3(0.88, 0.92, 0.99), float3(1.0, 1.0, 1.0), smoothstep(0.2, 0.6, cavity));
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
                 float3 color = lerp(shade, albedo * sun.color, lit);
                 color = MixFog(color, i.fogFactor);
