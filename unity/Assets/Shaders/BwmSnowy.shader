@@ -13,6 +13,7 @@ Shader "BWM/Snowy"
         _SnowLine ("Snow line (0 = everything, 1 = only flat tops)", Range(0, 1)) = 0.55
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.12
         _SnowNoise ("Snow edge raggedness", Range(0, 1)) = 0.35
+        _Through ("Light through thin things (dry grass)", Range(0, 1)) = 0
     }
 
     SubShader
@@ -30,6 +31,7 @@ Shader "BWM/Snowy"
             float _SnowLine;
             float _SnowEdge;
             float _SnowNoise;
+            float _Through;
         CBUFFER_END
 
         float Hash31(float3 p)
@@ -115,7 +117,8 @@ Shader "BWM/Snowy"
                     float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
                 #endif
                 Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
-                float wrap = saturate(dot(n, sun.direction) * 0.65 + 0.35);
+                float towards = dot(n, sun.direction);
+                float wrap = saturate(max(towards, -towards * _Through) * 0.65 + 0.35);      // a blade of grass is lit from behind too
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16);

@@ -181,7 +181,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -202,6 +202,7 @@ namespace BwmCompanion
                 case "snowtest": yield return SnowTest(r); break;
                 case "move": yield return Move(r); break;
                 case "look": yield return Look(r); break;
+                case "ground": yield return GroundHeight(r); break;
                 case "walk": { IEnumerator<string> e = Walk(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "obj": yield return Objects.Describe(r); break;
                 case "clone": yield return Objects.Clone(r); break;
@@ -659,6 +660,24 @@ namespace BwmCompanion
 
         // Saves a screenshot to <repo>\shots\<file>.png. With cx,cy,cz (camera) and tx,ty,tz (target) it is taken
         // from a temporary camera at that viewpoint; otherwise it is the player's own view.
+        // The height of the ground itself at x, z (terrain or the island's land, not a tree, rock or cabin on it):
+        // ground?x=..&z=..  ->  "ground: 12.3" or "ground: none". With &all=1, the highest thing a player could
+        // stand on there, rocks included (much of the base game's island is rock, not terrain).
+        static string GroundHeight(Request r)
+        {
+            float best = float.MinValue;
+            bool all = r.Has("all");
+            foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(r.Num("x"), 3000f, r.Num("z")), Vector3.down, 6000f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                Collider col = hit.collider;
+                if (col == null || col.TryCast<CapsuleCollider>() != null || col.TryCast<SphereCollider>() != null) continue;
+                string root = col.transform.root.name, name = col.name;
+                if (!all && (root == "Winter Dressing" || name.StartsWith("rock") || name == "collider" || name.StartsWith("Cabin"))) continue;
+                best = Mathf.Max(best, hit.point.y);
+            }
+            return best > float.MinValue ? "ground: " + F(best) : "ground: none";
+        }
+
         // How far the view is open along the level from an eye position, in n directions (yaw 0 = +z, 90 = +x):
         // look?x=..&y=..&z=..&n=12  ->  "open: 3.2 60 60 ..." (metres to the first thing in the way, at most 60)
         static string Look(Request r)

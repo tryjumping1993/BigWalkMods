@@ -278,6 +278,11 @@ Shader "BWM/Snow"
                 // where the snow is thin the ground shows first in the troughs between the wind's ridges
                 float bare = smoothstep(0.58, 0.72, i.ground.x * 0.85 + (patchy - 0.5) * 0.5 + (0.5 - windH.g) * 0.35 + grainN.x * 0.2) * (1.0 - path * 0.45);
                 float sand = smoothstep(0.3, 0.6, i.ground.y + (patchy - 0.5) * 0.25);
+                // No snow at the waterline or under it: the sea keeps a ragged band of rock wet and bare (sand, in the
+                // bays), and the seabed below is rock, darker the deeper it lies
+                float tide = 1.0 - smoothstep(0.05, 0.5, positionWS.y + (patchy - 0.5) * 0.45);
+                rock = max(rock, tide * (1.0 - sand));
+                rockColor = lerp(rockColor, bareRock * lerp(0.62, 0.32, smoothstep(0.0, -5.0, positionWS.y)), tide);
                 // (from three sides, like the rock: laid from above alone it smears down a slope)
                 float3 bareTex = SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.zy * _GroundTiling).rgb * tw.x
                     + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * tw.y

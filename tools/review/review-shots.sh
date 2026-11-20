@@ -1,15 +1,45 @@
 #!/bin/bash
 # Matched review shots of the original island and the Winter Isle -> shots/review/<island>-*.png
-# Each eye-level view is taken from where the player actually lands, at the game camera's own height, with a level
-# gaze; landings in water are skipped. usage: review-shots.sh [orig|winter|both]
+#   review-shots.sh [orig|winter|both]        (Git Bash, with the game running: bwm.ps1 play)
+# Per island: an aerial, a mid shot, eight eye-level shots and one shore shot.
+# - Eye level: the player is set down on the ground at each point in review-viewpoints.txt (the Winter Isle's are
+#   taken afresh from world/winter-viewpoints.tsv, twelve spread along its trails), and the shot is taken from the
+#   game camera's own position, looking level along the planned heading. Points under water are skipped.
+# - Shore: from the even eye points, due south until the sea; the player stands 14 m back from the water, looking
+#   east along the shore. Taken at the first one where a player can stand within 6 m of sea level (not a cliff).
+# - pick-heading.py turns the camera to the nearest open heading when the view is blocked within 6 m.
+# It pauses between teleports on purpose: see the CPU note in CLAUDE.md.
 here=$(dirname "$0"); cd /z/Programming/BigWalkMods
 which=${1:-both}
 c(){ curl -s -m 200 "http://127.0.0.1:17361/$1"; }
 cam(){ c status | sed -n 's/^camera: \([^,]*\), \([^,]*\), \([^ ]*\) facing.*/\1 \2 \3/p'; }
 settle(){ local last=x now; for i in $(seq 1 40); do sleep 0.5; now=$(cam); [ "$now" = "$last" ] && break; last=$now; done; echo "$now"; }
-L="/z/Programming/BigWalkMods/logs/review-activity.log"; lg(){ echo "$(date '+%F %T') $*" >> "$L"; }
+ground(){ c "ground?x=$1&z=$2&all=1" | sed -n 's/^ground: \(-\{0,1\}[0-9.]*\).*/\1/p'; }
+# sets the player down on the ground at x z; prints "px py pz" of the camera, or nothing if there is no ground or it is under water
+stand(){
+  c "teleport?x=$1&y=150&z=$2" >/dev/null; sleep 2.5
+  local g; g=$(ground $1 $2)
+  if [ -z "$g" ]; then
+    # nothing to stand on is loaded there yet (or it is open water): let the player come down where they will, and
+    # take that if it is land
+    local at; at=$(settle); read -r _ fy _ <<< "$at"
+    [ -n "$fy" ] && python -c "import sys; sys.exit(0 if $fy > 0.6 else 1)" && echo "$at"
+    return
+  fi
+  python -c "import sys; sys.exit(0 if $g > 0.5 else 1)" || return
+  c "teleport?x=$1&y=$(python -c "print($g+1.3)")&z=$2" >/dev/null; sleep 1; settle
+}
+L="/z/Programming/BigWalkMods/logs/review-activity.log"; mkdir -p logs; lg(){ echo "$(date '+%F %T') $*" >> "$L"; }
 mkdir -p shots/review
 lg "START review shots ($which)"
+# the Winter Isle's points: twelve spread evenly through the list its build writes
+winter_points(){ python - <<'PY'
+rows=[l.split() for l in open('world/winter-viewpoints.tsv').read().splitlines()[1:] if l.strip()]
+n=len(rows); pick=[rows[round(i*(n-1)/11)] for i in range(12)] if n>=12 else rows
+for i,r in enumerate(pick): print('winter','w%d'%(i+1),*r)
+PY
+}
+points(){ if [ $1 = winter ]; then winter_points; else grep "^$1 " "$here/review-viewpoints.txt"; fi; }
 shoot_island(){
   rm -f shots/review/$1-*.png
   if [ $1 = orig ]; then
@@ -21,17 +51,40 @@ shoot_island(){
     c 'time?hour=13' >/dev/null; c 'shot?file=rv-winter-aerial&cx=-300&cy=330&cz=-480&tx=-1100&ty=10&tz=-1100&fov=60' >/dev/null; sleep 4
     c 'time?hour=13' >/dev/null; c 'shot?file=rv-winter-mid&cx=-640&cy=55&cz=-700&tx=-950&ty=40&tz=-850&fov=70' >/dev/null; sleep 4
   fi
-  n=0
+  n=0; shore=0
   while read isl name x z dx dz; do
     [ $n -ge 8 ] && break
-    c "teleport?x=$x&y=150&z=$z" >/dev/null; sleep 3; read px py pz <<< "$(settle)"; sleep 1.5
-    if python -c "import sys; sys.exit(0 if $py > 0.6 else 1)"; then
+    read px py pz <<< "$(stand $x $z)"
+    if [ -n "$py" ]; then
+      sleep 1.5
       n=$((n+1)); read tx tz turned <<< "$(python -I "$here/pick-heading.py" $px $pz $dx $dz "$(c "look?x=$px&y=$py&z=$pz&n=24")")"
       c 'time?hour=13' >/dev/null
       c "shot?file=rv-$isl-eye-$n&cx=$px&cy=$py&cz=$pz&tx=$tx&ty=$py&tz=$tz&fov=70" >/dev/null; sleep 4
-      echo "$isl eye-$n ($name) asked $x,$z  stood $px,$py,$pz  turned $turned deg"
-    else echo "$isl $name asked $x,$z  landed in water ($py), skipped"; fi
-  done < <(grep "^$1 " "$here/review-viewpoints.txt")
+      echo "$isl eye-$n ($name) at $x,$z  camera $px,$py,$pz  turned $turned deg"
+      if [ $shore -lt 1 ] && [ $((n % 2)) = 0 ]; then
+        # due south to the sea, in 8 m steps (moving the player along so the land there is loaded)
+        sz=$z; found=
+        for step in $(seq 1 150); do
+          sz=$(python -c "print($sz-8)")
+          [ $((step % 12)) = 0 ] && { c "teleport?x=$x&y=150&z=$sz" >/dev/null; sleep 2; }
+          g=$(ground $x $sz)
+          if [ -z "$g" ] || python -c "import sys; sys.exit(0 if $g < 0.3 else 1)"; then found=1; break; fi
+        done
+        if [ -n "$found" ]; then
+          back=$(python -c "print($sz+14)")
+          read px py pz <<< "$(stand $x $back)"
+          # only where a player can stand: not slid off a cliff into the sea
+          if [ -n "$py" ] && python -c "import sys, math; sys.exit(0 if 0.5 < $py < 6.5 and math.hypot($px-($x), $pz-($back)) < 8 else 1)"; then
+            sleep 1.5; shore=$((shore+1))
+            read tx tz turned <<< "$(python -I "$here/pick-heading.py" $px $pz 1 0 "$(c "look?x=$px&y=$py&z=$pz&n=24")")"
+            c 'time?hour=13' >/dev/null
+            c "shot?file=rv-$isl-shore&cx=$px&cy=$py&cz=$pz&tx=$tx&ty=$py&tz=$tz&fov=70" >/dev/null; sleep 4
+            echo "$isl shore south of $name at $x,$back  camera $px,$py,$pz  turned $turned deg"
+          else echo "$isl no standing shore south of $name (cliff, water or too high)"; fi
+        fi
+      fi
+    else echo "$isl $name at $x,$z  no ground above water, skipped"; fi
+  done < <(points $1)
 }
 [ "$which" != winter ] && shoot_island orig
 [ "$which" != orig ] && shoot_island winter
