@@ -189,6 +189,18 @@ namespace Bwm
             return new Piece(go);
         }
 
+        // Saves a mesh with the puzzle (so pieces can share it) and returns it
+        public Mesh SaveMesh(string name, Mesh mesh)
+        {
+            string dir = assetDir + "/Meshes";
+            if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder(assetDir, "Meshes");
+            string path = dir + "/" + name + ".asset";
+            AssetDatabase.DeleteAsset(path);
+            mesh.name = name;
+            AssetDatabase.CreateAsset(mesh, path);
+            return mesh;
+        }
+
         // Declares the land this pack adds, so later builds of other puzzles can be sited on it and snap to it.
         // Heights are world heights at the (nx + 1) x (nz + 1) grid points, row by row in z; NaN where there is none.
         // 'blocked' (optional, same grid) marks points no puzzle may be sited on: trees, rocks, paths.

@@ -213,6 +213,193 @@ namespace Bwm
             }
         }
 
+        // A snow-laden fir added to a mesh being built (use with the BWM/Fir shader and FirBranchTexture): a trunk
+        // and whorls of drooping branch fronds, each frond a shallow roof of two cards so it has a top for snow to
+        // lie on and an underside that stays dark. Vertex colour: rgb tints the tree, alpha is 1 at the crown's
+        // surface and 0 deep inside it. uv.x below 0 marks bark.
+        public static void AddFir(MeshBuilder mb, Vector3 foot, float height, int seed, float detail = 1f)
+        {
+            var random = new System.Random(seed * 7919 + 3);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            var tint = new Color(R(0.82f, 1.05f), R(0.85f, 1.08f), R(0.8f, 1.0f), 1f);
+            float spin = R(0f, Mathf.PI * 2f);
+
+            // trunk: a tapering eight-sided column, bark-marked
+            float trunkR = height * 0.022f + 0.06f;
+            const int sides = 8;
+            var bark = new Color(1f, 1f, 1f, 1f);
+            for (int s = 0; s < sides; s++)
+            {
+                float a0 = 2f * Mathf.PI * s / sides, a1 = 2f * Mathf.PI * (s + 1) / sides;
+                Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
+                Vector3 b0 = foot + d0 * trunkR + Vector3.down * 0.4f, b1 = foot + d1 * trunkR + Vector3.down * 0.4f;
+                Vector3 t0 = foot + d0 * trunkR * 0.15f + Vector3.up * height * 0.97f, t1 = foot + d1 * trunkR * 0.15f + Vector3.up * height * 0.97f;
+                mb.QuadUV(b0, b1, t1, t0, new Vector2(-1f, 0f), new Vector2(-1f, 0f), new Vector2(-1f, 1f), new Vector2(-1f, 1f), bark, bark, bark, bark);
+            }
+
+            // the crown's core: a dark cone inside the boughs, so the tree reads as full from a distance (uv.x -2);
+            // close up it is only a thin shadow round the trunk
+            {
+                float coreBase = height * 0.16f, coreR = (height * 0.36f * 0.5f + 0.2f) * (detail < 0.7f ? 1f : 0.35f);
+                for (int s = 0; s < sides; s++)
+                {
+                    float a0 = 2f * Mathf.PI * s / sides + spin, a1 = 2f * Mathf.PI * (s + 1) / sides + spin;
+                    Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
+                    Vector3 b0 = foot + Vector3.up * coreBase + d0 * coreR, b1 = foot + Vector3.up * coreBase + d1 * coreR;
+                    Vector3 apex = foot + Vector3.up * height * 0.94f;
+                    var deep = new Color(tint.r, tint.g, tint.b, 0.45f);
+                    mb.QuadUV(b0, b1, apex, apex, new Vector2(-2f, 0f), new Vector2(-2f, 0f), new Vector2(-2f, 1f), new Vector2(-2f, 1f), deep, deep, deep, deep);
+                }
+            }
+
+            // whorls of fronds, longest at the bottom; each frond droops and curves down towards its tip
+            float first = height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.42f, 0.66f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
+            int whorl = 0;
+            for (float y = first; y < height * 0.93f; y += spacing * R(0.85f, 1.15f), whorl++)
+            {
+                float t = (y - first) / (height * 0.93f - first);      // 0 bottom ... 1 top
+                float reach = height * 0.36f * Mathf.Pow(1f - t, 0.95f) + 0.25f;
+                int count = t > 0.85f || detail < 0.7f ? 4 : random.Next(5, 7);
+                float offset = spin + whorl * 2.39996f;      // golden angle between whorls
+                for (int k = 0; k < count; k++)
+                {
+                    float a = offset + 2f * Mathf.PI * k / count + R(-0.25f, 0.25f);
+                    float len = reach * R(0.82f, 1.12f);
+                    float droop = Mathf.Lerp(0.38f, 0.12f, t) + R(-0.06f, 0.06f);      // radians below horizontal at the base
+                    var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                    var side = new Vector3(-dir.z, 0f, dir.x);
+                    Vector3 root = foot + Vector3.up * y + dir * trunkR * 0.8f;
+                    // three points along the bough: it curves further down towards the tip
+                    Vector3 p0 = root;
+                    Vector3 p1 = p0 + (dir * Mathf.Cos(droop) + Vector3.down * Mathf.Sin(droop)) * len * 0.5f;
+                    float droop2 = droop + 0.32f;
+                    Vector3 p2 = p1 + (dir * Mathf.Cos(droop2) + Vector3.down * Mathf.Sin(droop2)) * len * 0.5f;
+                    float width = len * (detail < 0.7f ? 0.8f : 0.62f);
+                    float roof = 0.32f;      // how far each half of the frond tilts down from its spine
+                    Vector3 wingL = (side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
+                    Vector3 wingR = (-side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
+                    var inner = new Color(tint.r, tint.g, tint.b, 0.25f);
+                    var mid = new Color(tint.r, tint.g, tint.b, 0.75f);
+                    var outer = new Color(tint.r, tint.g, tint.b, 1f);
+                    // the texture's u runs along the bough (0 at the trunk), v across it (0.5 on the spine)
+                    for (int half = 0; half < 2; half++)
+                    {
+                        Vector3 w = half == 0 ? wingL : wingR;
+                        float v = half == 0 ? 0f : 1f;
+                        mb.QuadUV(p0, p1, p1 + w * 0.9f, p0 + w * 0.35f, new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, v), new Vector2(0f, Mathf.Lerp(0.5f, v, 0.35f)), inner, mid, mid, inner);
+                        mb.QuadUV(p1, p2, p2 + w * 0.25f, p1 + w * 0.9f, new Vector2(0.5f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, Mathf.Lerp(0.5f, v, 0.3f)), new Vector2(0.5f, v), mid, outer, outer, mid);
+                    }
+                    if (detail >= 0.7f)
+                    {
+                        // twigs hanging under the bough: a card straight down from its spine, so it has body seen from the side
+                        Vector3 hang = Vector3.down * width * 0.32f;
+                        mb.QuadUV(p0, p2, p2 + hang * 0.4f, p1 + hang, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.62f), new Vector2(0.5f, 0.9f), inner, outer, mid, mid);
+                    }
+                }
+            }
+            // the leader: two crossed fronds standing up at the top
+            Vector3 tipBase = foot + Vector3.up * height * 0.88f, tip = foot + Vector3.up * height * 1.02f;
+            var top = new Color(tint.r, tint.g, tint.b, 1f);
+            for (int k = 0; k < 2; k++)
+            {
+                float a = spin + k * Mathf.PI * 0.5f;
+                var side = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * height * 0.045f;
+                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.1f, tip - side * 0.1f, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.55f), new Vector2(1f, 0.45f), top, top, top, top);
+            }
+        }
+
+        // Draws the needle spray the fir fronds are textured with and saves it as a PNG asset (alpha = the needles'
+        // cut-out; colour = dark needles, lighter tips, a brown twig). u runs along the twig, v across it.
+        public static Texture2D FirBranchTexture(string assetPath, int size = 512)
+        {
+            var px = new Color[size * size];
+            var random = new System.Random(4242);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            void Dot(float x, float y, float r, Color c)
+            {
+                int x0 = Mathf.Max(0, Mathf.FloorToInt(x - r)), x1 = Mathf.Min(size - 1, Mathf.CeilToInt(x + r));
+                int y0 = Mathf.Max(0, Mathf.FloorToInt(y - r)), y1 = Mathf.Min(size - 1, Mathf.CeilToInt(y + r));
+                for (int j = y0; j <= y1; j++)
+                    for (int i = x0; i <= x1; i++)
+                    {
+                        float d = Mathf.Sqrt((i - x) * (i - x) + (j - y) * (j - y));
+                        float cover = Mathf.Clamp01(r + 0.5f - d);
+                        if (cover <= 0f) continue;
+                        Color old = px[j * size + i];
+                        px[j * size + i] = new Color(Mathf.Lerp(old.r, c.r, cover), Mathf.Lerp(old.g, c.g, cover), Mathf.Lerp(old.b, c.b, cover), Mathf.Max(old.a, cover));
+                    }
+            }
+            void Line(Vector2 a, Vector2 b, float r0, float r1, Color c0, Color c1)
+            {
+                int steps = Mathf.CeilToInt((b - a).magnitude / 0.7f) + 1;
+                for (int s = 0; s <= steps; s++)
+                {
+                    float t = (float)s / steps;
+                    Vector2 p = Vector2.Lerp(a, b, t);
+                    Dot(p.x, p.y, Mathf.Lerp(r0, r1, t), Color.Lerp(c0, c1, t));
+                }
+            }
+            // the frond's outline: widest a little past the middle, narrowing to the tip
+            float Half(float u) => size * 0.5f * Mathf.Pow(Mathf.Sin(Mathf.PI * Mathf.Clamp01(0.08f + u * 0.92f)), 0.6f) * (1f - 0.25f * u);
+            var twig = new Color(0.30f, 0.22f, 0.12f);
+            // side twigs, each with its own needles
+            for (float u = 0.05f; u < 0.95f; u += R(0.085f, 0.13f))
+                for (int sideSign = -1; sideSign <= 1; sideSign += 2)
+                {
+                    float x0 = u * size, y0 = size * 0.5f;
+                    float ang = R(0.55f, 0.85f);      // forward angle of the side twig
+                    float reach = Half(u) * R(0.6f, 1.0f) / Mathf.Sin(ang);
+                    Vector2 start = new Vector2(x0, y0), end = start + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang) * sideSign) * reach;
+                    int needles = Mathf.CeilToInt(reach / 2.6f);
+                    for (int n = 0; n < needles; n++)
+                    {
+                        float t = (float)n / needles;
+                        Vector2 at = Vector2.Lerp(start, end, t);
+                        float nl = Mathf.Lerp(size * 0.055f, size * 0.03f, t) * R(0.8f, 1.2f);
+                        for (int ns = -1; ns <= 1; ns += 2)
+                        {
+                            float na = ang + ns * R(0.7f, 1.1f) * sideSign;
+                            Vector2 tipP = at + new Vector2(Mathf.Cos(na), Mathf.Sin(na) * sideSign) * nl;
+                            float shade = R(0.75f, 1.15f);
+                            var dark = new Color(0.07f * shade, 0.20f * shade, 0.11f * shade);
+                            var light = new Color(0.16f * shade, 0.36f * shade, 0.18f * shade);
+                            Line(at, tipP, 1.7f, 0.8f, dark, light);
+                        }
+                    }
+                    Line(start, end, 2.2f, 0.9f, twig, twig * 1.3f);
+                }
+            Line(new Vector2(0f, size * 0.5f), new Vector2(size * 0.98f, size * 0.5f), 4f, 1.2f, twig, twig);
+            // spread colour into the transparent pixels so mipmaps do not fringe dark
+            for (int pass = 0; pass < 6; pass++)
+                for (int j = 1; j < size - 1; j++)
+                    for (int i = 1; i < size - 1; i++)
+                    {
+                        int k = j * size + i;
+                        if (px[k].a > 0.01f) continue;
+                        Color sum = Color.clear; int n = 0;
+                        foreach (int o in new[] { k - 1, k + 1, k - size, k + size })
+                            if (px[o].a > 0.01f || px[o].r + px[o].g > 0f) { sum += px[o]; n++; }
+                        if (n > 0) { sum /= n; px[k] = new Color(sum.r, sum.g, sum.b, 0f); }
+                    }
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.SetPixels(px);
+            tex.Apply();
+            string full = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", assetPath));
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full));
+            System.IO.File.WriteAllBytes(full, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            UnityEditor.AssetDatabase.ImportAsset(assetPath, UnityEditor.ImportAssetOptions.ForceUpdate);
+            var importer = (UnityEditor.TextureImporter)UnityEditor.AssetImporter.GetAtPath(assetPath);
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = true;
+            importer.mipMapsPreserveCoverage = true;
+            importer.alphaTestReferenceValue = 0.42f;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.sRGBTexture = true;
+            importer.SaveAndReimport();
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
         // ---- decorations ----
 
         // A string of Christmas lights hung between posts. Each post is (local x, height of the wire there, local z);
@@ -309,6 +496,7 @@ namespace Bwm
     {
         readonly List<Vector3> verts = new List<Vector3>();
         readonly List<Color> colors = new List<Color>();
+        readonly List<Vector2> uvs = new List<Vector2>();
         readonly List<int> tris = new List<int>();
 
         public int VertexCount => verts.Count;
@@ -318,7 +506,19 @@ namespace Bwm
             int v = verts.Count;
             verts.Add(a); verts.Add(b); verts.Add(c);
             colors.Add(color); colors.Add(color); colors.Add(color);
+            uvs.Add(Vector2.zero); uvs.Add(Vector2.zero); uvs.Add(Vector2.zero);
             tris.Add(v); tris.Add(v + 1); tris.Add(v + 2);
+        }
+
+        // A textured quad with its own colour at each corner (smooth-shaded: its two triangles share vertices)
+        public void QuadUV(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud, Color ca, Color cb, Color cc, Color cd)
+        {
+            int v = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c); verts.Add(d);
+            uvs.Add(ua); uvs.Add(ub); uvs.Add(uc); uvs.Add(ud);
+            colors.Add(ca); colors.Add(cb); colors.Add(cc); colors.Add(cd);
+            tris.Add(v); tris.Add(v + 2); tris.Add(v + 1);
+            tris.Add(v); tris.Add(v + 3); tris.Add(v + 2);
         }
 
         public void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color color)
@@ -332,6 +532,7 @@ namespace Bwm
             var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
             mesh.SetVertices(verts);
             mesh.SetColors(colors);
+            mesh.SetUVs(0, uvs);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();

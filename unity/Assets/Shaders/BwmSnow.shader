@@ -5,6 +5,10 @@
 //  - a faint bright rim at grazing angles
 //  - bare rock where the ground is too steep to hold snow, in rough horizontal bands, with a ragged snow line
 //  - trodden paths (the mesh's vertex colour marks them): packed, bluer, no glints
+//  - bare ground where the snow is thin (vertex green): heath and grass showing through, dusted with snow
+//  - beach sand (vertex blue): pale dry sand, darker and wet at the waterline, with a dusting of snow
+// The rock, heath and sand textures are the game's own, lent at runtime by the Winter Walk plugin; without it
+// (or in the editor) the same places show in flat colours.
 // Lit by the sun (with its shadows) and by lamps. Written against URP 17 (Unity 6000.3), the game's version.
 Shader "BWM/Snow"
 {
@@ -21,6 +25,13 @@ Shader "BWM/Snow"
         _PathColor ("Trodden path", Color) = (0.74, 0.80, 0.90, 1)
         _RockColor ("Rock", Color) = (0.36, 0.36, 0.40, 1)
         _RockLine ("Rock line (how steep before rock shows)", Range(0.3, 0.95)) = 0.72
+        _RockTex ("Rock texture", 2D) = "white" {}
+        _RockTiling ("Rock tiling (per metre)", Float) = 0.12
+        _BareColor ("Bare ground", Color) = (0.42, 0.40, 0.30, 1)
+        _BareTex ("Bare ground texture", 2D) = "white" {}
+        _SandColor ("Sand", Color) = (0.70, 0.67, 0.60, 1)
+        _SandTex ("Sand texture", 2D) = "white" {}
+        _GroundTiling ("Ground tiling (per metre)", Float) = 0.18
     }
 
     SubShader
@@ -42,7 +53,14 @@ Shader "BWM/Snow"
             half4 _PathColor;
             half4 _RockColor;
             float _RockLine;
+            float _RockTiling;
+            half4 _BareColor;
+            half4 _SandColor;
+            float _GroundTiling;
         CBUFFER_END
+        TEXTURE2D(_RockTex); SAMPLER(sampler_RockTex);
+        TEXTURE2D(_BareTex); SAMPLER(sampler_BareTex);
+        TEXTURE2D(_SandTex); SAMPLER(sampler_SandTex);
 
         float Hash21(float2 p)
         {
@@ -104,6 +122,7 @@ Shader "BWM/Snow"
                 float3 normalWS : TEXCOORD1;
                 float fogFactor : TEXCOORD2;
                 float path : TEXCOORD3;
+                float2 ground : TEXCOORD4;      // x bare ground, y sand
             };
 
             Varyings Vert(Attributes v)
@@ -115,6 +134,7 @@ Shader "BWM/Snow"
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 o.fogFactor = ComputeFogFactor(p.positionCS.z);
                 o.path = 1.0 - v.color.r;
+                o.ground = v.color.gb;
                 return o;
             }
 
@@ -134,9 +154,29 @@ Shader "BWM/Snow"
                 float3 ground = normalize(i.normalWS);
                 float ragged = (ValueNoise(positionWS.xz * 0.45 + positionWS.y * 0.3) - 0.5) * 0.16;
                 float rock = 1.0 - smoothstep(_RockLine - 0.07, _RockLine + 0.07, ground.y + ragged);
-                float strata = ValueNoise(float2(positionWS.y * 1.1, (positionWS.x + positionWS.z) * 0.06));
-                float3 rockColor = _RockColor.rgb * lerp(0.72, 1.18, strata);
-                float3 n = normalize(ground + _DriftStrength * (1.0 - path * 0.85) * (1.0 - rock) * float3(h0 - hx, 0, h0 - hz));
+                float strata = ValueNoise(positionWS.xz * 0.11 + positionWS.y * 0.17) * 0.7 + ValueNoise(positionWS.xz * 0.5 - positionWS.y * 0.4) * 0.3;
+                // granite: the texture projected from the side the face looks to most
+                float3 an = abs(ground);
+                float2 rockUV = an.x > an.z ? positionWS.zy : positionWS.xy;
+                if (an.y > 0.8) rockUV = positionWS.xz;
+                float3 rockTex = SAMPLE_TEXTURE2D(_RockTex, sampler_RockTex, rockUV * _RockTiling).rgb;
+                float3 rockColor = _RockColor.rgb * lerp(0.82, 1.1, strata) * rockTex * 1.6;
+                // a dusting of snow on the rock's flatter parts
+                rockColor = lerp(rockColor, _Color.rgb * 0.92, saturate((ground.y - 0.3) * 2.5) * smoothstep(0.4, 0.7, strata) * 0.8);
+
+                // bare ground and sand where the snow is thin
+                float2 groundUV = positionWS.xz * _GroundTiling;
+                float patchy = ValueNoise(positionWS.xz * 0.21) * 0.6 + ValueNoise(positionWS.xz * 0.9) * 0.4;
+                float bare = smoothstep(0.45, 0.85, i.ground.x * 0.85 + (patchy - 0.5) * 0.6) * (1.0 - path);
+                float sand = smoothstep(0.3, 0.6, i.ground.y + (patchy - 0.5) * 0.25);
+                float3 bareColor = _BareColor.rgb * SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * 1.7;
+                bareColor = lerp(bareColor, _Color.rgb * 0.9, 0.25 + smoothstep(0.45, 0.85, patchy) * 0.5);      // snow lying in the hollows of the heath
+                float wet = 1.0 - smoothstep(0.15, 0.9, positionWS.y);
+                float3 sandColor = _SandColor.rgb * SAMPLE_TEXTURE2D(_SandTex, sampler_SandTex, groundUV * 0.7).rgb * 1.5 * lerp(1.0, 0.62, wet);
+                sandColor = lerp(sandColor, _Color.rgb * 0.95, (0.2 + smoothstep(0.4, 0.8, patchy) * 0.6) * (1.0 - wet));      // drifted snow on the upper beach
+                float3 earth = lerp(bareColor, sandColor, sand);
+                float earthy = saturate(max(bare, sand));
+                float3 n = normalize(ground + _DriftStrength * (1.0 - path * 0.85) * (1.0 - rock) * (1.0 - earthy * 0.8) * float3(h0 - hx, 0, h0 - hz));
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -150,8 +190,9 @@ Shader "BWM/Snow"
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
                 float3 shade = _ShadeColor.rgb * (ambient * 1.1 + 0.18);
-                float3 snowColor = lerp(lerp(_Color.rgb, _PathColor.rgb, path), rockColor, rock);
-                shade = lerp(shade * lerp(1.0, 0.9, path), rockColor * _ShadeColor.rgb * (ambient * 1.1 + 0.16), rock);
+                float3 snowColor = lerp(lerp(lerp(_Color.rgb, _PathColor.rgb, path), earth, earthy), rockColor, rock);
+                float3 earthShade = earth * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
+                shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * _ShadeColor.rgb * (ambient * 1.1 + 0.16), rock);
                 float3 color = lerp(shade, snowColor * sun.color, lit);
 
                 // Hollows between drifts are a touch bluer
@@ -172,7 +213,7 @@ Shader "BWM/Snow"
                 #endif
 
                 // Glints: each small cell of the surface has a random facet; it flashes when it mirrors the sun
-                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path) * (1.0 - rock);
+                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path) * (1.0 - rock) * (1.0 - earthy);
                 if (sparkleFade > 0.0)
                 {
                     float3 scaled = positionWS * _SparkleScale;
@@ -185,7 +226,7 @@ Shader "BWM/Snow"
                     color += glint * grain * _SparkleAmount * sparkleFade * sparkleFade * sun.color * sun.shadowAttenuation;
                 }
 
-                color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1);
+                color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1) * (1.0 - earthy);
                 color = MixFog(color, i.fogFactor);
                 return half4(color, 1);
             }

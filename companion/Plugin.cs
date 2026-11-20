@@ -131,8 +131,13 @@ namespace BwmCompanion
 
         static readonly List<KeyValuePair<Request, IEnumerator<string>>> running = new List<KeyValuePair<Request, IEnumerator<string>>>();
 
+        internal static float FrameMs = 16f, WorstMs = 16f;      // smoothed frame time, and the worst in the last second or so
+
         void Update()
         {
+            float ms = Time.unscaledDeltaTime * 1000f;
+            FrameMs = Mathf.Lerp(FrameMs, ms, 0.05f);
+            WorstMs = Mathf.Max(ms, Mathf.Lerp(WorstMs, ms, 0.02f));
             lock (Server.Incoming)
                 while (Server.Incoming.Count > 0)
                 {
@@ -195,6 +200,14 @@ namespace BwmCompanion
                 case "terrainset": yield return TerrainSet(r); break;
                 case "snowtest": yield return SnowTest(r); break;
                 case "move": yield return Move(r); break;
+                case "obj": yield return Objects.Describe(r); break;
+                case "clone": yield return Objects.Clone(r); break;
+                case "overlay": yield return Objects.Overlay(r); break;
+                case "mats": yield return Objects.Materials(r); break;
+                case "tree": yield return Objects.Tree(r); break;
+                case "matset": yield return Objects.MatSet(r); break;
+                case "destroy": yield return Objects.DestroyCopy(r); break;
+                case "catalog": yield return Objects.Catalog(r); break;
                 case "get": yield return Inspect(r, false); break;
                 case "set": yield return Inspect(r, true); break;
                 case "quit": Application.Quit(); yield return "quitting"; break;
@@ -233,6 +246,7 @@ namespace BwmCompanion
             foreach (PuzzleSDK p in Puzzles())
                 sb.AppendLine("puzzle: " + p.transform.root.name + " at " + V(p.transform.position) + " running " + p.IsRunning + " won " + p.IsWon);
             sb.AppendLine("window: " + Screen.width + " x " + Screen.height + ", focused " + Application.isFocused);
+            sb.AppendLine("frame: " + F(Runner.FrameMs) + " ms average (" + F(1000f / Mathf.Max(Runner.FrameMs, 0.1f)) + " fps), worst lately " + F(Runner.WorstMs) + " ms");
             return sb.ToString();
         }
 
@@ -619,6 +633,347 @@ namespace BwmCompanion
             for (int i = 0; i < 3; i++) yield return null;
             if (camGo != null) UnityEngine.Object.Destroy(camGo);
             yield return File.Exists(file) ? "saved " + file : "ERROR the screenshot was not written (is the window minimised?)";
+        }
+    }
+
+    // Looking inside the game's own objects, and copying them (the groundwork for Winter Walk's set dressing).
+    internal static class Objects
+    {
+        static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+        static string V(Vector3 v) => F(v.x) + ", " + F(v.y) + ", " + F(v.z);
+
+        // Parts of the game's objects that would write to the save, move the copy onto the terrain, clear the
+        // ground round it or hide it by distance (the SDK's PuzzleVanillaCopy removes the same ones)
+        internal static readonly HashSet<string> Removed = new HashSet<string>
+        {
+            "SaveIdentity", "BuoySaver", "PeckEffectSavableHome", "PeckEffectGourdMap", "LandmarkSaveSetter",
+            "CullingLocation", "TerrainAligner", "ClearStamp",
+        };
+
+        static int clones;
+
+        // path=full/path, or name=exact name [&index=n] [&under=text in the path]
+        internal static Transform Locate(Request r)
+        {
+            string name = r.Str("name", ""), under = r.Str("under", null), path = r.Str("path", null);
+            int index = (int)r.Num("index", 0), n = 0;
+            foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>(true))
+            {
+                if (path != null) { if (Full(t) == path) return t; continue; }
+                if (t.name != name) continue;
+                if (under != null && Full(t).IndexOf(under, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (n++ == index) return t;
+            }
+            return null;
+        }
+
+        static string Full(Transform t)
+        {
+            var parts = new List<string>();
+            for (Transform c = t; c != null; c = c.parent) parts.Add(c.name);
+            parts.Reverse();
+            return string.Join("/", parts);
+        }
+
+        static void Material(StringBuilder sb, string indent, Material m)
+        {
+            if (m == null) { sb.AppendLine(indent + "material: null"); return; }
+            sb.AppendLine(indent + "material: " + m.name + " | shader " + (m.shader != null ? m.shader.name : "null") + " | queue " + m.renderQueue);
+            try
+            {
+                Shader s = m.shader;
+                int count = s.GetPropertyCount();
+                var props = new List<string>();
+                for (int i = 0; i < count; i++)
+                {
+                    string p = s.GetPropertyName(i);
+                    var type = s.GetPropertyType(i);
+                    string value;
+                    if (type == UnityEngine.Rendering.ShaderPropertyType.Texture) { Texture tex = m.GetTexture(p); value = tex != null ? tex.name + " " + tex.width + "x" + tex.height : "-"; }
+                    else if (type == UnityEngine.Rendering.ShaderPropertyType.Color) value = m.GetColor(p).ToString();
+                    else if (type == UnityEngine.Rendering.ShaderPropertyType.Vector) value = m.GetVector(p).ToString();
+                    else value = F(m.GetFloat(p));
+                    props.Add(p + "=" + value);
+                }
+                sb.AppendLine(indent + "  " + string.Join("; ", props));
+            }
+            catch (Exception e) { sb.AppendLine(indent + "  (properties unavailable: " + e.GetType().Name + ": " + e.Message + ")"); }
+            try { sb.AppendLine(indent + "  keywords: " + string.Join(" ", m.shaderKeywords)); } catch (Exception) { }
+        }
+
+        static void Describe(StringBuilder sb, Transform t, int depth, string indent, bool materials)
+        {
+            sb.AppendLine(indent + t.name + (t.gameObject.activeSelf ? "" : " (inactive)") + " | at " + V(t.position) + " | scale " + V(t.lossyScale) + " | layer " + t.gameObject.layer);
+            var names = new List<string>();
+            foreach (Component c in t.gameObject.GetComponents(Il2CppInterop.Runtime.Il2CppType.Of<Component>()))
+                if (c != null) names.Add(c.GetIl2CppType().Name);
+            sb.AppendLine(indent + "  components: " + string.Join(", ", names));
+            MeshFilter mf = t.GetComponent<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null)
+                sb.AppendLine(indent + "  mesh: " + mf.sharedMesh.name + " | " + mf.sharedMesh.vertexCount + " vertices, " + mf.sharedMesh.subMeshCount + " submeshes, readable " + mf.sharedMesh.isReadable + " | bounds " + V(mf.sharedMesh.bounds.size));
+            Renderer rend = t.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                sb.AppendLine(indent + "  renderer: enabled " + rend.enabled + ", shadows " + rend.shadowCastingMode + ", bounds " + V(rend.bounds.size));
+                if (materials) foreach (Material m in rend.sharedMaterials) Material(sb, indent + "  ", m);
+            }
+            foreach (Component c in t.gameObject.GetComponents(Il2CppInterop.Runtime.Il2CppType.Of<Collider>()))
+            {
+                Collider col = c != null ? c.TryCast<Collider>() : null;
+                if (col == null) continue;
+                MeshCollider mc = col.TryCast<MeshCollider>();
+                sb.AppendLine(indent + "  collider: " + col.GetIl2CppType().Name + ", enabled " + col.enabled + ", trigger " + col.isTrigger + (mc != null && mc.sharedMesh != null ? ", mesh " + mc.sharedMesh.name + " (" + mc.sharedMesh.vertexCount + ")" : "") + ", bounds " + V(col.bounds.size));
+            }
+            LODGroup lods = t.GetComponent<LODGroup>();
+            if (lods != null) sb.AppendLine(indent + "  lod group: " + lods.lodCount + " levels, size " + F(lods.size));
+            if (depth <= 0) { if (t.childCount > 0) sb.AppendLine(indent + "  (" + t.childCount + " children)"); return; }
+            for (int i = 0; i < t.childCount; i++) Describe(sb, t.GetChild(i), depth - 1, indent + "    ", materials);
+        }
+
+        // obj?name=X[&index=n][&under=text][&depth=2][&materials=0]
+        public static string Describe(Request r)
+        {
+            Transform t = Locate(r);
+            if (t == null) return "ERROR nothing found";
+            var sb = new StringBuilder(Full(t) + "\n");
+            Describe(sb, t, (int)r.Num("depth", 2), "", r.Num("materials", 1) > 0);
+            return sb.ToString();
+        }
+
+        // Copies a game object into place with its save, terrain and culling parts taken out first.
+        // clone?name=X[&index][&under]&x&y&z[&yaw][&scale]
+        public static string Clone(Request r)
+        {
+            Transform t = Locate(r);
+            if (t == null) return "ERROR nothing found";
+            var holder = new GameObject("BWM Clone Holder");
+            holder.SetActive(false);      // nothing in the copy wakes until it is cleaned
+            GameObject copy = UnityEngine.Object.Instantiate((UnityEngine.Object)t.gameObject, holder.transform).Cast<GameObject>();
+            int removed = 0;
+            var doomed = new List<Component>();
+            foreach (Component c in copy.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Component>(), true))
+                if (c != null && Removed.Contains(c.GetIl2CppType().Name)) doomed.Add(c);
+            foreach (Component c in doomed) { UnityEngine.Object.DestroyImmediate(c); removed++; }
+            int renderers = 0, colliders = 0;
+            foreach (Component c in copy.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Renderer>(), true)) { Renderer rr = c.TryCast<Renderer>(); if (rr != null) { rr.enabled = true; renderers++; } }
+            foreach (Component c in copy.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Collider>(), true)) colliders++;
+            copy.name = "BWM Clone " + (++clones);
+            copy.transform.SetParent(null, true);
+            copy.transform.position = new Vector3(r.Num("x"), r.Num("y"), r.Num("z"));
+            copy.transform.rotation = Quaternion.Euler(0f, r.Num("yaw", 0f), 0f) * t.rotation;
+            copy.transform.localScale = t.lossyScale * r.Num("scale", 1f);
+            UnityEngine.Object.Destroy(holder);
+            copy.SetActive(true);
+            return "made " + copy.name + " from " + Full(t) + ": removed " + removed + " components, " + renderers + " renderers, " + colliders + " colliders";
+        }
+
+        // Copies one of the terrain's tree kinds (they are prefabs the terrain draws, not scene objects).
+        // tree?kind=Name&x&y&z[&yaw][&scale][&describe=1]
+        public static string Tree(Request r)
+        {
+            string kind = r.Str("kind", "");
+            GameObject prefab = null;
+            foreach (Terrain terrain in UnityEngine.Object.FindObjectsOfType<Terrain>())
+            {
+                foreach (TreePrototype proto in terrain.terrainData.treePrototypes)
+                    if (proto.prefab != null && proto.prefab.name == kind) { prefab = proto.prefab; break; }
+                if (prefab != null) break;
+            }
+            if (prefab == null) return "ERROR no tree kind '" + kind + "'";
+            GameObject copy = UnityEngine.Object.Instantiate((UnityEngine.Object)prefab).Cast<GameObject>();
+            copy.name = "BWM Tree " + (++clones);
+            copy.transform.position = new Vector3(r.Num("x"), r.Num("y"), r.Num("z"));
+            copy.transform.rotation = Quaternion.Euler(0f, r.Num("yaw", 0f), 0f);
+            copy.transform.localScale = Vector3.one * r.Num("scale", 1f);
+            var sb = new StringBuilder("made " + copy.name + "\n");
+            if (r.Num("describe", 0) > 0) Describe(sb, copy.transform, 3, "", true);
+            return sb.ToString();
+        }
+
+        // Sets a material value on every renderer under a target (making the target's own material copies).
+        // matset?target=X&prop=_Name&value=1 | &color=r,g,b,a | &keyword=KW&on=1 [&slot=n (default all but our snow)]
+        public static string MatSet(Request r)
+        {
+            Transform t = Locate(new Request { Query = { ["name"] = r.Str("target", "") } });
+            if (t == null) return "ERROR no target";
+            int done = 0;
+            foreach (Component c in t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Renderer>(), true))
+            {
+                Renderer rend = c != null ? c.TryCast<Renderer>() : null;
+                if (rend == null) continue;
+                var mats = rend.materials;      // instances
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    Material m = mats[i];
+                    if (m == null || m.name.StartsWith("SnowOverlay")) continue;
+                    if (r.Has("slot") && (int)r.Num("slot") != i) continue;
+                    string prop = r.Str("prop", "");
+                    if (r.Has("value")) m.SetFloat(prop, r.Num("value"));
+                    if (r.Has("color"))
+                    {
+                        string[] p = r.Str("color").Split(',');
+                        m.SetColor(prop, new Color(float.Parse(p[0], CultureInfo.InvariantCulture), float.Parse(p[1], CultureInfo.InvariantCulture), float.Parse(p[2], CultureInfo.InvariantCulture), p.Length > 3 ? float.Parse(p[3], CultureInfo.InvariantCulture) : 1f));
+                    }
+                    if (r.Has("keyword")) { if (r.Num("on", 1) > 0) m.EnableKeyword(r.Str("keyword")); else m.DisableKeyword(r.Str("keyword")); }
+                    done++;
+                }
+            }
+            return "set on " + done + " material(s)";
+        }
+
+        // destroy?target=X (one of our copies)
+        public static string DestroyCopy(Request r)
+        {
+            string name = r.Str("target", "");
+            if (!name.StartsWith("BWM ")) return "ERROR only our own copies (BWM ...) can be destroyed";
+            Transform t = Locate(new Request { Query = { ["name"] = name } });
+            if (t == null) return "ERROR no target";
+            UnityEngine.Object.Destroy(t.gameObject);
+            return "destroyed " + name;
+        }
+
+        static string Base(string name)
+        {
+            int p = name.IndexOf(" (", StringComparison.Ordinal);
+            return p > 0 ? name.Substring(0, p) : name;
+        }
+
+        // Bounds of a renderer's mesh in another transform's local space (that transform's own scale removed)
+        static Bounds LocalBounds(Renderer rend, Transform space)
+        {
+            MeshFilter mf = rend.GetComponent<MeshFilter>();
+            Bounds b = mf != null && mf.sharedMesh != null ? mf.sharedMesh.bounds : new Bounds(Vector3.zero, Vector3.zero);
+            Matrix4x4 toSpace = space.worldToLocalMatrix * rend.transform.localToWorldMatrix;
+            var result = new Bounds(toSpace.MultiplyPoint3x4(b.center), Vector3.zero);
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                result.Encapsulate(toSpace.MultiplyPoint3x4(corner));
+            }
+            return result;
+        }
+
+        // Writes <repo>\world\catalog.tsv: every rock kind (from the world's rock objects) and every tree kind
+        // (from the terrains), with its LOD0 bounds at scale 1, the scale range the game uses it at, and how
+        // many there are. The island build places copies from this.
+        public static string Catalog(Request r)
+        {
+            var sb = new StringBuilder("kind\tsource\tcx\tcy\tcz\tsx\tsy\tsz\tminScale\tmaxScale\tcount\ttemplate\n");
+            var rocks = new Dictionary<string, (Transform t, float lo, float hi, int n)>();
+            foreach (LODGroup g in UnityEngine.Object.FindObjectsOfType<LODGroup>(true))
+            {
+                Transform t = g.transform;
+                string kind = Base(t.name);
+                if (!kind.StartsWith("rock-") || t.root.name == "Winter Dressing" || Full(t).Contains("_OLD")) continue;
+                float s = t.lossyScale.x;
+                if (rocks.TryGetValue(kind, out var e)) rocks[kind] = (e.t, Mathf.Min(e.lo, s), Mathf.Max(e.hi, s), e.n + 1);
+                else rocks[kind] = (t, s, s, 1);
+            }
+            foreach (var kv in rocks)
+            {
+                Renderer lod0 = null;
+                foreach (Component c in kv.Value.t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<MeshRenderer>(), true))
+                {
+                    Renderer rr = c.TryCast<Renderer>();
+                    if (rr != null && (lod0 == null || rr.name.EndsWith("_LOD0"))) lod0 = rr;
+                    if (lod0 != null && lod0.name.EndsWith("_LOD0")) break;
+                }
+                if (lod0 == null) continue;
+                Bounds b = LocalBounds(lod0, kv.Value.t);
+                sb.AppendLine(kv.Key + "\trock\t" + F(b.center.x) + "\t" + F(b.center.y) + "\t" + F(b.center.z) + "\t" + F(b.size.x) + "\t" + F(b.size.y) + "\t" + F(b.size.z)
+                    + "\t" + F(kv.Value.lo) + "\t" + F(kv.Value.hi) + "\t" + kv.Value.n + "\t" + Full(kv.Value.t));
+            }
+            var seen = new HashSet<string>();
+            foreach (Terrain terrain in UnityEngine.Object.FindObjectsOfType<Terrain>())
+            {
+                TerrainData data = terrain.terrainData;
+                var protos = data.treePrototypes;
+                var counts = new int[protos.Length];
+                var lo = new float[protos.Length]; var hi = new float[protos.Length];
+                for (int i = 0; i < protos.Length; i++) { lo[i] = 99f; hi[i] = 0f; }
+                foreach (TreeInstance inst in data.treeInstances)
+                {
+                    int p = inst.prototypeIndex;
+                    if (p < 0 || p >= protos.Length) continue;
+                    counts[p]++; lo[p] = Mathf.Min(lo[p], inst.heightScale); hi[p] = Mathf.Max(hi[p], inst.heightScale);
+                }
+                for (int i = 0; i < protos.Length; i++)
+                {
+                    GameObject prefab = protos[i].prefab;
+                    if (prefab == null || !seen.Add(prefab.name)) continue;
+                    Renderer lod0 = null;
+                    foreach (Component c in prefab.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<MeshRenderer>(), true))
+                    {
+                        Renderer rr = c.TryCast<Renderer>();
+                        if (rr != null && rr.name.EndsWith("_LOD0")) { lod0 = rr; break; }
+                        if (rr != null && lod0 == null) lod0 = rr;
+                    }
+                    if (lod0 == null) continue;
+                    Bounds b = LocalBounds(lod0, prefab.transform);
+                    sb.AppendLine(prefab.name + "\ttree\t" + F(b.center.x) + "\t" + F(b.center.y) + "\t" + F(b.center.z) + "\t" + F(b.size.x) + "\t" + F(b.size.y) + "\t" + F(b.size.z)
+                        + "\t" + F(counts[i] > 0 ? lo[i] : 1f) + "\t" + F(counts[i] > 0 ? hi[i] : 1f) + "\t" + counts[i] + "\t" + prefab.name);
+                }
+            }
+            string file = Path.Combine(Plugin.RepoDir, "world", "catalog.tsv");
+            File.WriteAllText(file, sb.ToString());
+            return "wrote " + file + " (" + rocks.Count + " rock kinds, " + seen.Count + " tree kinds)";
+        }
+
+        static Material FindMaterial(string name)
+        {
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<Material>()))
+            {
+                Material m = o != null ? o.TryCast<Material>() : null;
+                if (m != null && m.name == name) return m;
+            }
+            return null;
+        }
+
+        // mats?name=text: loaded materials whose name contains the text
+        public static string Materials(Request r)
+        {
+            string text = r.Str("name", "");
+            var sb = new StringBuilder();
+            int n = 0;
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<Material>()))
+            {
+                Material m = o != null ? o.TryCast<Material>() : null;
+                if (m == null || m.name.IndexOf(text, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (++n <= 60) sb.AppendLine(m.name + " | " + (m.shader != null ? m.shader.name : "null"));
+            }
+            sb.AppendLine(n + " material(s)");
+            return sb.ToString();
+        }
+
+        // Adds snow to a copy: appends a copy of the named material to every renderer.
+        // overlay?target=BWM Clone 1[&mat=SnowOverlay][&line=0.45][&cutout=0.3 (foliage: the leaf texture's alpha)][&tex=_BaseMap]
+        public static string Overlay(Request r)
+        {
+            Transform t = Locate(new Request { Query = { ["name"] = r.Str("target", "") } });
+            if (t == null) return "ERROR no target";
+            Material source = FindMaterial(r.Str("mat", "SnowOverlay"));
+            if (source == null) return "ERROR material not loaded";
+            int done = 0;
+            foreach (Component c in t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Renderer>(), true))
+            {
+                Renderer rend = c != null ? c.TryCast<Renderer>() : null;
+                if (rend == null) continue;
+                var old = rend.sharedMaterials;
+                var mats = new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<Material>(old.Length + 1);
+                for (int i = 0; i < old.Length; i++) mats[i] = old[i];
+                var snow = new Material(source);
+                if (r.Has("line")) snow.SetFloat("_SnowLine", r.Num("line"));
+                if (r.Has("cutout") && old.Length > 0 && old[0] != null)
+                {
+                    string texName = r.Str("tex", "_BaseMap");
+                    if (old[0].HasProperty(texName)) snow.SetTexture("_AlphaTex", old[0].GetTexture(texName));
+                    snow.SetFloat("_Cutoff", r.Num("cutout"));
+                }
+                mats[old.Length] = snow;
+                rend.sharedMaterials = mats;
+                done++;
+            }
+            return "snow on " + done + " renderer(s) of " + t.name;
         }
     }
 

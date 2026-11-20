@@ -28,10 +28,12 @@ namespace WinterWalk
             L = Log;
             Enabled = Config.Bind("General", "WinterSky", true, "Blend the sky and light towards winter near the Winter Isle.");
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
             go.AddComponent<SkyDriver>();
+            go.AddComponent<Dresser>();
             L.LogInfo("Winter Walk loaded");
         }
     }
@@ -40,8 +42,7 @@ namespace WinterWalk
     {
         public SkyDriver(IntPtr ptr) : base(ptr) { }
 
-        // The island's box in the world. Keep in step with WinterIslePuzzle.cs (X0, X1, Z0, Z1).
-        const float X0 = -1016f, X1 = -428f, Z0 = -1016f, Z1 = -560f;
+        // The island's box in the world comes from the dressing list (Dresser.X0...), which the island's build writes
         const float FadeDistance = 170f;      // metres outside the box over which winter fades out
 
         // Winter's values
@@ -107,7 +108,7 @@ namespace WinterWalk
                 }
 
                 Vector3 p = cam.transform.position;
-                float dx = Mathf.Max(0f, Mathf.Max(X0 - p.x, p.x - X1)), dz = Mathf.Max(0f, Mathf.Max(Z0 - p.z, p.z - Z1));
+                float dx = Mathf.Max(0f, Mathf.Max(Dresser.X0 - p.x, p.x - Dresser.X1)), dz = Mathf.Max(0f, Mathf.Max(Dresser.Z0 - p.z, p.z - Dresser.Z1));
                 float weight = Plugin.Enabled.Value ? 1f - Smooth(Mathf.Sqrt(dx * dx + dz * dz) / FadeDistance) : 0f;
                 if (Mathf.Abs(weight - lastWeight) < 0.002f) return;      // nothing to change: leave the sky alone
                 lastWeight = weight;
