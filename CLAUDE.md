@@ -74,6 +74,15 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   peaks, a ravine and a frozen lake (`Peaks`, `Lake` and the ravine constants in `WinterIslePuzzle.cs`). Its
   build levels every island puzzle's site, so a puzzle can be sited on a slope, and prints how much level
   ground is left.
+- **The island's ground** is a 3 m height grid (`height[]`, which paths, sites and the dressing work on) drawn as a
+  mesh twice as fine: `HeightAt` is a smooth curve through the grid with crags on steep ground, and the mesh and
+  its collider follow it exactly. Use `HeightAt` for anything placed on the ground. On top of it the build lays
+  scatter as merged meshes by district (drifts, tussocks, sticks, stones: section 7b), ice floes in the bays, and
+  the dressing's game rocks and plants. Players' eyes are only 60 cm above the ground, so what lies on the snow
+  matters more than the view from above suggests. The coast's line is `CoastFull` (points and inlets), sand lies
+  only in bays, and dense woods are planted across the trails (`Land.Woods`).
+- **How good is it?** `tools\review\README.md`: matched screenshots of both islands judged by a fresh agent. The
+  user's goal is every one of its six scores "adequately close" to the base island's.
 - **Sky:** the game copies some sky settings from its quality levels every frame (the flat cloud switch is
   one), so a value that will not stay set has to be changed in `Quality.Settings` instead. A screenshot's
   temporary camera does not move the sky: Winter Walk goes by the player's own camera, so `teleport` first.
