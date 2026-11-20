@@ -66,18 +66,20 @@ namespace Bwm
 
         // Land that our own packs add (an island in the sea): a height grid per pack, saved by the pack's build in
         // unity\Land\<Name>.land. It is read here so that site search and ground snapping treat it as ground.
-        sealed class Land { public string name; public float x0, z0, cell; public int nx, nz; public float[] h; }
+        sealed class Land { public string name; public float x0, z0, cell; public int nx, nz; public float[] h; public bool[] blocked; }
         readonly List<Land> lands = new List<Land>();
         static string LandDir => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Land"));
 
         // Heights are world heights at the (nx + 1) x (nz + 1) grid points, row by row in z; NaN where there is no land
-        public static void SaveLand(string name, float x0, float z0, float cell, int nx, int nz, float[] heights)
+        // 'blocked' (optional, same grid) marks points a puzzle must not be sited on: trees, rocks, paths, the plaza.
+        public static void SaveLand(string name, float x0, float z0, float cell, int nx, int nz, float[] heights, bool[] blocked = null)
         {
             Directory.CreateDirectory(LandDir);
             using (var w = new BinaryWriter(File.Create(Path.Combine(LandDir, name + ".land"))))
             {
                 w.Write(x0); w.Write(z0); w.Write(cell); w.Write(nx); w.Write(nz);
                 foreach (float h in heights) w.Write(h);
+                if (blocked != null) foreach (bool b in blocked) w.Write(b);
             }
         }
 
@@ -93,6 +95,11 @@ namespace Bwm
                     var l = new Land { name = name, x0 = r.ReadSingle(), z0 = r.ReadSingle(), cell = r.ReadSingle(), nx = r.ReadInt32(), nz = r.ReadInt32() };
                     l.h = new float[(l.nx + 1) * (l.nz + 1)];
                     for (int i = 0; i < l.h.Length; i++) l.h[i] = r.ReadSingle();
+                    if (r.BaseStream.Position + l.h.Length <= r.BaseStream.Length)
+                    {
+                        l.blocked = new bool[l.h.Length];
+                        for (int i = 0; i < l.h.Length; i++) l.blocked[i] = r.ReadBoolean();
+                    }
                     lands.Add(l);
                 }
             }
@@ -158,13 +165,27 @@ namespace Bwm
             return false;
         }
 
-        // Lowest and highest terrain over a rectangle; false if any of it is a hole or off the terrain
+        // Is this point of one of our lands marked as taken (trees, rocks, paths)? Used by the site search only.
+        public bool Blocked(float x, float z)
+        {
+            foreach (Land l in lands)
+            {
+                if (l.blocked == null) continue;
+                int i = Mathf.RoundToInt((x - l.x0) / l.cell), j = Mathf.RoundToInt((z - l.z0) / l.cell);
+                if (i < 0 || j < 0 || i > l.nx || j > l.nz) continue;
+                if (l.blocked[j * (l.nx + 1) + i]) return true;
+            }
+            return false;
+        }
+
+        // Lowest and highest terrain over a rectangle; false if any of it is a hole, off the terrain or blocked
         public bool Range(float cx, float cz, float hx, float hz, out float min, out float max)
         {
             min = float.MaxValue; max = float.MinValue;
             for (float z = cz - hz; z <= cz + hz + 0.01f; z += 1f)
                 for (float x = cx - hx; x <= cx + hx + 0.01f; x += 1f)
                 {
+                    if (Blocked(x, z)) return false;
                     if (!At(x, z, out float y)) return false;
                     if (y < min) min = y;
                     if (y > max) max = y;

@@ -86,6 +86,82 @@ namespace Bwm
             return mesh;
         }
 
+        // ---- scenery ----
+
+        // A snow-laden pine added to a mesh being built: a trunk and four drooping tiers. Flat-shaded, so each
+        // face takes snow by how much it faces up (the Snowy shader does that).
+        public static void AddPine(MeshBuilder mb, Vector3 foot, float height, int seed)
+        {
+            var random = new System.Random(seed * 2654435 + 11);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            float yaw = R(0f, Mathf.PI * 2f);
+            var bark = new Color(R(0.24f, 0.30f), R(0.16f, 0.20f), R(0.10f, 0.13f));
+            var needles = new Color(R(0.07f, 0.11f), R(0.24f, 0.33f), R(0.14f, 0.20f));
+            var under = needles * 0.6f; under.a = 1f;
+
+            const int sides = 6;
+            float trunkR = height * 0.035f, trunkH = height * 0.32f;
+            for (int s = 0; s < sides; s++)
+            {
+                float a0 = yaw + 2f * Mathf.PI * s / sides, a1 = yaw + 2f * Mathf.PI * (s + 1) / sides;
+                Vector3 p0 = foot + new Vector3(Mathf.Cos(a0) * trunkR, -0.3f, Mathf.Sin(a0) * trunkR), p1 = foot + new Vector3(Mathf.Cos(a1) * trunkR, -0.3f, Mathf.Sin(a1) * trunkR);
+                Vector3 up = Vector3.up * (trunkH + 0.3f);
+                mb.Quad(p0, p1, p1 + up, p0 + up, bark);
+            }
+
+            const int tiers = 4, segments = 9;
+            for (int k = 0; k < tiers; k++)
+            {
+                float baseY = height * (0.16f + 0.19f * k);
+                float tierH = height * (0.36f - 0.02f * k);
+                float radius = height * 0.27f * (1f - 0.21f * k) * R(0.92f, 1.08f);
+                Vector3 apex = foot + new Vector3(R(-0.04f, 0.04f) * height * 0.1f, baseY + tierH, R(-0.04f, 0.04f) * height * 0.1f);
+                Vector3 centre = foot + Vector3.up * (baseY + tierH * 0.12f);
+                var ring = new Vector3[segments];
+                for (int s = 0; s < segments; s++)
+                {
+                    float a = yaw + k * 0.7f + 2f * Mathf.PI * s / segments;
+                    float r = radius * R(0.86f, 1.12f);
+                    ring[s] = foot + new Vector3(Mathf.Cos(a) * r, baseY - R(0f, 0.12f) * tierH, Mathf.Sin(a) * r);
+                }
+                for (int s = 0; s < segments; s++)
+                {
+                    Vector3 a = ring[s], b2 = ring[(s + 1) % segments];
+                    mb.Tri(apex, b2, a, needles);          // the bough's upper face
+                    mb.Tri(centre, a, b2, under);          // its underside
+                }
+            }
+        }
+
+        // A boulder added to a mesh being built: a lumpy, squashed, flat-shaded ball, half sunk in the ground
+        public static void AddRock(MeshBuilder mb, Vector3 foot, Vector3 size, int seed)
+        {
+            var random = new System.Random(seed * 40503 + 7);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            float grey = R(0.34f, 0.46f);
+            var colour = new Color(grey, grey * 1.02f, grey * 1.08f);
+            float yaw = R(0f, 360f);
+            Quaternion turn = Quaternion.Euler(R(-12f, 12f), yaw, R(-12f, 12f));
+            const int rings = 5, segments = 8;
+            var points = new Vector3[(rings + 1) * segments];
+            for (int r = 0; r <= rings; r++)
+                for (int s = 0; s < segments; s++)
+                {
+                    float lat = Mathf.PI * ((float)r / rings - 0.5f), lon = 2f * Mathf.PI * s / segments;
+                    var dir = new Vector3(Mathf.Cos(lat) * Mathf.Cos(lon), Mathf.Sin(lat), Mathf.Cos(lat) * Mathf.Sin(lon));
+                    float lump = (r == 0 || r == rings) ? 1f : R(0.78f, 1.15f);
+                    points[r * segments + s] = foot + Vector3.up * size.y * 0.25f + turn * Vector3.Scale(dir * lump, size * 0.5f);
+                }
+            for (int r = 0; r < rings; r++)
+                for (int s = 0; s < segments; s++)
+                {
+                    Vector3 a = points[r * segments + s], b2 = points[r * segments + (s + 1) % segments];
+                    Vector3 c = points[(r + 1) * segments + s], d = points[(r + 1) * segments + (s + 1) % segments];
+                    mb.Tri(a, c, b2, colour);
+                    mb.Tri(b2, c, d, colour);
+                }
+        }
+
         // ---- decorations ----
 
         // A string of Christmas lights hung between posts. Each post is (local x, height of the wire there, local z);
@@ -173,6 +249,42 @@ namespace Bwm
                 new Vector3(cx - hx, height, cz + hz), new Vector3(cx - hx, height, cz), new Vector3(cx - hx, height, cz - hz),
             };
             return LightString(b, name, posts, 0.4f, 0.5f, onGround, true, seed);
+        }
+    }
+
+    // Collects flat-shaded, vertex-coloured triangles from many objects into one mesh (every triangle has its own
+    // three vertices, so each face has its own normal: the low-poly look, and what lets snow settle face by face).
+    public sealed class MeshBuilder
+    {
+        readonly List<Vector3> verts = new List<Vector3>();
+        readonly List<Color> colors = new List<Color>();
+        readonly List<int> tris = new List<int>();
+
+        public int VertexCount => verts.Count;
+
+        public void Tri(Vector3 a, Vector3 b, Vector3 c, Color color)
+        {
+            int v = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c);
+            colors.Add(color); colors.Add(color); colors.Add(color);
+            tris.Add(v); tris.Add(v + 1); tris.Add(v + 2);
+        }
+
+        public void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color color)
+        {
+            Tri(a, c, b, color);
+            Tri(a, d, c, color);
+        }
+
+        public Mesh ToMesh()
+        {
+            var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.SetVertices(verts);
+            mesh.SetColors(colors);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
     }
 }

@@ -72,6 +72,9 @@ namespace Bwm
     {
         public readonly GameObject Root;
         public readonly Ground Ground;
+
+        // Every other puzzle's remembered site as (x, z, radius), for packs that dress the land round them
+        public List<Vector3> OtherSites = new List<Vector3>();
         readonly string assetDir;      // Assets/Puzzles/<Name>
         readonly Dictionary<string, Material> materials = new Dictionary<string, Material>();
 
@@ -188,9 +191,10 @@ namespace Bwm
 
         // Declares the land this pack adds, so later builds of other puzzles can be sited on it and snap to it.
         // Heights are world heights at the (nx + 1) x (nz + 1) grid points, row by row in z; NaN where there is none.
-        public void RegisterLand(float worldX0, float worldZ0, float cell, int nx, int nz, float[] worldHeights)
+        // 'blocked' (optional, same grid) marks points no puzzle may be sited on: trees, rocks, paths.
+        public void RegisterLand(float worldX0, float worldZ0, float cell, int nx, int nz, float[] worldHeights, bool[] blocked = null)
         {
-            Ground.SaveLand(Root.name, worldX0, worldZ0, cell, nx, nz, worldHeights);
+            Ground.SaveLand(Root.name, worldX0, worldZ0, cell, nx, nz, worldHeights, blocked);
         }
 
         // Adds one of our own runtime scripts (a class in Assets/PuzzleScripts) to a piece. The SDK compiles that

@@ -269,7 +269,15 @@ namespace Bwm
             root.transform.SetPositionAndRotation(new Vector3(site.x, y, site.z), Quaternion.Euler(0f, site.yaw, 0f));
             Sdk.Set(root.AddComponent(Sdk.T("PuzzleSDK")), "puzzleType", def.PuzzleType);
 
-            def.Build(new PuzzleBuilder(root, ground, assetDir));
+            var builder = new PuzzleBuilder(root, ground, assetDir);
+            foreach (PuzzleDef other in Defs())
+            {
+                string otherFile = Path.Combine(Application.dataPath, "Puzzles", other.Name, "site.json");
+                if (other.Name == name || other.PuzzleType == 2 || !File.Exists(otherFile)) continue;
+                Site s = JsonUtility.FromJson<Site>(File.ReadAllText(otherFile));
+                builder.OtherSites.Add(new Vector3(s.x, s.z, other.Footprint.magnitude / 2f));
+            }
+            def.Build(builder);
             Debug.Log("[BWM] Built " + root.GetComponentsInChildren<Transform>(true).Length + " objects");
 
             AssetDatabase.SaveAssets();

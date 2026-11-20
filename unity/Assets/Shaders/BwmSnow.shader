@@ -16,6 +16,7 @@ Shader "BWM/Snow"
         _SparkleAmount ("Sparkle amount", Range(0, 4)) = 2.4
         _SparkleDistance ("Sparkle distance", Float) = 22
         _Rim ("Rim", Range(0, 1)) = 0.18
+        _PathColor ("Trodden path", Color) = (0.74, 0.80, 0.90, 1)
     }
 
     SubShader
@@ -34,6 +35,7 @@ Shader "BWM/Snow"
             float _SparkleAmount;
             float _SparkleDistance;
             float _Rim;
+            half4 _PathColor;
         CBUFFER_END
 
         float Hash21(float2 p)
@@ -86,6 +88,7 @@ Shader "BWM/Snow"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                half4 color : COLOR;      // red = 1 fresh snow ... 0 a trodden path (a mesh with no colours is all fresh)
             };
 
             struct Varyings
@@ -94,6 +97,7 @@ Shader "BWM/Snow"
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
                 float fogFactor : TEXCOORD2;
+                float path : TEXCOORD3;
             };
 
             Varyings Vert(Attributes v)
@@ -104,12 +108,15 @@ Shader "BWM/Snow"
                 o.positionWS = p.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 o.fogFactor = ComputeFogFactor(p.positionCS.z);
+                o.path = 1.0 - v.color.r;
                 return o;
             }
 
             half4 Frag(Varyings i) : SV_Target
             {
                 float3 positionWS = i.positionWS;
+                // Paths: a ragged-edged band of packed snow, flatter, bluer and without glints
+                float path = smoothstep(0.35, 0.65, i.path + (ValueNoise(positionWS.xz * 0.9) - 0.5) * 0.35);
                 float3 viewVector = GetWorldSpaceViewDir(positionWS);
                 float viewDistance = length(viewVector);
                 float3 v = viewVector / max(viewDistance, 1e-4);
@@ -117,7 +124,7 @@ Shader "BWM/Snow"
                 // Drift relief: tilt the normal by the slope of the drift height (finite differences)
                 float2 dp = positionWS.xz * _DriftScale;
                 float h0 = Drift(dp), hx = Drift(dp + float2(0.35, 0)), hz = Drift(dp + float2(0, 0.35));
-                float3 n = normalize(normalize(i.normalWS) + _DriftStrength * float3(h0 - hx, 0, h0 - hz));
+                float3 n = normalize(normalize(i.normalWS) + _DriftStrength * (1.0 - path * 0.85) * float3(h0 - hx, 0, h0 - hz));
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -131,7 +138,8 @@ Shader "BWM/Snow"
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
                 float3 shade = _ShadeColor.rgb * (ambient * 1.1 + 0.18);
-                float3 color = lerp(shade, _Color.rgb * sun.color, lit);
+                float3 snowColor = lerp(_Color.rgb, _PathColor.rgb, path);
+                float3 color = lerp(shade * lerp(1.0, 0.9, path), snowColor * sun.color, lit);
 
                 // Hollows between drifts are a touch bluer
                 color = lerp(color, color * float3(0.90, 0.95, 1.0), saturate(0.55 - h0));
@@ -145,13 +153,13 @@ Shader "BWM/Snow"
                     uint lightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(lightCount)
                         Light lamp = GetAdditionalLight(lightIndex, positionWS, half4(1, 1, 1, 1));
-                        color += _Color.rgb * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.7 + 0.3));
+                        color += snowColor * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.7 + 0.3));
                     LIGHT_LOOP_END
                 }
                 #endif
 
                 // Glints: each small cell of the surface has a random facet; it flashes when it mirrors the sun
-                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance);
+                float sparkleFade = saturate(1.0 - viewDistance / _SparkleDistance) * (1.0 - path);
                 if (sparkleFade > 0.0)
                 {
                     float3 scaled = positionWS * _SparkleScale;
