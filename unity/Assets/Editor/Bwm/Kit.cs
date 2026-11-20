@@ -162,6 +162,25 @@ namespace Bwm
                 }
         }
 
+        // A solid block added to a mesh being built: 'foot' is the centre of its underside, yaw turns it about that.
+        // Build a puzzle's posts, walls, roofs and plinths this way into one mesh with the Snowy shader, and snow
+        // settles on their tops by itself.
+        public static void AddBox(MeshBuilder mb, Vector3 foot, Vector3 size, Color color, float yaw = 0f)
+        {
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            float hx = size.x / 2f, hz = size.z / 2f;
+            var low = new[]
+            {
+                foot + turn * new Vector3(-hx, 0f, -hz), foot + turn * new Vector3(hx, 0f, -hz),
+                foot + turn * new Vector3(hx, 0f, hz), foot + turn * new Vector3(-hx, 0f, hz),
+            };
+            var high = new Vector3[4];
+            for (int i = 0; i < 4; i++) high[i] = low[i] + Vector3.up * size.y;
+            for (int i = 0; i < 4; i++) mb.Quad(low[i], low[(i + 1) % 4], high[(i + 1) % 4], high[i], color);
+            mb.Tri(high[0], high[3], high[2], color); mb.Tri(high[0], high[2], high[1], color);
+            mb.Tri(low[0], low[1], low[2], color); mb.Tri(low[0], low[2], low[3], color);
+        }
+
         // A flat round slab (a step, a pad, a table top) added to a mesh being built; 'foot' is the centre of its underside
         public static void AddDisc(MeshBuilder mb, Vector3 foot, float radius, float height, Color color, int segments = 24)
         {

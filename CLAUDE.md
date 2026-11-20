@@ -66,8 +66,20 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   override `Near` (a point on it), `MinDistance => 0` and `MaxDistance`; `GlassBoothPuzzle.cs` does this.
   The editor previews do not show the island (puzzles there look as if they float over the sea); use game
   screenshots.
+- The island grows pine groves and boulders and treads paths from the causeway to the plaza and from the
+  plaza to every puzzle on it, all clear of the puzzle sites, and marks that ground as taken so the site
+  search keeps new puzzles off it. So after adding or moving a puzzle, rebuild `WinterIsle` too: that is what
+  clears its trees and lays its path. `TheTreePuzzle.cs` is the gourd tower in the plaza
+  (`WinterIslePuzzle.Plaza`), one plinth per puzzle.
 - `Kit` (`Assets\Editor\Bwm\Kit.cs`) holds ready-made pieces: `Kit.LightString` / `Kit.LightRing` (Christmas
-  lights between posts; every winter site should have some), `Kit.Ball` (snowballs), `Kit.Mound` (drifts).
+  lights between posts; every winter site should have some), `Kit.Ball` (snowballs), `Kit.Mound` (drifts), and
+  flat-shaded building into a `MeshBuilder`: `Kit.AddBox` (posts, walls, roofs, plinths), `Kit.AddDisc`,
+  `Kit.AddPine`, `Kit.AddRock`, `Kit.AddStar`. Build a puzzle's structures into one `MeshBuilder`, add it with
+  `b.MeshPiece(name, mb.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"))` and move it with
+  `piece.Transform.position = b.WorldPoint(x, z)`. The Snowy shader takes the mesh's vertex colours and puts
+  snow on whatever faces up; a material with `_SnowLine` 2 never takes snow. `LightTheTreePuzzle.cs` and
+  `BellRingersPuzzle.cs` are the models for a winter puzzle; prefer this to `b.Box`, which uses the stock
+  shader and takes no snow.
 - **Loose snow** is items: `b.Item(name, mesh, material, x, z, height, mass)` makes something players can pick
   up, carry and throw. A Presence Sensor with `type` 2 (Specific Item), the items in `acceptedCustom` and
   `requiredPlayers` set to how many are needed counts the ones inside it; wire its `onPressed` to

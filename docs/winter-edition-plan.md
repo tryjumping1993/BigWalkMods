@@ -92,8 +92,12 @@ The island as built:
   search finds flat ground everywhere.
 - Sea level is height 0. Players dropped in the sea float and are not killed, so water is not a wall: puzzles
   cannot rely on the shoreline to keep players in or out.
-- Its ground uses our own snow shader (drift relief, blue shadows, glints) and it snows there. Both are first
-  versions that work in game and have had no art pass. Winter trees, rocks, ice and the sky are still to make.
+- Its ground uses our own snow shader (drift relief, blue shadows, glints) and it snows there.
+- About 340 snow-laden pines stand in groves, with boulders, all generated and all using our own snow-capped
+  shader. Packed-snow paths run from the causeway's landing to a levelled central plaza and from there to
+  every puzzle. The Tree stands in the plaza.
+- Still to make: the sky and light over the island (it sits under the game's sunny sky), ice and a frozen
+  shoreline, cabins and other buildings, and an art pass on all of it.
 
 Fallback if new land fails later: the north-west of the island, beyond the big wall near the ending (few base-game
 puzzles there), dressed with the same bespoke snow materials laid over the ground as meshes.
@@ -140,8 +144,8 @@ their head. Six puzzles below are built round a player who cannot see.
 |---|---|---|---|---|---|
 | 1 | Glass Booth | Reader in a soundproof booth points out tiles for the others to hang | Display, Peg Board, Glass, Door | No | Built |
 | 2 | Snow Bridge **S** | A gap too wide to jump; carry lumps from drifts on both banks to build the spans, and the far bank's drift can only be reached by the first span | Custom Item, Presence Sensor | Yes (spans) | Medium |
-| 3 | Light the Tree | Lamps on a tree light in turn; press the matching button before it moves on | Press In Order, Light, Hold Button, Progress Bar | No | Low |
-| 4 | Bell Ringers | Bells far apart must be rung within the same second | Sim Press Switch, Light | No | Low |
+| 3 | Light the Tree | Six posts ring a tree; one lamp lights at a time and its button must be pressed, but each button's lamp is on the far side, so the others must call it | Press In Order, Light, Poke Button, Progress Bar | No | Built |
+| 4 | Bell Ringers | Bell stands far apart, each with a lever; all must be pulled within about a second. A fourth stand appears for four or more players | Sim Press Switch, Hider | No | Built |
 | 5 | Hold the Star | Everyone holds a button at once to raise the star; one must let go to fetch the gourd | N-Hold Button, Box | No | Low |
 | 6 | Reindeer Count | Count reindeer cut-outs scattered on a hillside from two lookouts that each see some | Count Input, Count Validator, Telescope | Yes (sets the answer) | Medium |
 | 7 | Bauble Hunt | Coloured baubles buried in drifts go on a round board | Circle Peg, Circle Peg Board | No | Low |
@@ -162,7 +166,11 @@ their head. Six puzzles below are built round a player who cannot see.
 | 22 | Snowball Range **B S** | A masked thrower, aimed by voice, must put snowballs through the hoops the spotter calls | Custom Item, Presence Sensor, Light, blind mask gate | Yes (hit order) | Medium |
 | 23 | Advent Trail | 24 numbered signs across the whole island; a final board asks about them | Sign, Peg Tile, Peg Board | No | Low (but needs every other site placed first) |
 | 24 | Midnight Finale | With every ornament on the tree, everyone triggers the fireworks together | Firework Launcher, Sim Press Switch, Light | Yes | Medium (the launcher has a known particle bug) |
-| T | The Tree | The modded gourd tower as a Christmas tree; each won puzzle adds an ornament | Gourd Plinth x24, Tower Button | No | Medium |
+| T | The Tree | The modded gourd tower as a Christmas tree; each won puzzle adds an ornament | Gourd Plinth x24, Tower Button | No | Built |
+
+Built so far (2026-11-20): 1, 3, 4, The Tree, and a first version of 14. "Built" means it loads in the game,
+starts, and looks right in screenshots; none has been played, and the levers, buttons and lamps have not
+been operated by a player.
 
 Eleven need no custom code. Blind mask: 9, 11, 15, 18, 21, 22. Snow building: 2, 14, 15, 22 (and 7 uses the
 drifts). Each blind-mask puzzle has to be safe for someone who cannot see: railings or soft resets, never a
