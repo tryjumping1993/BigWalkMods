@@ -162,6 +162,38 @@ namespace Bwm
                 }
         }
 
+        // A flat round slab (a step, a pad, a table top) added to a mesh being built; 'foot' is the centre of its underside
+        public static void AddDisc(MeshBuilder mb, Vector3 foot, float radius, float height, Color color, int segments = 24)
+        {
+            Vector3 top = foot + Vector3.up * height;
+            for (int s = 0; s < segments; s++)
+            {
+                float a0 = 2f * Mathf.PI * s / segments, a1 = 2f * Mathf.PI * (s + 1) / segments;
+                var d0 = new Vector3(Mathf.Cos(a0) * radius, 0f, Mathf.Sin(a0) * radius);
+                var d1 = new Vector3(Mathf.Cos(a1) * radius, 0f, Mathf.Sin(a1) * radius);
+                mb.Tri(top, top + d1, top + d0, color);
+                mb.Quad(foot + d0, foot + d1, top + d1, top + d0, color);
+            }
+        }
+
+        // A five-pointed star standing upright, facing along z (a tree-topper)
+        public static void AddStar(MeshBuilder mb, Vector3 centre, float radius, float thickness, Color color)
+        {
+            var rim = new Vector3[10];
+            for (int i = 0; i < 10; i++)
+            {
+                float a = Mathf.PI * 0.5f + 2f * Mathf.PI * i / 10f, r = i % 2 == 0 ? radius : radius * 0.42f;
+                rim[i] = centre + new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0f);
+            }
+            Vector3 front = centre + Vector3.back * thickness, back = centre + Vector3.forward * thickness;
+            for (int i = 0; i < 10; i++)
+            {
+                Vector3 a = rim[i], c = rim[(i + 1) % 10];
+                mb.Tri(front, a, c, color);
+                mb.Tri(back, c, a, color * 0.85f);
+            }
+        }
+
         // ---- decorations ----
 
         // A string of Christmas lights hung between posts. Each post is (local x, height of the wire there, local z);

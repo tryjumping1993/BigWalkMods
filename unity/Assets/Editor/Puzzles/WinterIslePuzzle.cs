@@ -23,6 +23,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     static readonly Vector2 ShorePoint = new Vector2(-468f, -700f);     // where the causeway meets the mainland
     public static readonly Vector2 Plaza = new Vector2(-705f, -795f);   // the open middle, where The Tree stands
     public const float PlazaRadius = 24f;
+    const float PlazaHeight = 8.5f;                                       // one of the island's shelves (they are 2 m apart from 0.5)
 
     public override Vector2 Footprint => new Vector2(X1 - X0, Z1 - Z0);
     public override Vector2? FixedSite => new Vector2((X0 + X1) / 2f, (Z0 + Z1) / 2f);
@@ -157,6 +158,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 {
                     float hills = 2f + 12f * Mathf.PerlinNoise(x * 0.004f + 40.2f, z * 0.004f + 17.9f) + 1.5f * Mathf.PerlinNoise(x * 0.015f + 9.1f, z * 0.015f + 61.4f);
                     y = 0.5f + Terrace(Smooth(inside / 70f) * hills);
+                    float toPlaza = (new Vector2(x, z) - Plaza).magnitude;
+                    if (toPlaza < PlazaRadius + 16f) y = Mathf.Lerp(PlazaHeight, y, Smooth((toPlaza - PlazaRadius) / 16f));
                 }
                 height[j * (nx + 1) + i] = y;
                 land[j * (nx + 1) + i] = !float.IsNaN(y) && y > 0.2f ? y : float.NaN;
