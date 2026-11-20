@@ -16,8 +16,8 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
 | `build-all` / `list` | All puzzle definitions. |
 | `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save. Unattended, about 80 s. |
-| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `quit`; `game help` lists all. |
-| `companion` | Rebuilds the companion plugin (the game must be closed). |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `quit`; `game help` lists all. |
+| `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
@@ -33,6 +33,9 @@ code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-N
   `site.json`, materials), `Assets\BigPuzzleSDK\` is the imported SDK (do not edit).
 - `companion\` — the test companion, a BepInEx plugin serving http://127.0.0.1:17361 inside the game.
   Dev profile only; it must never ship with a puzzle.
+- `winterwalk\` — Winter Walk, the edition's own BepInEx plugin, which every player needs. It gives the island
+  its sky and light: near the island's box (kept in step with `WinterIslePuzzle.cs` by hand) it blends the
+  game's sky system (Enviro) towards winter for that player, and back on the mainland.
 - `profile\` — the mod profile: BepInEx 6.0.788 (IL2CPP), the SDK mod, the companion and dev helpers
   (UnityExplorer hidden at startup, NoClip, SkipIntro). Builds export to `profile\BepInEx\plugins\BigPuzzleSDK\`.
 - `previews\<Name>-*.png` — editor renders of the last build. `shots\*.png` — screenshots from the real game.
@@ -66,6 +69,13 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   override `Near` (a point on it), `MinDistance => 0` and `MaxDistance`; `GlassBoothPuzzle.cs` does this.
   The editor previews do not show the island (puzzles there look as if they float over the sea); use game
   screenshots.
+- The island's terrain is low shelves in the east and middle, a 73 m mountain in the west with two lower
+  peaks, a ravine and a frozen lake (`Peaks`, `Lake` and the ravine constants in `WinterIslePuzzle.cs`). Its
+  build levels every island puzzle's site, so a puzzle can be sited on a slope, and prints how much level
+  ground is left.
+- **Sky:** the game copies some sky settings from its quality levels every frame (the flat cloud switch is
+  one), so a value that will not stay set has to be changed in `Quality.Settings` instead. A screenshot's
+  temporary camera does not move the sky: Winter Walk goes by the player's own camera, so `teleport` first.
 - The island grows pine groves and boulders and treads paths from the causeway to the plaza and from the
   plaza to every puzzle on it, all clear of the puzzle sites, and marks that ground as taken so the site
   search keeps new puzzles off it. So after adding or moving a puzzle, rebuild `WinterIsle` too: that is what

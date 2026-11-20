@@ -51,8 +51,9 @@ Measured from the game's own world (`world\world-index.tsv`):
 4. **Snow on everything that is not terrain.** Paths stay red-brown, grass and shrubs stay orange, trees olive,
    rocks brown. Each needs its own treatment (tint, texture swap, or hiding).
 5. **Falling snow, cold light, fog.** Falling snow is answered 2026-11-20: our own particle effect and flake
-   shader follow each player's camera over the island (`shots\snowfall-player.png`). The sky over the island is
-   still the game's sunny one; an overcast winter sky and light through the game's sky system is not started.
+   shader follow each player's camera over the island (`shots\snowfall-player.png`). Sky and light are answered
+   too: the Winter Walk plugin (`winterwalk\`) blends the game's sky system towards winter for each player as
+   they near the island (`shots\sky-isle-day.png`, `-dusk`, `-night`, `sky-partway.png`, `sky-mainland.png`).
 6. **Multiplayer.** Nothing has been played by two people. State sync is the SDK's job, but untested here.
 7. **Installing on a friend's PC.** No packaging script yet; nobody else has installed any of this.
 8. **Walking on new land.** Standing is proven on the full-size island; nobody has walked the causeway or the
@@ -88,16 +89,23 @@ The island as built:
   game's puzzle area. Land past the square's edge also held a player in a test, so the island can grow west or
   south later if the 24 puzzles need more room.
 - The causeway lands on the mainland shore at about (-468, -700), roughly 290 m from the spawn rooms.
-- Inland it is terraced: level shelves 2 m apart joined by gentle ramps, up to 14 m above the sea, so the site
-  search finds flat ground everywhere.
+- Its terrain is varied. The east and middle are low shelves 2 m apart joined by gentle ramps, where most
+  puzzles sit. A mountain rises in the west to 73 m in cliff bands, with two lower peaks north and south, a
+  ravine 9 m deep north of the plaza and a frozen lake in the south-west. About a quarter of the land is level
+  enough to build on; steep ground shows bare rock. Every puzzle site is levelled, and paths are routed around
+  slopes too steep to walk.
 - Sea level is height 0. Players dropped in the sea float and are not killed, so water is not a wall: puzzles
   cannot rely on the shoreline to keep players in or out.
 - Its ground uses our own snow shader (drift relief, blue shadows, glints) and it snows there.
 - About 340 snow-laden pines stand in groves, with boulders, all generated and all using our own snow-capped
   shader. Packed-snow paths run from the causeway's landing to a levelled central plaza and from there to
   every puzzle. The Tree stands in the plaza.
-- Still to make: the sky and light over the island (it sits under the game's sunny sky), ice and a frozen
-  shoreline, cabins and other buildings, and an art pass on all of it.
+- Sky and light: within about 170 m of the island each player's sky turns paler with haze on the horizon, a
+  softer sun, brighter light from the sky and a thin layer of high cloud, fading back to the game's own on the
+  mainland. This is the Winter Walk plugin, which every player needs; without it the island still works under
+  the game's sunny sky. Its config has an off switch (`WinterSky`).
+- Still to make: a frozen shoreline, cabins and other buildings, puzzles up on the mountain, and an art pass
+  on all of it.
 
 Fallback if new land fails later: the north-west of the island, beyond the big wall near the ending (few base-game
 puzzles there), dressed with the same bespoke snow materials laid over the ground as meshes.

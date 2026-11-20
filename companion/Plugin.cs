@@ -176,7 +176,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | get?path=Type.member... | set?path=...&value=v | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -195,6 +195,8 @@ namespace BwmCompanion
                 case "terrainset": yield return TerrainSet(r); break;
                 case "snowtest": yield return SnowTest(r); break;
                 case "move": yield return Move(r); break;
+                case "get": yield return Inspect(r, false); break;
+                case "set": yield return Inspect(r, true); break;
                 case "quit": Application.Quit(); yield return "quitting"; break;
                 case "shot": { IEnumerator<string> e = Shot(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "host": { IEnumerator<string> e = Host.Run(r); while (e.MoveNext()) yield return e.Current; break; }
@@ -491,6 +493,73 @@ namespace BwmCompanion
             best.position = target;
             if (body != null) { body.position = target; body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; }
             return "moved " + PathOf(best) + " from " + from + " to " + V(target) + (body != null ? " (rigidbody)" : " (no rigidbody)");
+        }
+
+        // For exploring the game's own objects: /get?path=Type.Full.Name.member.member lists what is there,
+        // /set?path=...&value=v changes a number, bool, enum or colour (r,g,b,a). The path starts at a type and
+        // walks static then instance members, e.g. Enviro.EnviroManager.instance.Fog.Settings
+        static string Inspect(Request r, bool write)
+        {
+            string[] parts = r.Str("path", "").Split('.');
+            Type type = null;
+            int used = 0;
+            for (int n = parts.Length; n > 0 && type == null; n--)
+            {
+                string name = string.Join(".", parts, 0, n);
+                type = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(name)).FirstOrDefault(x => x != null);
+                used = n;
+            }
+            if (type == null) return "ERROR no type at the start of '" + r.Str("path") + "'";
+            object current = null;
+            Type currentType = type;
+            for (int i = used; i < parts.Length; i++)
+            {
+                bool last = i == parts.Length - 1;
+                PropertyInfo prop = currentType.GetProperty(parts[i], Any | BindingFlags.FlattenHierarchy);
+                FieldInfo field = prop == null ? currentType.GetField(parts[i], Any | BindingFlags.FlattenHierarchy) : null;
+                if (prop == null && field == null) return "ERROR " + currentType.Name + " has no member '" + parts[i] + "'";
+                if (write && last)
+                {
+                    Type target = prop != null ? prop.PropertyType : field.FieldType;
+                    string text = r.Str("value", "");
+                    object value;
+                    if (target == typeof(float)) value = float.Parse(text, CultureInfo.InvariantCulture);
+                    else if (target == typeof(int)) value = int.Parse(text, CultureInfo.InvariantCulture);
+                    else if (target == typeof(bool)) value = text == "1" || text == "true";
+                    else if (target.IsEnum) value = Enum.Parse(target, text, true);
+                    else if (target == typeof(Color))
+                    {
+                        string[] c = text.Split(',');
+                        value = new Color(float.Parse(c[0], CultureInfo.InvariantCulture), float.Parse(c[1], CultureInfo.InvariantCulture), float.Parse(c[2], CultureInfo.InvariantCulture), c.Length > 3 ? float.Parse(c[3], CultureInfo.InvariantCulture) : 1f);
+                    }
+                    else return "ERROR cannot set a " + target.Name;
+                    if (prop != null) prop.SetValue(current, value); else field.SetValue(current, value);
+                    return "set " + parts[i] + " = " + value;
+                }
+                current = prop != null ? prop.GetValue(current) : field.GetValue(current);
+                if (current == null) return string.Join(".", parts, 0, i + 1) + " is null";
+                currentType = current.GetType();
+            }
+            if (current == null) return "type " + type.FullName + ": static members " + string.Join(", ", type.GetProperties(BindingFlags.Public | BindingFlags.Static).Select(x => x.Name));
+            if (currentType.IsPrimitive || currentType.IsEnum || currentType == typeof(string) || currentType == typeof(Color) || currentType == typeof(Vector3) || currentType == typeof(Vector2))
+                return currentType.Name + " = " + current;
+            var sb = new StringBuilder();
+            sb.AppendLine(currentType.FullName);
+            string[] skip = { "Pointer", "ObjectClass", "WasCollected", "hideFlags", "name" };
+            foreach (PropertyInfo prop in currentType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (prop.GetIndexParameters().Length > 0 || skip.Contains(prop.Name) || prop.Name.StartsWith("NativeFieldInfoPtr") || prop.Name.StartsWith("NativeMethodInfoPtr")) continue;
+                string shown;
+                try
+                {
+                    object v = prop.GetValue(current);
+                    Type pt = prop.PropertyType;
+                    shown = v == null ? "null" : (pt.IsPrimitive || pt.IsEnum || pt == typeof(string) || pt == typeof(Color) || pt == typeof(Vector3) || pt == typeof(Vector2)) ? v.ToString() : "<" + pt.Name + ">";
+                }
+                catch (Exception e) { shown = "(" + e.GetType().Name + ")"; }
+                sb.AppendLine("  " + prop.Name + " = " + shown);
+            }
+            return sb.ToString();
         }
 
         // ---- looking ----

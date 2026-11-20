@@ -72,6 +72,9 @@ switch ($Command) {
         # Builds the test companion plugin into the profile. The game must be closed (Windows locks a loaded DLL).
         if (Get-Process 'Big Walk' -ErrorAction SilentlyContinue) { Write-Output 'Close Big Walk first (bwm.ps1 game quit).'; exit 2 }
         & 'C:\Program Files\dotnet\dotnet.exe' build (Join-Path $Repo 'companion') -c Release -nologo -v q
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        # ...and Winter Walk, the edition's own plugin (sky and light), which every player needs
+        & 'C:\Program Files\dotnet\dotnet.exe' build (Join-Path $Repo 'winterwalk') -c Release -nologo -v q
         exit $LASTEXITCODE
     }
     'play' {
