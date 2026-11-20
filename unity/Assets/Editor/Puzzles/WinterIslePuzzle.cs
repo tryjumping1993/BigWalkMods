@@ -130,6 +130,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
         return ski * Mathf.Max(open * (1f - Rib(p)), best);
     }
     // The middle of run 0, 1 or 2 at a distance from the peak, and its half-width there (the same sums as Piste)
+    // The finish arch at the foot of the middle run: its middle, the way the run goes there, and the run's half-width
+    public static Vector2 PisteFinish(out Vector2 direction, out float half)
+    {
+        Vector2 mid = RunCentre(1, SkiRadius - 110f, out half);
+        direction = (RunCentre(1, SkiRadius - 104f, out _) - mid).normalized;
+        return mid;
+    }
     public static Vector2 RunCentre(int run, float along, out float half)
     {
         float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f) + 0.13f * Mathf.Sin(along / (150f + run * 37f) + run * 2.1f) * Smooth((along - 300f) / 200f);

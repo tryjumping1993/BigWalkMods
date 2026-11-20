@@ -91,6 +91,19 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   search keeps new puzzles off it. So after adding or moving a puzzle, rebuild `WinterIsle` too: that is what
   clears its trees and lays its path. `TheTreePuzzle.cs` is the gourd tower in the plaza
   (`WinterIslePuzzle.Plaza`), one plinth per puzzle.
+- **The mine** (`WinterIsleMine.cs`, built by the island's pack): a hall under the summit at 30 m above the sea,
+  three level tunnels out to portals (east, north-west, south), cross-cuts, a closed double track and eight
+  mantrips. Its light is baked into vertex colours (shader `BWM/Mine` takes no sun or sky), so change lamps in
+  the builder, not with lights. `winterwalk\MineDriver.cs` runs the mantrips from the network clock and opens the
+  gates; `game 'set?path=WinterWalk.MineDriver.ForceOpen&value=true'` opens it for testing, as
+  `GondolaDriver.ForceOpen` does the gondola. The island's ground is left out over each portal's open cut
+  (`WinterIsleMine.InCut`). The build writes `unity\Land\WinterIsle.mine`, which The Tree reads to place the mine
+  tower, so build WinterIsle before TheTree.
+- **Towers:** the SDK supports one tower button list, and shows one plinth per puzzle loaded, first in the list
+  first. The Tree's list is its own five plinths (the gondola), then the mine tower's five (the mine), then the
+  summit's twenty; the mine tower and the summit have their own hold buttons wired to `HoldToOpen`. So the mine
+  opens only once ten puzzles exist. The SDK's plinths take only modded gourds, which is how "island gourds
+  only" holds. An idle player falls asleep (red, then dark screen): keep that in mind when a test sits still.
 - `Kit` (`Assets\Editor\Bwm\Kit.cs`) holds ready-made pieces: `Kit.LightString` / `Kit.LightRing` (Christmas
   lights between posts; every winter site should have some), `Kit.Ball` (snowballs), `Kit.Mound` (drifts), and
   flat-shaded building into a `MeshBuilder`: `Kit.AddBox` (posts, walls, roofs, plinths), `Kit.AddDisc`,

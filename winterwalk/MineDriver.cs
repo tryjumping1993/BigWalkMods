@@ -142,7 +142,7 @@ namespace WinterWalk
                     if (plinth != null) plinths.Add(plinth);
                 }
             }
-            if (plinths.Count < 5) { State = "waiting: the mine tower's plinths are not loaded (" + plinths.Count + " of 5)"; return false; }
+            if (plinths.Count < 5) { State = "waiting: the mine tower shows " + plinths.Count + " of 5 plinths (the tower shows one plinth per puzzle loaded, The Tree's five first, so the mine needs ten puzzles)"; return false; }
             int filled = 0;
             foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in plinths)
                 if (plinth != null && plinth.HasGourd) filled++;
