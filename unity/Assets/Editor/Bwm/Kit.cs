@@ -234,11 +234,28 @@ namespace Bwm
         {
             var random = new System.Random(seed * 92821 + 5);
             float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
-            float tall = R(1.5f, 2.1f), yaw = R(0f, 360f);
-            var wood = new Color(R(0.36f, 0.44f), R(0.27f, 0.32f), R(0.18f, 0.22f));
-            var paint = random.Next(3) == 0 ? new Color(0.9f, 0.75f, 0.15f) : new Color(0.78f, 0.12f, 0.1f);
-            AddBox(mb, foot + Vector3.down * 0.3f, new Vector3(0.07f, tall * 0.72f + 0.3f, 0.07f), wood, yaw);
-            AddBox(mb, foot + Vector3.up * (tall * 0.72f), new Vector3(0.075f, tall * 0.28f, 0.075f), paint, yaw);
+            float tall = R(1.5f, 2.1f), spin = R(0f, 6.28f), radius = 0.04f;
+            var wood = new Color(R(0.42f, 0.5f), R(0.31f, 0.37f), R(0.2f, 0.25f));
+            Color paint = random.Next(3) == 0 ? new Color(0.92f, 0.76f, 0.14f) : new Color(0.8f, 0.12f, 0.1f), white = new Color(0.93f, 0.92f, 0.88f);
+            // a round post (six sides), tapering a little, its top third painted in bands so it shows against snow
+            float[] levels = { -0.3f, tall * 0.62f, tall * 0.72f, tall * 0.8f, tall * 0.9f, tall };
+            Color[] bands = { wood, paint, white, paint, white };
+            for (int level = 0; level + 1 < levels.Length; level++)
+                for (int sd = 0; sd < 6; sd++)
+                {
+                    float a0 = spin + sd * Mathf.PI / 3f, a1 = spin + (sd + 1) * Mathf.PI / 3f;
+                    float r0 = radius * (1f - 0.25f * Mathf.Clamp01(levels[level] / tall)), r1 = radius * (1f - 0.25f * Mathf.Clamp01(levels[level + 1] / tall));
+                    Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
+                    mb.Quad(foot + Vector3.up * levels[level] + d0 * r0, foot + Vector3.up * levels[level] + d1 * r0,
+                        foot + Vector3.up * levels[level + 1] + d1 * r1, foot + Vector3.up * levels[level + 1] + d0 * r1, bands[level]);
+                }
+            // a little cap, which takes the snow
+            Vector3 top = foot + Vector3.up * tall;
+            for (int sd = 0; sd < 6; sd++)
+            {
+                float a0 = spin + sd * Mathf.PI / 3f, a1 = spin + (sd + 1) * Mathf.PI / 3f;
+                mb.Tri(top + Vector3.up * 0.03f, top + new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1)) * radius * 0.75f, top + new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)) * radius * 0.75f, white);
+            }
         }
 
         // A small round ball (a bauble) added to a mesh being built, flat-shaded
@@ -328,7 +345,7 @@ namespace Bwm
 
             // trunk: a tapering eight-sided column, bark-marked
             float trunkR = height * 0.022f + 0.06f;
-            const int sides = 8;
+            const int sides = 12;
             var bark = new Color(1f, 1f, 1f, 1f);
             for (int s = 0; s < sides; s++)
             {
@@ -355,7 +372,8 @@ namespace Bwm
             }
 
             // whorls of fronds, longest at the bottom; each frond droops and curves down towards its tip
-            float first = height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.34f, 0.54f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
+            // (on a grown tree the boughs start above the head of a walker 70 cm tall, who can then pass under them)
+            float first = height > 5f ? Mathf.Max(height * R(0.12f, 0.2f), R(1.25f, 1.7f)) : height * R(0.10f, 0.18f), spacing = Mathf.Lerp(0.34f, 0.54f, (height - 4f) / 10f) / Mathf.Max(detail, 0.2f);
             int whorl = 0;
             for (float y = first; y < height * 0.96f; y += spacing * R(0.85f, 1.15f), whorl++)
             {

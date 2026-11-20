@@ -147,13 +147,36 @@ public sealed class WinterIslePuzzle : PuzzleDef
         return CoastBroad(p) + points - inlets * inlets * 70f;
     }
 
+    // Deep coves bitten out of the coast, each with a beach round its head, and a bar of sand out to an islet
+    // (chosen by the build, where the coast is low and nothing else is)
+    static readonly List<(Vector2 at, float radius)> coveList = new List<(Vector2, float)>();
+    static readonly List<(Vector2 from, Vector2 to)> barList = new List<(Vector2, Vector2)>();
+    static float ToBar(Vector2 p, Vector2 a, Vector2 b)
+    {
+        Vector2 ab = b - a;
+        float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 1e-4f));
+        return (p - (a + ab * t)).magnitude;
+    }
+
     // How much of a sandy cove a point of coast is: sand gathers in the bays (where the coast is pushed in), in
     // stretches a slow noise picks, away from the high ground. The points between the bays are rock.
     static float BeachAmount(Vector2 p)
     {
-        float b = Smooth((Mathf.PerlinNoise(p.x * 0.0075f + 61.1f, p.y * 0.0075f + 3.7f) - 0.46f) / 0.1f);
-        float bay = Smooth((-CoastFull(p) - 4f) / 22f);
-        return b * bay * (1f - Smooth(RidgeHeight(p) / 10f));
+        float b = Smooth((Mathf.PerlinNoise(p.x * 0.0075f + 61.1f, p.y * 0.0075f + 3.7f) - 0.4f) / 0.1f);
+        float bay = Smooth((-CoastFull(p) - 1f) / 20f);
+        float sand = b * bay;
+        foreach (var cove in coveList)
+        {
+            float d = (p - cove.at).magnitude;
+            if (d < cove.radius + 60f) sand = Mathf.Max(sand, 1f - Smooth((d - cove.radius - 10f) / 45f));
+        }
+        sand *= (1f - Smooth(RidgeHeight(p) / 10f)) * Smooth(((p - Lake).magnitude - LakeRadius - 25f) / 40f);      // (the lake's shore is snow, not sand)
+        foreach (var bar in barList)
+        {
+            float d = ToBar(p, bar.from, bar.to);
+            if (d < 40f) sand = Mathf.Max(sand, 1f - Smooth((d - 12f) / 24f));
+        }
+        return sand;
     }
 
     // Height above sea level at a point 'inside' metres in from the coastline, before any levelling
@@ -371,6 +394,32 @@ public sealed class WinterIslePuzzle : PuzzleDef
             inside[k] = Mathf.Min(Mathf.Min(toMainland, toEdge) + coves, rim);
             offMainland[k] = Mathf.Min(toMainland, toGrid - 45f);
         }
+        // Coves: three or four round bays bitten out of low coast well away from everything, so the island's outline
+        // is not an oval; BeachAmount puts sand round the head of each
+        coveList.Clear();
+        barList.Clear();
+        var coveRandom = new System.Random(808);
+        for (int tries = 0; tries < 60000 && coveList.Count < 4; tries++)
+        {
+            int k = coveRandom.Next(count);
+            if (Mathf.Abs(inside[k]) > 4f || offMainland[k] < 160f) continue;
+            Vector2 p = At(k);
+            if (Mathf.Min(Mathf.Min(p.x - X0, X1 - p.x), Mathf.Min(p.y - Z0, Z1 - p.y)) < 150f || Guard(p) < 230f || RidgeHeight(p) > 10f) continue;
+            bool apart = true;
+            foreach (var other in coveList) if ((other.at - p).magnitude < 430f) apart = false;
+            if (apart) coveList.Add((p, 85f + (float)coveRandom.NextDouble() * 45f));
+        }
+        for (int k = 0; k < count; k++)
+        {
+            Vector2 p = At(k);
+            foreach (var cove in coveList)
+            {
+                Vector2 d = p - cove.at;
+                if (d.magnitude > cove.radius * 1.3f) continue;
+                float r = cove.radius * (1f + 0.12f * Mathf.Sin(Mathf.Atan2(d.y, d.x) * 3f + cove.at.x) + 0.06f * Mathf.Sin(Mathf.Atan2(d.y, d.x) * 7f + cove.at.y));
+                inside[k] = Mathf.Min(inside[k], d.magnitude - r);
+            }
+        }
         // Islets: a few small rocky ones standing off the coast, clear of the channel and of each other
         var islets = new List<(Vector2 at, float radius)>();
         var isletRandom = new System.Random(4242);
@@ -383,6 +432,27 @@ public sealed class WinterIslePuzzle : PuzzleDef
             bool apart = true;
             foreach (var other in islets) if ((other.at - p).magnitude < 190f) apart = false;
             if (apart) islets.Add((p, radius));
+        }
+        // A bar: the islet nearest the shore is joined to it by a low spit of sand (as the base island's two halves are)
+        {
+            float nearest = float.MaxValue; Vector2 barFrom = Vector2.zero, barTo = Vector2.zero;
+            foreach (var islet in islets)
+                for (int k = 0; k < count; k++)
+                {
+                    if (inside[k] < 2f || inside[k] > 8f) continue;
+                    float d = (At(k) - islet.at).magnitude;
+                    if (d < nearest && d > islet.radius + 35f) { nearest = d; barFrom = islet.at; barTo = At(k); }
+                }
+            if (nearest < 170f)
+            {
+                barList.Add((barFrom, barTo + (barTo - barFrom).normalized * 12f));
+                for (int k = 0; k < count; k++)
+                {
+                    Vector2 p = At(k);
+                    float d = ToBar(p, barFrom, barTo);
+                    if (d < 30f) inside[k] = Mathf.Max(inside[k], 9f + 3f * Mathf.PerlinNoise(p.x * 0.05f, p.y * 0.05f) - d);
+                }
+            }
         }
         var height = new float[count];
         var beach = new float[count];
@@ -774,6 +844,27 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     bareUnder[k] = Mathf.Max(bareUnder[k], 1f - Smooth((d - cover.radius * 0.6f) / 2.5f));
                 }
         }
+        // ...and two more, carried in the mesh's texture coordinates: needle litter under our conifers (x), scree at a
+        // rock's foot (y)
+        var under = new Vector2[count];
+        void Spot(List<(Vector2 at, float radius)> list, bool needles)
+        {
+            foreach (var spot in list)
+            {
+                int r = Mathf.CeilToInt((spot.radius + 1.5f) / Cell), centre = Cell_(spot.at);
+                for (int oj = -r; oj <= r; oj++)
+                    for (int oi = -r; oi <= r; oi++)
+                    {
+                        int i = centre % row + oi, j = centre / row + oj;
+                        if (i < 0 || j < 0 || i > nx || j > nz) continue;
+                        float amount = 1f - Smooth((new Vector2(oi, oj).magnitude * Cell - spot.radius * 0.6f) / 2.5f);
+                        int k = j * row + i;
+                        under[k] = needles ? new Vector2(Mathf.Max(under[k].x, amount), under[k].y) : new Vector2(under[k].x, Mathf.Max(under[k].y, amount));
+                    }
+            }
+        }
+        Spot(WinterIsleDressing.Needles, true);
+        Spot(WinterIsleDressing.Scree, false);
         var tint = new Color[count];
         var land = new float[count];
         float top = float.MinValue; Vector2 topAt = Vector2.zero;
@@ -797,7 +888,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float bare = Mathf.Clamp01(Mathf.Clamp01((slope - 0.45f) * 1.2f) * 0.3f + Mathf.Clamp01(convex * 0.15f) + heath + bareUnder[k] * 0.8f + shoreline) * (1f - trodden[k]);
             float worn = trodden[k] * Smooth((Mathf.PerlinNoise(p.x * 0.08f + 3.1f, p.y * 0.08f + 7.3f) - 0.4f) / 0.3f) * 0.6f;      // trodden through to the ground in places
             bare = Mathf.Max(bare, worn);
-            float sand = beach[k] * (1f - Smooth((height[k] - 0.7f) / 1.5f));
+            float sand = beach[k] * (1f - Smooth((height[k] - 0.4f) / 0.8f));      // a strip by the water; above it the beach lies under snow
             tint[k] = new Color(1f - trodden[k], bare, sand, Mathf.Clamp01(0.5f + convex * 0.11f));      // alpha: hollow (0) .. crest (1)
         }
         bool Whole(int i, int j) { int k = j * row + i; return !float.IsNaN(height[k]) && !float.IsNaN(height[k + 1]) && !float.IsNaN(height[k + row]) && !float.IsNaN(height[k + row + 1]); }
@@ -828,7 +919,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             var p = new Vector2(X0 + fi * Cell / Sub, Z0 + fj * Cell / Sub);
             fineIndex[f] = verts.Count;
             verts.Add(new Vector3(p.x - root.x, HeightIn(ci, cj, tx, tz) - root.y, p.y - root.z));
-            uvs.Add(new Vector2(p.x / 8f, p.y / 8f));
+            uvs.Add(Vector2.Lerp(Vector2.Lerp(under[k], under[k + 1], tx), Vector2.Lerp(under[k + row], under[k + row + 1], tx), tz));
             colors.Add(Color.Lerp(Color.Lerp(tint[k], tint[k + 1], tx), Color.Lerp(tint[k + row], tint[k + row + 1], tx), tz));
             return fineIndex[f];
         }
@@ -906,6 +997,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             int Region(Vector2 p) => Mathf.Clamp((int)((p.y - Z0) / 290f), 0, 9) * 16 + Mathf.Clamp((int)((p.x - X0) / 290f), 0, 15);
             var lumpVerts = new Dictionary<int, List<Vector3>>();
             var lumpTris = new Dictionary<int, List<int>>();
+            var lumpRims = new Dictionary<int, List<int>>();      // each drift's outer ring: its normals are the ground's, so no seam shows
             var litter = new Dictionary<int, MeshBuilder>();
             var grass = new Dictionary<int, MeshBuilder>();
             Vector3 On(Vector2 p, float lift) => new Vector3(p.x - root.x, HeightAt(p) + lift - root.y, p.y - root.z);
@@ -913,15 +1005,15 @@ public sealed class WinterIslePuzzle : PuzzleDef
             int lumps = 0, tufts = 0, sticks = 0, stones = 0;
             var straw = new Color(0.86f, 0.74f, 0.42f); var dryStraw = new Color(0.6f, 0.5f, 0.28f);
             var wood = new Color(0.25f, 0.18f, 0.12f); var granite = new Color(0.43f, 0.38f, 0.33f);
-            void Stick(MeshBuilder mb, Vector3 from, Vector3 to, float thick)
+            void Stick(MeshBuilder mb, Vector3 from, Vector3 to, float thick)      // a round stick (five sides), tapering
             {
                 Vector3 dir = (to - from).normalized;
                 Vector3 u = Vector3.Cross(dir, Mathf.Abs(dir.y) > 0.9f ? Vector3.right : Vector3.up).normalized, v = Vector3.Cross(u, dir);
-                for (int sd = 0; sd < 3; sd++)
+                for (int sd = 0; sd < 5; sd++)
                 {
-                    float t0 = 2f * Mathf.PI * sd / 3f + Mathf.PI / 6f, t1 = 2f * Mathf.PI * (sd + 1) / 3f + Mathf.PI / 6f;
+                    float t0 = 2f * Mathf.PI * sd / 5f + Mathf.PI * 0.3f, t1 = 2f * Mathf.PI * (sd + 1) / 5f + Mathf.PI * 0.3f;
                     Vector3 d0 = u * Mathf.Cos(t0) + v * Mathf.Sin(t0), d1 = u * Mathf.Cos(t1) + v * Mathf.Sin(t1);
-                    mb.Quad(from + d0 * thick, from + d1 * thick, to + d1 * thick * 0.55f, to + d0 * thick * 0.55f, wood);
+                    mb.Quad(from + d0 * thick, from + d1 * thick, to + d1 * thick * 0.55f, to + d0 * thick * 0.55f, wood * Rs(0.85f, 1.15f));
                 }
             }
             void Stone(MeshBuilder mb, Vector2 at, float radius)
@@ -953,7 +1045,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     float byPath = 0.7f + 1.3f * (1f - Smooth((PathDistance(p) - 3f) / 25f));      // most where walkers look
                     int region = Region(p);
                     float slope = Slope(k);
-                    bool onSand = beach[k] > 0.35f && height[k] < 3f;
+                    bool onSand = beach[k] > 0.35f && height[k] < 1.1f;
                     // fields of lumps here, smooth snow there
                     float field = Mathf.PerlinNoise(p.x * 0.023f + 51.7f, p.y * 0.023f + 14.2f);
                     if (!onSand && slope < 0.5f && roll < 0.1f + 0.4f * Smooth((field - 0.38f) / 0.3f))
@@ -963,10 +1055,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
                         bool ridge = random.Next(3) == 0;
                         float length = ridge ? Rs(2.5f, 7f) : Rs(1.2f, 4.6f), width = length * (ridge ? Rs(0.14f, 0.24f) : Rs(0.32f, 0.55f));
                         float tall = Mathf.Min(ridge ? 0.5f : 0.6f, width * (ridge ? Rs(0.4f, 0.6f) : Rs(0.26f, 0.42f)));
-                        if (!lumpVerts.TryGetValue(region, out List<Vector3> lv)) { lv = lumpVerts[region] = new List<Vector3>(); lumpTris[region] = new List<int>(); }
+                        if (!lumpVerts.TryGetValue(region, out List<Vector3> lv)) { lv = lumpVerts[region] = new List<Vector3>(); lumpTris[region] = new List<int>(); lumpRims[region] = new List<int>(); }
                         List<int> lt = lumpTris[region];
-                        int rings = length > 2.6f ? 3 : 2;
-                        const int segments = 8;
+                        int rings = length > 2.6f ? 4 : 3;
+                        const int segments = 10;
                         int first = lv.Count;
                         lv.Add(On(p, tall));
                         for (int r = 1; r <= rings; r++)
@@ -977,7 +1069,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                                 float wobble = 0.85f + 0.3f * Mathf.PerlinNoise(p.x * 0.7f + Mathf.Cos(a) * 1.3f, p.y * 0.7f + Mathf.Sin(a) * 1.3f);
                                 Vector2 q = p + (wind * downwind + cross * sideways) * (t * wobble);
                                 float c = Mathf.Cos(t * Mathf.PI * 0.5f);
-                                lv.Add(On(q, tall * (ridge ? c : c * c) - (r == rings ? 0.07f : 0f)));
+                                if (r == rings) lumpRims[region].Add(lv.Count);
+                                lv.Add(On(q, tall * (ridge ? c * Mathf.Sqrt(c) : c * c) - (r == rings ? 0.02f : 0f)));
                             }
                         for (int sg = 0; sg < segments; sg++) { lt.Add(first); lt.Add(first + 1 + (sg + 1) % segments); lt.Add(first + 1 + sg); }
                         for (int r = 1; r < rings; r++)
@@ -1015,12 +1108,14 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             tufts++;
                         }
                     }
-                    else if (roll2 < tuftChance + 0.045f * byPath)
+                    else if (roll2 < tuftChance + (onSand ? 0.12f : 0.045f) * byPath && slope < 0.3f)
                     {
                         // a fallen stick, half sunk, with a twig or two; its top takes the snow
-                        float a = Rs(0f, Mathf.PI * 2f), length = Rs(0.7f, 2.6f), thick = Rs(0.02f, 0.05f);
-                        var dir = new Vector3(Mathf.Cos(a), Rs(-0.06f, 0.12f), Mathf.Sin(a)).normalized;
-                        Vector3 middle = On(p, thick * 0.3f), a0 = middle - dir * length * 0.5f, a1 = middle + dir * length * 0.5f;
+                        // (each end lies on the ground where it is, so a stick never juts out of a slope or hovers over a dip)
+                        float a = Rs(0f, Mathf.PI * 2f), length = Rs(0.4f, 1.4f), thick = Rs(0.012f, 0.03f);
+                        var lie = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * length * 0.5f;
+                        Vector3 a0 = On(p - lie, thick * 0.2f), a1 = On(p + lie, thick * 0.2f + Rs(0f, 0.05f));
+                        Vector3 dir = (a1 - a0).normalized;
                         Stick(mb, a0, a1, thick);
                         int twigs = random.Next(0, 3);
                         for (int tw = 0; tw < twigs; tw++)
@@ -1031,13 +1126,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
                         }
                         sticks++;
                     }
-                    else if (roll2 < tuftChance + 0.085f * byPath)
+                    else if (roll2 < tuftChance + (onSand ? 0.2f : 0.085f) * byPath)
                     {
                         // a stone's top showing, its crown catching snow
                         Stone(mb, p, Rs(0.12f, 0.5f));
                         stones++;
                     }
-                    else if (roll2 < tuftChance + 0.105f * byPath)
+                    else if (roll2 < tuftChance + (onSand ? 0.32f : 0.105f) * byPath)
                     {
                         // a patch of pebbles
                         int pebbles = random.Next(5, 12);
@@ -1055,8 +1150,19 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 lumpMesh.SetVertices(kv.Value);
                 lumpMesh.SetTriangles(lumpTris[kv.Key], 0);
                 lumpMesh.RecalculateNormals();
+                // a drift's edge takes the normal of the ground it runs out into
+                Vector3[] lumpNormals = lumpMesh.normals;
+                foreach (int rim in lumpRims[kv.Key])
+                {
+                    Vector3 at = kv.Value[rim];
+                    var world = new Vector2(at.x + root.x, at.z + root.z);
+                    float hx = HeightAt(world + Vector2.right * 0.75f) - HeightAt(world - Vector2.right * 0.75f), hz = HeightAt(world + Vector2.up * 0.75f) - HeightAt(world - Vector2.up * 0.75f);
+                    lumpNormals[rim] = new Vector3(-hx / 1.5f, 1f, -hz / 1.5f).normalized;
+                }
+                lumpMesh.normals = lumpNormals;
                 lumpMesh.RecalculateBounds();
-                b.MeshPiece("Drifts " + kv.Key, lumpMesh, lumpMaterial, false);
+                Piece drifts = b.MeshPiece("Drifts " + kv.Key, lumpMesh, lumpMaterial, false);
+                drifts.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;      // they are the ground: no shadow of their own
             }
             foreach (var kv in litter) if (kv.Value.VertexCount > 0) b.MeshPiece("Litter " + kv.Key, kv.Value.ToMesh(), litterMaterial, false);
             foreach (var kv in grass) if (kv.Value.VertexCount > 0) b.MeshPiece("Grass " + kv.Key, kv.Value.ToMesh(), grassMaterial, false);
@@ -1090,7 +1196,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Kit.AddDisc(ice, new Vector3(p.x - root.x, -0.16f - root.y, p.y - root.z), radius, 0.22f, Color.Lerp(iceColor, Color.white, Rf(0.2f, 0.7f)), floeRandom.Next(5, 9));
                 floes++;
             }
-            Debug.Log("[BWM] Winter Isle: " + islets.Count + " islets, " + floes + " ice floes");
+            Debug.Log("[BWM] Winter Isle: " + coveList.Count + " coves, " + barList.Count + " sand bar, " + islets.Count + " islets, " + floes + " ice floes");
         }
         b.MeshPiece("Ice", ice.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Ice", m => { m.SetFloat("_SnowLine", 1.02f); m.SetFloat("_SnowNoise", 0.9f); m.SetFloat("_SnowEdge", 0.05f); }), false);
 

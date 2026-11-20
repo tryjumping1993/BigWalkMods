@@ -63,6 +63,8 @@ public static class WinterIsleDressing
     static readonly List<(Vector2 at, float radius)> solids = new List<(Vector2, float)>();      // rocks placed, to keep plants out of them
     static readonly List<(Vector2 at, float diameter)> big = new List<(Vector2, float)>();     // rocks big enough to bank snow against
     public static readonly List<(Vector2 at, float radius)> Cover = new List<(Vector2, float)>();  // plants placed: the ground under them shows through the snow
+    public static readonly List<(Vector2 at, float radius)> Needles = new List<(Vector2, float)>();   // under our conifers: needle litter, not heath
+    public static readonly List<(Vector2 at, float radius)> Scree = new List<(Vector2, float)>();     // at a rock's foot: stones
     public static readonly List<(Vector2 at, float height, int seed)> Firs = new List<(Vector2, float, int)>();   // our own firs, built into the island's pack
 
     // Our own trees. Each is one of these models, which the island's build makes and Winter Walk copies to every
@@ -88,6 +90,7 @@ public static class WinterIsleDressing
             .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(tallness / TreeModels[best].height)).Append("\t-9\n");
         solids.Add((p, trunk));
         Cover.Add((p, cover));
+        if (kind != "birch") Needles.Add((p, cover * 1.15f));
     }
 
     static float Smooth01(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
@@ -134,7 +137,7 @@ public static class WinterIsleDressing
         solids.Add((p, diameter * 0.45f));
         if (block) land.Block(p, diameter * 0.55f + 2f);
         if (onTerrain && diameter >= 3.5f) big.Add((p, diameter));
-        if (onTerrain && diameter >= 1.5f) Cover.Add((p, diameter * 0.55f));      // the wind scours the ground bare at a rock's foot
+        if (onTerrain && diameter >= 1.5f) { Cover.Add((p, diameter * 0.55f)); Scree.Add((p, diameter * 0.62f)); }      // the wind scours the ground bare at a rock's foot
         rocks++;
         return y + (k.centre.y + k.size.y / 2f) * scale;
     }
@@ -212,6 +215,8 @@ public static class WinterIsleDressing
         solids.Clear();
         big.Clear();
         Cover.Clear();
+        Needles.Clear();
+        Scree.Clear();
         Firs.Clear();
         rocks = plants = 0;
         output.Append("# Winter Isle set dressing, written by WinterIslePuzzle's build. kind, x, y, z, yaw, pitch, roll, scale, snow line\n");
@@ -368,6 +373,44 @@ public static class WinterIsleDressing
                 loose++;
             }
 
+        // ---- bedrock: slabs of granite flush with the ground (a big mass sunk until only its back shows), in the
+        //      stony parts of the lowland; the rock is the island's frame, not something set down on the snow ----
+        int slabs = 0;
+        for (float z = l.Z0; z < l.Z1; z += 17f)
+            for (float x = l.X0; x < l.X1; x += 17f)
+            {
+                var p = new Vector2(x + R(-7f, 7f), z + R(-7f, 7f));
+                float h = l.Height(p);
+                if (float.IsNaN(h) || h < 2f || h > 40f || l.Slope(p) > 0.4f || !l.Free(p, 2f) || InsideRock(p, 2f)) continue;
+                float stony = Mathf.PerlinNoise(p.x * 0.02f + 13.7f, p.y * 0.02f + 55.1f);
+                if (R(0f, 1f) > 0.1f + (stony - 0.4f) * 1.2f) continue;
+                float d = R(9f, 20f);
+                Rock(Pick(new[] { "rock-cliff01", "rock-whale", "rock-dome" }), p, LowGround(p, d * 0.4f), d, R(0.7f, 0.84f), 0.55f, 4f);
+                slabs++;
+            }
+
+        // ---- trailside rock: domes sunk to their shoulders within a few steps of the paths, each with cobbles at its
+        //      foot, so a walker passes between rocks instead of beside a field of them ----
+        int trailside = 0;
+        for (float z = l.Z0; z < l.Z1; z += 7f)
+            for (float x = l.X0; x < l.X1; x += 7f)
+            {
+                var p = new Vector2(x + R(-3f, 3f), z + R(-3f, 3f));
+                float h = l.Height(p), toPath = l.ToPath(p);
+                if (float.IsNaN(h) || h < 1.5f || toPath < 3.6f || toPath > 10f || l.Slope(p) > 0.5f || !l.Free(p, 0f) || InsideRock(p, 1.5f)) continue;
+                if (R(0f, 1f) > 0.16f + 0.4f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
+                float d = Mathf.Min(R(2.2f, 7.5f), (toPath - 1.6f) * 1.7f);
+                Rock(Pick(BigRound), p, LowGround(p, d * 0.4f), d, R(0.38f, 0.58f), 0.45f, 10f);
+                int cobbles = random.Next(2, 6);
+                for (int i = 0; i < cobbles; i++)
+                {
+                    Vector2 q = p + new Vector2(R(-1f, 1f), R(-1f, 1f)).normalized * d * R(0.45f, 0.85f);
+                    if (l.ToPath(q) < 1.8f || InsideRock(q, 0.1f) || float.IsNaN(l.Height(q))) continue;
+                    Rock(Pick(SmallRound), q, LowGround(q, 0.3f), R(0.35f, 1.3f), R(0.35f, 0.6f), 0.35f, 25f, true, false);
+                }
+                trailside++;
+            }
+
         // ---- snow banked against the bigger rocks, before anything else is stood on that ground ----
         if (l.Bank != null) foreach (var r in big) l.Bank(r.at, r.diameter * 0.75f + 1.5f, Mathf.Min(0.22f * r.diameter, 1.4f));
 
@@ -381,7 +424,7 @@ public static class WinterIsleDressing
                 var p = new Vector2(x + R(-2.1f, 2.1f), z + R(-2.1f, 2.1f));
                 float h = l.Height(p);
                 if (float.IsNaN(h) || h < 2.5f || h > 62f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;
-                float inGrove = Smooth01((Grove(p) - 0.43f) / 0.14f) * (1f - Smooth01((h - 50f) / 14f));
+                float inGrove = Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 50f) / 14f));
                 // glades: open ground inside a grove, a few tens of metres across
                 if (inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
@@ -434,7 +477,7 @@ public static class WinterIsleDressing
                     var p = new Vector2(x + R(-1.4f, 1.4f), z + R(-1.4f, 1.4f));
                     float h = l.Height(p);
                     float inWood = 1f - Smooth01(((p - w.at).magnitude - w.radius * 0.6f) / (w.radius * 0.4f));
-                    if (float.IsNaN(h) || h < 2f || l.Slope(p) > 0.6f || R(0f, 1f) > inWood * 0.82f || !l.Free(p, -1f) || InsideRock(p, 0.7f)) continue;
+                    if (float.IsNaN(h) || h < 2f || l.Slope(p) > 0.6f || R(0f, 1f) > inWood * 0.82f || !l.Free(p, 0.4f) || InsideRock(p, 0.7f)) continue;
                     float pick = R(0f, 1f);
                     if (w.birch)
                     {
@@ -444,6 +487,9 @@ public static class WinterIsleDressing
                     else
                     {
                         float tallness = pick < 0.18f ? R(1.4f, 4.2f) : R(6f, 14f);
+                        // the path through a wood is an aisle: a big tree stands back far enough that its boughs reach
+                        // the path's edge but do not hang across it
+                        if (tallness > 5f && l.ToPath(p) < tallness * 0.34f + 1.2f) tallness = R(1.4f, 4.2f);
                         Firs.Add((p, tallness, random.Next(1, 1000000)));
                         if (pick > 0.75f) { Tree("spruce", p, h, tallness * 1.25f, 0.9f, tallness * 0.14f); spruces++; }
                         else Tree("fir", p, h, tallness, 1.1f, tallness * 0.22f);
@@ -458,7 +504,7 @@ public static class WinterIsleDressing
         // where only their impostors draw), a few hardy evergreens, and thickets
         string[] woodland = { "SheoakDrooping_Short", "Paperbark_Thicket", "KangarooApple", "HazelPomaderris", "AustralianBlackthorn_Bush", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short" };
         string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead", "SheoakDrooping", "Blackwood" };
-        string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath" };
+        string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath", "FernRough", "HazelPomaderris_Thicket", "LemonBottlebrush", "BanksiaCoast_Juvenile", "Paperbark_Bush", "BushyNeedlewood" };
         string[] tops = { "GrassTree", "GrassTree_Short", "GrassTree_NoFlower", "ButtonGrass", "PricklyMoses", "TreeEverlasting" };
         string[] dead = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "LillyPilly_ForestTall_Dead" };
         string[] logs = { "Litter_Log_Dry", "Litter_Log_Dry_Small", "Litter_Log_Wet", "Litter_Log_Wet_Small", "Litter_Stump_Wet" };
@@ -491,7 +537,7 @@ public static class WinterIsleDressing
                     // fallen logs and stumps, the odd dead snag (a grove with bare snow between its trunks reads as
                     // planted, not grown)
                     float grove = Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f);
-                    float a = 0.035f * wood, b = a + 0.13f * wood * clump + 0.022f + 0.11f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
+                    float a = 0.035f * wood, b = a + 0.13f * wood * clump + 0.022f + 0.2f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
                     if (roll < 0.006f * wood && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
                     else if (roll < a) Plant(Pick(woodland), p, R(0.6f, 1.0f));
                     else if (roll < b) Plant(Pick(under), p, R(0.6f, 1.1f));
@@ -506,7 +552,7 @@ public static class WinterIsleDressing
         int scattered = 0;
         string[] tufts = { "ButtonGrass", "ButtonGrass", "SaltMarshRush", "GrassTree_Short_NoFlower", "TeatreeCoast_Dead", "TeatreeCoast_Dead" };
         string[] sticks = { "Litter_Log_Dry_Small", "Litter_Log_Wet_Small", "Litter_Stump_Wet" };
-        string[] low = { "PovertyBush", "CoastSaltbush", "TeatreeCoast_Bush", "BushyNeedlewood" };
+        string[] low = { "PovertyBush", "CoastSaltbush", "TeatreeCoast_Bush", "BushyNeedlewood", "SaltMarshRush", "Paperbark_Bush", "TreeBroomHeath", "PricklyMoses", "CorreaWhite_Bush", "TreeEverlasting" };
         for (float z = l.Z0; z < l.Z1; z += 3f)
             for (float x = l.X0; x < l.X1; x += 3f)
             {
@@ -514,20 +560,21 @@ public static class WinterIsleDressing
                 float h = l.Height(p);
                 if (float.IsNaN(h) || h < 0.8f || l.Slope(p) > 0.7f || l.Beach(p)) continue;
                 float toPath = l.ToPath(p);
-                if (toPath < 2.2f || InsideRock(p, 0.3f) || !l.Free(p, -1.3f)) continue;
-                float near = 1f - Smooth01((toPath - 4f) / 40f);
+                if (toPath < 1.7f || InsideRock(p, 0.3f) || !l.Free(p, -1.9f)) continue;
+                float near = 1f - Smooth01((toPath - 4f) / 30f);
                 float patch = Mathf.PerlinNoise(p.x * 0.05f + 91.3f, p.y * 0.05f + 27.7f);
-                if (R(0f, 1f) > (0.13f + 0.18f * near) * (0.4f + patch * 1.2f)) continue;
-                float pick = R(0f, 1f);
-                if (pick < 0.5f) Plant(Pick(tufts), p, R(0.28f, 0.5f), 0.3f);
-                else if (pick < 0.75f) Rock(Pick(SmallRound), p, LowGround(p, 0.3f), R(0.35f, 1.1f), R(0.45f, 0.65f), 0.35f, 25f, true, false);
-                else if (pick < 0.9f) Plant(Pick(sticks), p, R(0.35f, 0.7f), 0.35f);
-                else Plant(Pick(low), p, R(0.3f, 0.55f), 0.3f);
+                if (R(0f, 1f) > (0.13f + 0.4f * near) * (0.4f + patch * 1.2f)) continue;
+                // by the trails it is mostly low bushes and ferns under snow, in clumps; further off, tufts and stones
+                float pick = R(0f, 1f), bushy = 0.2f + 0.3f * near;
+                if (pick < bushy) Plant(Pick(low), p, R(0.5f, 1.05f), 0.3f);
+                else if (pick < bushy + 0.3f) Plant(Pick(tufts), p, R(0.28f, 0.5f), 0.3f);
+                else if (pick < bushy + 0.5f) Rock(Pick(SmallRound), p, LowGround(p, 0.3f), R(0.35f, 1.1f), R(0.45f, 0.65f), 0.35f, 25f, true, false);
+                else Plant(Pick(sticks), p, R(0.35f, 0.7f), 0.35f);
                 scattered++;
             }
 
         File.WriteAllText(outputFile, output.ToString());
-        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs (" + spruces + " of them spruces), " + birches + " birches, " + wooded + " of the trees in " + l.Woods.Count + " woods, " + rocks + " rocks (" + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
+        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs (" + spruces + " of them spruces), " + birches + " birches, " + wooded + " of the trees in " + l.Woods.Count + " woods, " + rocks + " rocks (" + slabs + " slabs, " + trailside + " by the trails, " + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
             + plants + " plants (" + scattered + " of them scatter); written to " + outputFile);
     }
 }
