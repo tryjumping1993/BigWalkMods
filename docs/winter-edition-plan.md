@@ -15,6 +15,10 @@ one modpack, by Christmas 2026.
 - **Players:** three is the minimum. Design for 3 and for 4+; two-player lobbies are not supported.
 - **Audience:** friends only. No public release, so no store page, support or licence review beyond using
   assets we are allowed to use.
+- **Decorations:** the snow area is dressed for Christmas, with strings of lights above all.
+- **Snow you can build with:** if possible, players can move the looser snow about and build things with it,
+  and some puzzles are based on that.
+- **Blind mask:** six of the puzzles use the blinding mask.
 
 ## What "60% of the original" means
 
@@ -94,40 +98,75 @@ The island as built:
 Fallback if new land fails later: the north-west of the island, beyond the big wall near the ending (few base-game
 puzzles there), dressed with the same bespoke snow materials laid over the ground as meshes.
 
+### Decorations
+
+- **Strings of lights** are the island's signature: sagging wires of coloured bulbs between posts, along the
+  causeway, around every puzzle site, over the main paths and wound round The Tree. They are our own geometry
+  and shader (a kit call in a puzzle definition), they twinkle, and they glow at night. Built 2026-11-20.
+- Real lamps (the game's own, which light the snow) are used sparingly where a puzzle needs to be read at night.
+- Later: wreaths, candy-striped posts, presents, lanterns, a decorated gate at the causeway.
+
+### Snow you can build with
+
+The game cannot deform ground, but it can do carry-and-place very well, so loose snow is made of things:
+
+- **Snow lumps** are items of ours (the SDK's Custom Item) that sit in drifts. Players pick them up, carry
+  them, throw them, and put them down, and every player sees the same thing because the game syncs items.
+- **Building** is placing lumps where something should be. A zone that counts the lumps inside it (the SDK's
+  Presence Sensor in its item mode) makes the built thing appear piece by piece: a snowman, a wall, a bridge
+  span. Snap points (invisible hooks) hold a lump exactly in place where shape matters.
+- **Throwing** counts too: the same zones register a lump passing through, which makes targets.
+- Not possible: free sculpting, digging holes, or unlimited snow. Each drift holds a fixed number of lumps,
+  which go back to their drift when a puzzle resets.
+
+First test site built 2026-11-20 (`SnowmanPuzzle.cs`). Checked in game without hands: the three snowballs
+are real items, they fall and roll, the zone counts them when they drop in, the puzzle is won and the
+snowman's hat, nose and arms appear. Not checked: how they handle when carried and thrown, and whether the
+snap points take them, which is what would stack the three into a body. Until a person has tried that, the
+finished snowman is three loose snowballs with trimmings floating above them.
+
+### Blind mask
+
+The game has both a wearable blindfold and the blindfold challenge's own turnstile, and the SDK offers both
+(Vanilla Item: Blindfold; No Items Gate with Blind Mask on). Scripts can also read what a player wears on
+their head. Six puzzles below are built round a player who cannot see.
+
 ### Puzzle list (24; the first is built)
 
 "Code" says whether it needs custom C#. "Risk" is my estimate of how likely it is to need redesign.
+**B** marks the six blind-mask puzzles, **S** the snow-building ones.
 
 | # | Name | Idea | Main SDK parts | Code | Risk |
 |---|---|---|---|---|---|
 | 1 | Glass Booth | Reader in a soundproof booth points out tiles for the others to hang | Display, Peg Board, Glass, Door | No | Built |
-| 2 | Wrapping Counter | Two booths, each sees half the answer; tiles pass through a hatch | Display x2, Peg Board, Glass, Box | No | Low |
+| 2 | Snow Bridge **S** | A gap too wide to jump; carry lumps from drifts on both banks to build the spans, and the far bank's drift can only be reached by the first span | Custom Item, Presence Sensor | Yes (spans) | Medium |
 | 3 | Light the Tree | Lamps on a tree light in turn; press the matching button before it moves on | Press In Order, Light, Hold Button, Progress Bar | No | Low |
 | 4 | Bell Ringers | Bells far apart must be rung within the same second | Sim Press Switch, Light | No | Low |
 | 5 | Hold the Star | Everyone holds a button at once to raise the star; one must let go to fetch the gourd | N-Hold Button, Box | No | Low |
 | 6 | Reindeer Count | Count reindeer cut-outs scattered on a hillside from two lookouts that each see some | Count Input, Count Validator, Telescope | Yes (sets the answer) | Medium |
-| 7 | Bauble Hunt | Coloured baubles hidden in the snow go on a round board | Circle Peg, Circle Peg Board | No | Low |
+| 7 | Bauble Hunt | Coloured baubles buried in drifts go on a round board | Circle Peg, Circle Peg Board | No | Low |
 | 8 | Santa's List | A list only readable through one telescope; a second player hangs what is read out | Telescope (invisible ink), Peg Tile, Peg Board | No | Low |
-| 9 | Carol Match | Match tune-playing tiles to speakers by ear | Sound Peg, Sound Peg Answer, Peg Board | No (custom clips) | Medium |
+| 9 | Blind Carols **B** | The masked player sorts tune-playing tiles by ear; a partner who cannot hear them reads where each belongs | Sound Peg, Sound Peg Answer, Peg Board, blind mask gate, Soundproof | No (custom clips) | Medium |
 | 10 | Whispering Chimney | One player hears a distant room through a chimney microphone and relays what happens | Directional Mic, Listening Chair, Intercom | No | Medium |
-| 11 | Blizzard Walk | A blindfolded player is talked across a narrow walkway | No Items Gate (blind mask), Soundproof | No | Medium |
+| 11 | Blizzard Walk **B** | A masked player is talked across a narrow walkway over a drop | Blind mask gate, Soundproof | No | Medium |
 | 12 | Radio Silence | A valley where walkie-talkies fail; messages go by runner or signal | Radio Dead Zone, Display, Peg Board | No | Low |
 | 13 | Stocking Sort | Hang the right gift on each named stocking; names are across the valley | Custom Item, Hook, Sign | Yes (checks hooks) | Medium |
-| 14 | Build a Snowman | Carry the parts in the right order; a far player sees the blueprint | Custom Item, Presence Sensor, Display | Yes | Medium |
-| 15 | Sleigh Seats | Everyone must be seated in the right seats, told only by players who cannot see them | Custom Chair, Sign | Yes (reads seats) | Medium |
+| 14 | Build a Snowman **S** | Three snowballs of different sizes and the trimmings, assembled to a blueprint only a far player sees | Custom Item, Hook, Presence Sensor, Display | Yes | Medium (test site built) |
+| 15 | Blind Sculptor **B S** | The builder wears the mask; the others talk them to the right lumps and the right places | Custom Item, Presence Sensor, blind mask gate | Yes | Medium |
 | 16 | Footprints | Step on hidden pads in an order that only a lookout can see | Presence Sensor, Press In Order, Light | No | Low |
 | 17 | Sleigh Run | Carry a present from start to goal before the clock runs out, through gates others hold open | Timer, Timer Spawner, Timer Goal, Door, Hold Button | Maybe | Medium |
-| 18 | Ice Cave | A dark underground maze; one player outside has the map | Terrain Hole, Light, Switch, Glass | No | High (underground building) |
+| 18 | Whiteout Maze **B** | Masked players walk a walled maze; a lookout on a tower sees it all and calls the turns | Blind mask gate, Presence Sensor, Light | No | Medium |
 | 19 | Snow Globe | A room in a glass dome; inside and outside each hold half of a switch sequence | Glass (soundproof), Switch, Validator | Yes (sequence) | Medium |
 | 20 | Fairy Lights | A string of coloured lamps; set each switch so the pattern matches a picture seen elsewhere | Switch, Light, Display | Yes | Medium |
-| 21 | Frozen Lake | Cross on safe tiles only; safe tiles are marked on a board on the far shore | Presence Sensor, Light, Timer | Yes | Medium |
-| 22 | Gift Chute | Sort custom items into chutes by a rule only the sorter's partner knows | Custom Item, Presence Sensor, Count Validator | Yes | Medium |
-| 23 | Advent Trail | 24 numbered signs across the whole region; a final board asks about them | Sign, Peg Tile, Peg Board | No | Low (but needs every other site placed first) |
+| 21 | Thin Ice **B** | A masked player crosses a frozen lake on the safe tiles; the caller on the shore sees which are safe | Presence Sensor, Light, Timer, blind mask gate | Yes | Medium |
+| 22 | Snowball Range **B S** | A masked thrower, aimed by voice, must put snowballs through the hoops the spotter calls | Custom Item, Presence Sensor, Light, blind mask gate | Yes (hit order) | Medium |
+| 23 | Advent Trail | 24 numbered signs across the whole island; a final board asks about them | Sign, Peg Tile, Peg Board | No | Low (but needs every other site placed first) |
 | 24 | Midnight Finale | With every ornament on the tree, everyone triggers the fireworks together | Firework Launcher, Sim Press Switch, Light | Yes | Medium (the launcher has a known particle bug) |
 | T | The Tree | The modded gourd tower as a Christmas tree; each won puzzle adds an ornament | Gourd Plinth x24, Tower Button | No | Medium |
 
-Thirteen need no custom code. If the scripting spike goes badly, those thirteen plus variants still clear 20
-by reusing mechanics at new sites, at the cost of variety.
+Eleven need no custom code. Blind mask: 9, 11, 15, 18, 21, 22. Snow building: 2, 14, 15, 22 (and 7 uses the
+drifts). Each blind-mask puzzle has to be safe for someone who cannot see: railings or soft resets, never a
+fall into the sea, and the mask comes off the moment the puzzle stops.
 
 ### Art and audio
 
@@ -136,6 +175,7 @@ by reusing mechanics at new sites, at the cost of variety.
   own install.
 - Peg tile pictures: custom sheets of Christmas icons (the SDK takes a 4 x 4 sheet, eight images each).
 - Sound: carols must be public-domain compositions in recordings we are allowed to use (CC0 or self-made).
+- Snow lumps, snowballs, snowman parts and the light strings are generated in code, like the island.
 
 ## Framework work this needs
 

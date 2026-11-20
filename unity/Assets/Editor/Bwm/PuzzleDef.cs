@@ -51,8 +51,13 @@ namespace Bwm
         // Appends references to a list field, e.g. Add("PuzzlePressInOrder", "buttons", a.Component("PuzzleButton"))
         public Piece Add(string type, string field, params UnityEngine.Object[] items) { Sdk.Add(Component(type), field, items); return this; }
 
-        // When this piece's event fires, call target.<method>() (no argument)
-        public Piece On(string type, string eventField, Component target, string method) { Sdk.Wire(Component(type), eventField, target, method); return this; }
+        // When this piece's event fires, call target.<method>(), or target.<method>(arg) for a bool, int, float or
+        // string. The target can be a component or a GameObject, e.g. On("PuzzlePresenceSensor", "onPressed", thing.Go, "SetActive", true).
+        public Piece On(string type, string eventField, UnityEngine.Object target, string method, object arg = null)
+        {
+            Sdk.Wire(Component(type), eventField, target, method, arg);
+            return this;
+        }
 
         public Piece Named(string name) { Go.name = name; return this; }
 
@@ -91,6 +96,22 @@ namespace Bwm
                     throw new Exception("Nothing to stand on at local (" + x + ", " + z + "): that spot is a hole in the terrain");
             }
             return new Vector3(world.x, baseY + height, world.z);
+        }
+
+        // Where a local point is in the world (see Place); for kit code that builds its own geometry
+        public Vector3 WorldPoint(float x, float z, float height = 0f, bool onGround = true) => Place(x, z, height, onGround);
+
+        // Something players can pick up, carry and throw (the SDK's Custom Item): a mesh of ours, e.g. a snowball.
+        // The game fits a box collider round the mesh by itself. 'height' is where its centre sits.
+        public Piece Item(string name, Mesh mesh, Material material, float x, float z, float height, float mass = 1f, bool onGround = true)
+        {
+            Piece item = MeshPiece(name, mesh, material, false);
+            item.Go.transform.position = Place(x, z, height, onGround);
+            Component c = item.Go.AddComponent(Sdk.T("PuzzleItem"));
+            Sdk.Set(c, "mass", mass);
+            Sdk.Set(c, "canBelt", false);
+            Sdk.Set(c, "canBackpack", false);
+            return item;
         }
 
         // One of the SDK's prefabs by file name without extension, e.g. "Peg Board", "Switch Start", "Button Hold"

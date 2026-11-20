@@ -212,6 +212,22 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         Snowfall(b);
 
+        // Christmas lights down both sides of the causeway, a post every 9 m
+        Vector2 along = run.normalized, across = new Vector2(along.y, -along.x);
+        float span = run.magnitude + 16f;
+        for (int side = -1; side <= 1; side += 2)
+        {
+            var posts = new List<Vector3>();
+            for (float d = -8f; d <= span - 8f + 0.01f; d += 9f)
+            {
+                Vector2 p = landing + along * d + across * (side * 3.1f);
+                posts.Add(new Vector3(p.x - root.x, 1f + 2.4f - root.y, p.y - root.z));
+            }
+            Kit.LightString(b, side < 0 ? "Causeway Lights Left" : "Causeway Lights Right", posts, 0.35f, 0.5f, false, false, side + 3);
+            foreach (Vector3 post in posts)
+                b.Box("Light Post", post.x, post.z, new Vector3(0.12f, 2.9f, 0.12f), new Color(0.36f, 0.25f, 0.17f), 0.5f - root.y, 0f, false);
+        }
+
         b.Empty("Debug Teleport", topAt.x - root.x, topAt.y - root.z, top + 2f - root.y, false);
         Sdk.Set(b.Puzzle, "debugTeleport", b.Root.transform.Find("Debug Teleport"));
 

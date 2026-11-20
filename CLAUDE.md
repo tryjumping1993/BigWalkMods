@@ -66,6 +66,14 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   override `Near` (a point on it), `MinDistance => 0` and `MaxDistance`; `GlassBoothPuzzle.cs` does this.
   The editor previews do not show the island (puzzles there look as if they float over the sea); use game
   screenshots.
+- `Kit` (`Assets\Editor\Bwm\Kit.cs`) holds ready-made pieces: `Kit.LightString` / `Kit.LightRing` (Christmas
+  lights between posts; every winter site should have some), `Kit.Ball` (snowballs), `Kit.Mound` (drifts).
+- **Loose snow** is items: `b.Item(name, mesh, material, x, z, height, mass)` makes something players can pick
+  up, carry and throw. A Presence Sensor with `type` 2 (Specific Item), the items in `acceptedCustom` and
+  `requiredPlayers` set to how many are needed counts the ones inside it; wire its `onPressed` to
+  `PuzzleSDK.Win` or to `GameObject.SetActive` (`piece.On(..., target.Go, "SetActive", true)`). `SnowmanPuzzle.cs`
+  is the example. In the game each item's real prop is a root object named `VanillaItem`; the object with the
+  item's own name is only a marker.
 - Only Glass, Timer and Progress Bar can be scaled. Lamps start off. Ordinary walls do not block voices: put
   them under a parent with `PuzzleSoundProof`.
 - A `Puzzle`-type puzzle needs one Gourd Vice (or Box), one Pillow and a Start Switch. The SDK's checks run
@@ -91,8 +99,12 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 3. `bwm.ps1 game 'shot?file=...'` with a camera and target position, and Read the image in `shots\`. World
    position = site + local offset when yaw is 0. `time?hour=13` first for daylight.
 4. `bwm.ps1 game 'puzzle?name=<Puzzle>&do=start'` then `do=win` exercises the start, deal and win paths.
+5. Items: `game 'move?name=VanillaItem&nx=..&ny=..&nz=..&x=..&y=..&z=..'` moves the item nearest (nx, ny, nz).
+   Put it a few metres above a zone and let it fall in: an item placed directly inside a zone is not counted,
+   because the zone only notices things entering.
 
-What this cannot do: pick things up, press buttons as a player, or anything with two players. Those go to
+What this cannot do: pick things up or hang them on snap points, press buttons as a player, or anything
+with two players. Those go to
 the user and friends, who must all have the same packs and SDK version.
 
 ## Things that are easy to get wrong

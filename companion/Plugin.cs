@@ -176,7 +176,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -194,6 +194,7 @@ namespace BwmCompanion
                 case "global": Shader.SetGlobalFloat(r.Str("name"), r.Num("value")); yield return "set global " + r.Str("name") + " = " + F(r.Num("value")); break;
                 case "terrainset": yield return TerrainSet(r); break;
                 case "snowtest": yield return SnowTest(r); break;
+                case "move": yield return Move(r); break;
                 case "quit": Application.Quit(); yield return "quitting"; break;
                 case "shot": { IEnumerator<string> e = Shot(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "host": { IEnumerator<string> e = Host.Run(r); while (e.MoveNext()) yield return e.Current; break; }
@@ -463,6 +464,33 @@ namespace BwmCompanion
                 m.SetTexture("_Diffuse", snow);
             }
             return sb.Length == 0 ? "no terrains" : sb.ToString();
+        }
+
+        // Puts an object at a world position, for testing zones and snap points without a player's hands.
+        // Host only. A custom item's real prop is a root object called "VanillaItem" (the placeholder with the
+        // item's own name is only a marker), so pick one by where it is: nx, ny, nz choose the nearest of that name.
+        static string Move(Request r)
+        {
+            string name = r.Str("name", "");
+            bool nearest = r.Has("nx");
+            var near = new Vector3(r.Num("nx"), r.Num("ny"), r.Num("nz"));
+            Transform best = null;
+            float bestDistance = float.MaxValue;
+            foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>(true))
+            {
+                if (t.name != name) continue;
+                float d = nearest ? (t.position - near).sqrMagnitude : 0f;
+                if (d < bestDistance) { bestDistance = d; best = t; }
+                if (!nearest) break;
+            }
+            if (best == null) return "ERROR no object named '" + name + "'";
+            var target = new Vector3(r.Num("x"), r.Num("y"), r.Num("z"));
+            string from = V(best.position);
+            Rigidbody body = best.GetComponent<Rigidbody>();
+            if (body == null) body = best.GetComponentInChildren<Rigidbody>();
+            best.position = target;
+            if (body != null) { body.position = target; body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; }
+            return "moved " + PathOf(best) + " from " + from + " to " + V(target) + (body != null ? " (rigidbody)" : " (no rigidbody)");
         }
 
         // ---- looking ----
