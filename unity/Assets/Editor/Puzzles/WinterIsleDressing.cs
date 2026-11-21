@@ -126,7 +126,8 @@ public static class WinterIsleDressing
     {
         if (!catalog.TryGetValue(kind, out Kind k)) throw new Exception("No '" + kind + "' in world\\catalog.tsv");
         if (onTerrain && diameter > 2.5f && land.Forest(p) > 0.4f) return ground;
-        if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.Piste(p) > 0.15f) return ground;      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
+        if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.Piste(p) > 0.15f) return ground;
+        if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
             // never float: the rock's bottom goes below the lowest ground under it, deeper on a slope

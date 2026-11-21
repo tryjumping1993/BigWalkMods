@@ -12,6 +12,17 @@ public class SnowfallFollow : MonoBehaviour
     [SerializeField] private Vector3 areaCentre;            // world centre of the snowy area
     [SerializeField] private Vector3 areaSize;              // its size in x and z (y unused)
     [SerializeField] private float margin = 70f;            // how far outside the area it still snows
+    // The mine: no snow falls underground. Its hall's centre (y: the mine's floor), and each tunnel as (x of its
+    // direction, its length from the hall's centre, z of its direction)
+    [SerializeField] private Vector3 mineHub;
+    [SerializeField] private Vector3 mineA, mineB, mineC;
+
+    bool InTunnel(Vector3 p, Vector3 t)
+    {
+        float along = (p.x - mineHub.x) * t.x + (p.z - mineHub.z) * t.z, across = (p.x - mineHub.x) * t.z - (p.z - mineHub.z) * t.x;
+        if (across < 0f) across = -across;
+        return along > 0f && along < t.y && across < 5.5f;
+    }
 
     void LateUpdate()
     {
@@ -22,6 +33,11 @@ public class SnowfallFollow : MonoBehaviour
         if (dx < 0f) dx = -dx;
         if (dz < 0f) dz = -dz;
         bool inside = dx < areaSize.x * 0.5f + margin && dz < areaSize.z * 0.5f + margin;
+        if (inside && p.y > mineHub.y - 2f && p.y < mineHub.y + 14f)
+        {
+            float hx = p.x - mineHub.x, hz = p.z - mineHub.z;
+            if (hx * hx + hz * hz < 30f * 30f || InTunnel(p, mineA) || InTunnel(p, mineB) || InTunnel(p, mineC)) inside = false;
+        }
         transform.position = inside ? new Vector3(p.x, p.y + height, p.z) : new Vector3(p.x, -600f, p.z);
     }
 }

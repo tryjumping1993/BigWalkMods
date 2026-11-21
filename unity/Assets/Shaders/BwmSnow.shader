@@ -44,6 +44,7 @@ Shader "BWM/Snow"
         _SandColor ("Sand", Color) = (0.70, 0.67, 0.60, 1)
         _SandTex ("Sand texture", 2D) = "white" {}
         _GroundTiling ("Ground tiling (per metre)", Float) = 0.18
+        _PisteCentre ("Pistes fall away from (world x, -, z)", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -69,6 +70,7 @@ Shader "BWM/Snow"
             half4 _BareColor;
             half4 _SandColor;
             float _GroundTiling;
+            float4 _PisteCentre;
             float _WindTile;
             float _WindStrength;
             float _GrainTile;
@@ -293,7 +295,7 @@ Shader "BWM/Snow"
                     + 0.6 * smoothstep(0.92, 0.99, 1.0 - abs(ValueNoise(float2(faceZ.x * 0.03, faceZ.y * 0.14) + 1.0) * 2.0 - 1.0));
                 float cracks = saturate((jointX * tw.x + jointZ * tw.z) / max(tw.x + tw.z, 0.001)) * saturate(1.0 - tw.y * 1.5);
                 float3 rockColor = _RockColor.rgb * lerp(0.82, 1.1, strata) * rockTex * 1.6 * lerp(0.72, 1.18, mottle) * (1.0 - cracks * 0.45);
-                float3 bareRock = rockColor;
+                float3 bareRock = lerp(rockColor, dot(rockColor, float3(0.34, 0.33, 0.33)) * float3(0.93, 0.98, 1.07), 0.5);      // alpine rock is cold grey, not sandstone
                 // snow caught on the rock's flatter parts, in patches with an edge (a soft dusting reads as a smear)
                 float caught = Crisp(strata * 0.6 + Noise3(positionWS * 1.3 + 3.0) * 0.25 + Noise3(positionWS * 4.1) * 0.15, grainN.x * 0.08, 0.54);
                 rockColor = lerp(rockColor, _Color.rgb * 0.92, saturate((ground.y - 0.3) * 2.5) * caught * 0.85);
@@ -351,15 +353,18 @@ Shader "BWM/Snow"
                 // groomed piste (a negative 'under.x'): the wind's relief rolled flat, and corduroy running down the fall line
                 float groomed = saturate(-i.under.x) * snowy;
                 relief *= 1.0 - groomed * 0.75;
-                float3 acrossFall = normalize(float3(-ground.z, 0, ground.x) + float3(1e-4, 0, 0));
-                float cordFade = saturate(1.0 - distance(positionWS, _WorldSpaceCameraPos) / 70.0);
-                float cord = sin(dot(positionWS, acrossFall) * (6.2831853 / 0.42)) * groomed * cordFade;
+                // (the lines run down the mountain from its top; they go once a pixel cannot hold them, or they ring)
+                float2 fall = positionWS.xz - _PisteCentre.xz;
+                float3 acrossFall = float3(-fall.y, 0, fall.x) / max(length(fall), 1.0);
+                float cordPhase = atan2(fall.y, fall.x) * round(max(length(fall), 20.0) / 40.0) * 40.0 * (6.2831853 / 0.14);
+                float cordFade = saturate(1.0 - fwidth(cordPhase) * 1.5);
+                float cord = sin(cordPhase) * groomed * cordFade;
                 float2 tilt = _DriftStrength * float2(h0 - hx, h0 - hz)
                     + _WindStrength * calm * (windN.xy + farN.xy * 0.5)
                     + _GrainStrength * grainN.xy * grainFade;
                 tilt += grainN.xy * bank * 1.5;      // the heaped banks are loose and lumpy
                 float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * (sand * 0.45)
-                    + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.75));
+                    + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.3));
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
