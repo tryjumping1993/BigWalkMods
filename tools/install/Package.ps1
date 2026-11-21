@@ -76,6 +76,9 @@ foreach ($f in 'Install.cmd', 'Install.ps1', 'Install-Common.ps1', 'Uninstall.cm
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $f) -Destination (Join-Path $stage $f)
 }
 Set-Content -Path (Join-Path $stage 'version.txt') -Value $Version -Encoding ASCII
+# the shipped components' licences (LGPL, MIT, Apache, BSD), as their licences require
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'THIRD-PARTY-NOTICES.txt') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'licenses') -Destination (Join-Path $stage 'licenses') -Recurse
 
 # zip it (System.IO.Compression copes with files over 2 GB in total; Compress-Archive in PowerShell 5 does not)
 Add-Type -AssemblyName System.IO.Compression.FileSystem

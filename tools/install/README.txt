@@ -28,5 +28,5 @@ NOTES
   - Everyone in a walk must have the same version, or the island's puzzles will not match up.
   - Problems? The mod loader's log is BepInEx\LogOutput.log in the game's folder: send it along.
 
-Built on BepInEx (LGPL-2.1) and the Big Puzzle SDK by markviews (MIT). Big Walk is by House House; this is an
-unofficial fan mod.
+Built on BepInEx and the Big Puzzle SDK by markviews, with other open-source parts: see THIRD-PARTY-NOTICES.txt and
+the licenses folder. Big Walk is by House House; this is an unofficial fan mod and contains none of the game's files.
