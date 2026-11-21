@@ -29,9 +29,11 @@ namespace WinterWalk
         public static float Fuel;               // seconds left
         public static bool TestFire;            // for testing without a controller: fire as if jump were held in the air
         public static string State = "not loaded";
-        // where the jetpack sits on the back, from the player's origin (the round body's middle is about 0.35 m below
-        // it), and its size: the characters are small, so the model is shrunk (all three can be set live to tune)
-        public static float Up = -0.42f, Back = -0.36f, Scale = 0.6f;
+        // where the jetpack sits: on the back of the round body the player sees ("localBottom_mesh", which bobs and swings
+        // as they move, so the jetpack follows it every frame instead of hanging from the player's origin, where it cut
+        // through the body), 'Back' metres behind its middle and 'Up' above; and its size (all can be set live)
+        public static float Up = 0.02f, Back = 0.25f, Scale = 0.6f;
+        Transform anchor, anchorOf;
 
         GameObject model, worn, flame;
         readonly System.Collections.Generic.List<Vector3> presents = new System.Collections.Generic.List<Vector3>();
@@ -104,11 +106,39 @@ namespace WinterWalk
                 if (flame != null) flame.SetActive(false);
             }
             if (!Worn && worn != null) { Destroy(worn); worn = null; flame = null; }
-            if (worn != null)
+            if (worn != null) worn.transform.localScale = Vector3.one * Scale;
+        }
+
+        // the body ball under the player (found once per player by name, anywhere below it)
+        static Transform FindBelow(Transform t, string name)
+        {
+            for (int i = 0; i < t.childCount; i++)
             {
-                worn.transform.localPosition = new Vector3(0f, Up, Back);
-                worn.transform.localScale = Vector3.one * Scale;
+                Transform c = t.GetChild(i);
+                if (c.name == name) return c;
+                Transform deeper = FindBelow(c, name);
+                if (deeper != null) return deeper;
             }
+            return null;
+        }
+
+        void LateUpdate()
+        {
+            try
+            {
+                if (worn == null) return;
+                Transform player = worn.transform.parent;
+                if (player == null) return;
+                if (anchorOf != player || anchor == null) { anchorOf = player; anchor = FindBelow(player, "localBottom_mesh") ?? FindBelow(player, "torso_mesh"); }
+                Vector3 forward = player.forward;
+                forward.y = 0f;
+                if (forward.sqrMagnitude < 1e-4f) forward = Vector3.forward;
+                forward.Normalize();
+                Vector3 centre = anchor != null ? anchor.position : player.position + Vector3.up * -0.5f;
+                worn.transform.position = centre - forward * Back + Vector3.up * Up;
+                worn.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            }
+            catch (Exception) { }
         }
 
         void FixedUpdate()
