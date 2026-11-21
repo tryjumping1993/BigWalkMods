@@ -392,7 +392,7 @@ and finished assets for the puzzles.
   the shop, a new atlas with normal and gloss maps, real glass, the logo centred on its lettering, three lit zones with
   baked shading and lamps, and much more furniture and detail inside and out. A 75-second fly-over trailer, shot in the
   game with the HUD hidden and no sound or text added (`tools/trailer`; the MP4s and a full-resolution master are in
-  `Z:\Temp\claude\BigWalkMods	railer`). Seen in the game: trains departing on the timetable, a throttle push sending
+  `Z:\Temp\claude\BigWalkMods\trailer`). Seen in the game: trains departing on the timetable, a throttle push sending
   a parked train off at once, a train held 70 m short of an occupied station and following in when it cleared, the
   water tower by the new Plaza station; the pizzeria's front, dining room, window bar, counter, kitchen and hall.
   Not tried: pushing a throttle lever as a player (its wiring to the host is checked in the scene), two players.
