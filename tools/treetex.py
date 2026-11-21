@@ -11,6 +11,7 @@ older than this script):
     FirBark_N.png    2048 px  tileable bark normal map
     BirchBark_C.png  2048 px  tileable birch bark colour: chalk white, dark lenticels, peeling bands, black scars
     BirchBark_N.png  2048 px  tileable birch bark normal map
+    BirchTwigs_C/N/M 2048 px  a spray of fine birch twigs with a little snow, laid out as the fir sprays are
 
 The fronds atlas holds four sprays in a 2 x 2 grid, each 2048 px, drawn as fir sprays grow: a stem, side twigs
 in alternate pairs, second twigs off those, and flat two-ranked needles on every twig, so the spray is a flat
@@ -414,6 +415,79 @@ def birch_bark(out, n=2048, preview=None):
         save(os.path.join(preview, "birchbark_preview.png"), color[:1024, :1024], "RGB")
 
 
+def birch_twigs(out, n=2048, preview=None):
+    """A spray of fine birch twigs, branching and branching again, dark red-brown, with a little snow along the
+    larger ones: (colour + cut-out, normal, mask) as the fir sprays are, for cards hung at the birches' limb ends.
+    u runs along the spray from where it joins the limb (0) to its tips (1), v across it."""
+    rng = np.random.default_rng(77)
+    cv = Canvas(n)
+    bark = (0.20, 0.12, 0.10)
+    tip = (0.33, 0.20, 0.16)
+    segments = []
+
+    def branch(p, ang, length, width, depth):
+        steps = 4
+        pts = [np.array(p, np.float32)]
+        a = ang
+        for k in range(steps):
+            a += rng.normal(0, 0.12)
+            pts.append(pts[-1] + np.array([np.cos(a), np.sin(a)], np.float32) * length / steps)
+        for k in range(steps):
+            w0 = width * (1.0 - 0.6 * k / steps)
+            w1 = width * (1.0 - 0.6 * (k + 1) / steps)
+            cv.capsule(pts[k], pts[k + 1], max(w0, 0.7), max(w1, 0.6), bark, tip, 6.0 - depth * 0.6)
+            if width > 2.0:
+                segments.append((pts[k], pts[k + 1], width))
+        if depth >= 6 or length < n * 0.02:
+            return
+        kids = rng.integers(2, 4)
+        for c in range(kids):
+            t = rng.uniform(0.3, 0.95)
+            j = min(int(t * steps), steps - 1)
+            at = pts[j] + (pts[j + 1] - pts[j]) * (t * steps - j)
+            side = rng.choice([-1.0, 1.0])
+            branch(at, a + side * rng.uniform(0.3, 0.75), length * rng.uniform(0.5, 0.72), width * 0.62, depth + 1)
+
+    for k in range(3):
+        branch((n * 0.01, n * 0.5 + rng.normal(0, n * 0.03)), rng.normal(0, 0.12), n * 0.42, n * 0.0045, 0)
+    # snow: short lumps along the thicker twigs
+    snow = np.zeros((n, n), np.float32)
+    ys, xs = np.mgrid[0:n, 0:n].astype(np.float32)
+    for a, b, w in segments:
+        if rng.random() < 0.55:
+            continue
+        r = w * rng.uniform(0.9, 1.5)
+        t0, t1 = sorted(rng.uniform(0.0, 1.0, 2))
+        for t in np.linspace(t0, t1, 6):
+            m = a + (b - a) * t
+            x0, x1 = int(max(0, m[0] - r * 3)), int(min(n, m[0] + r * 3))
+            y0, y1 = int(max(0, m[1] - r * 3)), int(min(n, m[1] + r * 3))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            X, Y = xs[y0:y1, x0:x1], ys[y0:y1, x0:x1]
+            snow[y0:y1, x0:x1] = np.maximum(snow[y0:y1, x0:x1], np.exp(-(((X - m[0]) ** 2 + (Y - m[1]) ** 2) / (r * r))))
+    snow_mask = smooth(0.45, 0.6, snow) * smooth(0.2, 0.6, ndimage.maximum_filter(cv.alpha, size=5))
+    alpha = np.maximum(cv.alpha, snow_mask)
+    height = cv.height + snow_mask * 4.0
+    color = cv.color.copy()
+    empty = cv.alpha < 0.05
+    if empty.any():
+        idx = ndimage.distance_transform_edt(empty, return_distances=False, return_indices=True)
+        color = color[idx[0], idx[1]]
+    nrm = normal_map(ndimage.gaussian_filter(height, 0.6), 0.6)
+    nrm[empty & (snow_mask < 0.05)] = (0.5, 0.5, 1.0)
+    rgba = np.concatenate([color, alpha[..., None]], -1)[::-1]
+    nrm = nrm[::-1] * np.array([1, -1, 1]) + np.array([0, 1, 0])
+    mask = np.stack([snow_mask, np.ones_like(snow_mask), np.full_like(snow_mask, 0.5)], -1)[::-1]
+    save(os.path.join(out, "BirchTwigs_C.png"), rgba, "RGBA")
+    save(os.path.join(out, "BirchTwigs_N.png"), nrm, "RGB")
+    save(os.path.join(out, "BirchTwigs_M.png"), mask, "RGB")
+    if preview:
+        a = rgba[..., 3:4]
+        c = rgba[..., :3] * (1 - mask[..., 0:1]) + np.array([0.93, 0.95, 1.0]) * mask[..., 0:1]
+        save(os.path.join(preview, "birchtwigs_preview.png"), c * a + np.array([0.55, 0.65, 0.8]) * (1 - a), "RGB")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=os.path.join(REPO, "unity", "Assets", "Textures", "Trees"))
@@ -429,6 +503,8 @@ def main():
         birch_bark(args.out, preview=args.preview)
     if args.only in (None, "fronds"):
         fronds(args.out, preview=args.preview)
+    if args.only in (None, "birchtwigs"):
+        birch_twigs(args.out, preview=args.preview)
 
 
 if __name__ == "__main__":

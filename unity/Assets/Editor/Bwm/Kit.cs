@@ -333,6 +333,45 @@ namespace Bwm
             }
         }
 
+        // A floe: a cake of sea ice floating with 'foot' at the waterline. An uneven outline with bites out of it, sides
+        // dropping well below the water (so it floats rather than lies on it), a rim of bare blue-white ice and a
+        // domed cap of snow inset from the edge; tilted by 'tilt' (degrees about x and z), as the swell rocks it.
+        public static void AddFloe(MeshBuilder mb, Vector3 foot, float radius, float freeboard, Vector2 tilt, int seed, Color ice, Color snow)
+        {
+            var random = new System.Random(seed * 5167 + 9);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            int n = 14;
+            var r = new float[n];
+            for (int k = 0; k < n; k++) r[k] = R(0.62f, 1.08f);
+            for (int pass = 0; pass < 2; pass++)
+            {
+                var eased = (float[])r.Clone();
+                for (int k = 0; k < n; k++) eased[k] = (r[(k + n - 1) % n] + r[k] * 2f + r[(k + 1) % n]) / 4f;
+                r = eased;
+            }
+            int bite = random.Next(n);
+            r[bite] *= 0.55f; r[(bite + 1) % n] *= 0.7f;      // a piece broken off
+            float spin = R(0f, Mathf.PI * 2f);
+            Quaternion turn = Quaternion.Euler(tilt.x, 0f, tilt.y);
+            Vector3 P(float a, float rr, float y) => foot + turn * new Vector3(Mathf.Cos(a) * rr * radius, y, Mathf.Sin(a) * rr * radius);
+            float draft = freeboard * 4f, cap = R(0.06f, 0.16f);
+            Color side = ice * 0.92f, under = ice * new Color(0.55f, 0.72f, 0.85f, 1f), rim = Color.Lerp(ice, Color.white, 0.55f);
+            Vector3 middle = P(0f, 0f, freeboard + cap * 1.6f);
+            for (int k = 0; k < n; k++)
+            {
+                float a0 = spin + 2f * Mathf.PI * k / n, a1 = spin + 2f * Mathf.PI * (k + 1) / n;
+                float r0 = r[k], r1 = r[(k + 1) % n];
+                Vector3 e0 = P(a0, r0, freeboard), e1 = P(a1, r1, freeboard);
+                Vector3 w0 = P(a0, r0 * 0.97f, 0f), w1 = P(a1, r1 * 0.97f, 0f);
+                Vector3 b0 = P(a0, r0 * 0.85f, -draft), b1 = P(a1, r1 * 0.85f, -draft);
+                mb.Quad(w0, w1, e1, e0, side);                    // the edge above the water
+                mb.Quad(b0, b1, w1, w0, under);                   // and below it, darker and bluer
+                Vector3 c0 = P(a0, r0 * 0.8f, freeboard + cap), c1 = P(a1, r1 * 0.8f, freeboard + cap);
+                mb.Quad(e0, e1, c1, c0, rim);                     // the bare rim, rising to the snow
+                mb.Tri(c0, c1, middle, snow);                     // the snow's domed cap
+            }
+        }
+
         // A five-pointed star standing upright, facing along z (a tree-topper)
         public static void AddStar(MeshBuilder mb, Vector3 centre, float radius, float thickness, Color color)
         {
@@ -428,7 +467,7 @@ namespace Bwm
                 // a fuller crown than a straight cone, drawing in to a narrow spire at the top
                 // (a pine's crown is widest a third of the way up it, not at its foot, and its boughs hardly droop)
                 float reach = (height * 0.36f * (clear > 0f ? Mathf.Pow(1f - t, 0.7f) * Mathf.Lerp(0.55f, 1f, Mathf.Clamp01(t / 0.3f)) * 0.78f : Mathf.Pow(1f - t, 0.82f)) + Mathf.Lerp(0.3f, 0.07f, t)) * girth;
-                int count = t > 0.88f || detail < 0.7f ? 5 : girth < 0.8f ? random.Next(6, 9) : random.Next(9, 12);
+                int count = t > 0.88f || detail < 0.7f ? 5 : girth < 0.8f ? random.Next(5, 8) : random.Next(7, 10);      // (each bough fans into three sprays)
                 float offset = spin + whorl * 2.39996f;      // golden angle between whorls
                 for (int k = 0; k < count; k++)
                 {
@@ -437,49 +476,79 @@ namespace Bwm
                     // radians below horizontal at the base; the youngest shoots, at the top, point upwards
                     float droop = Mathf.Lerp(0.38f, 0.12f, t) * (clear > 0f ? 0.25f : 1f) + (1f - girth) * 0.55f - Mathf.Clamp01((t - 0.72f) / 0.28f) * 0.8f + R(-0.06f, 0.06f);
                     var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                    var side = new Vector3(-dir.z, 0f, dir.x);
                     Vector3 root = foot + Vector3.up * y + dir * trunkR * 0.8f;
-                    // three points along the bough: it curves further down towards the tip
-                    Vector3 p0 = root;
-                    Vector3 p1 = p0 + (dir * Mathf.Cos(droop) + Vector3.down * Mathf.Sin(droop)) * len * 0.5f;
-                    float droop2 = droop + 0.32f;
-                    Vector3 p2 = p1 + (dir * Mathf.Cos(droop2) + Vector3.down * Mathf.Sin(droop2)) * len * 0.5f;
-                    float width = len * (detail < 0.7f ? 0.78f : 0.66f);      // the spray's own outline is cut out, so the card can be as broad as the texture's spray
-                    float roof = 0.32f;      // how far each half of the frond tilts down from its spine
-                    Vector3 wingL = (side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
-                    Vector3 wingR = (-side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
                     var inner = new Color(tint.r, tint.g, tint.b, 0.25f);
                     var mid = new Color(tint.r, tint.g, tint.b, 0.75f);
                     var outer = new Color(tint.r, tint.g, tint.b, 1f);
-                    // the texture's u runs along the bough (0 at the trunk), v across it (0.5 on the spine); each bough is
-                    // one of the atlas's four sprays
-                    int which = random.Next(4);
-                    for (int half = 0; half < 2; half++)
+                    float widthShare = detail < 0.7f ? 0.78f : 0.66f;
+                    if (detail < 0.7f)
                     {
-                        Vector3 w = half == 0 ? wingL : wingR;
-                        float v = half == 0 ? 0f : 1f;
-                        mb.QuadUV(p0, p1, p1 + w * 0.9f, p0 + w * 0.35f, Spray(new Vector2(0f, 0.5f), which), Spray(new Vector2(0.5f, 0.5f), which), Spray(new Vector2(0.5f, v), which), Spray(new Vector2(0f, v), which), inner, mid, mid, inner);
-                        mb.QuadUV(p1, p2, p2 + w * 0.25f, p1 + w * 0.9f, Spray(new Vector2(0.5f, 0.5f), which), Spray(new Vector2(1f, 0.5f), which), Spray(new Vector2(1f, Mathf.Lerp(0.5f, v, 0.3f)), which), Spray(new Vector2(0.5f, v), which), mid, outer, outer, mid);
+                        Bough(root, dir, len, droop, widthShare, inner, mid, outer, false);
+                        continue;
                     }
-                    if (detail >= 0.7f)
+                    // a bough is not one blade: its main spray reaches two thirds of the way, and from its middle two side
+                    // sprays fan out and droop further, each from a different part of the atlas
+                    Vector3 joint = Bough(root, dir, len * 0.72f, droop, widthShare * 0.9f, inner, mid, outer, true);
+                    for (int sideSign = -1; sideSign <= 1; sideSign += 2)
                     {
-                        // twigs hanging under the bough: a whole spray turned straight down from its spine, so the bough has
-                        // body seen from the side (its own outline is cut out, so no straight card edge shows)
-                        Vector3 hang = Vector3.down * width * 0.3f;
-                        int other = (which + 1 + random.Next(3)) % 4;
-                        mb.QuadUV(p0 - hang * 0.15f, p2 - hang * 0.15f, p2 + hang * 0.7f, p0 + hang, Spray(new Vector2(0f, 0.5f), other), Spray(new Vector2(1f, 0.5f), other), Spray(new Vector2(1f, 0.02f), other), Spray(new Vector2(0f, 0.02f), other), inner, outer, mid, mid);
+                        float fan = R(0.4f, 0.75f) * sideSign;
+                        var sideDir = new Vector3(Mathf.Cos(a + fan), 0f, Mathf.Sin(a + fan));
+                        Bough(joint, sideDir, len * R(0.45f, 0.62f), droop + R(0.1f, 0.3f), widthShare * 0.75f, mid, mid, outer, false);
                     }
                 }
             }
-            // the leader: three narrow fronds standing against the axis and meeting in a point, so the top is a spire
-            // from every side (two crossed full-width fronds read as a diamond, a splayed tuft as a forked V)
-            Vector3 tipBase = foot + Vector3.up * height * 0.9f, tip = foot + Vector3.up * height * 1.03f;
-            var top = new Color(tint.r, tint.g, tint.b, 1f);
-            for (int k = 0; k < 3; k++)
+            // the leader: a slim top shoot, and round it a few short sprays angled upwards, so the top is soft and
+            // a little irregular rather than a spearhead
             {
-                float a = spin + k * 2.0944f + 0.4f;
-                var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * height * 0.017f;
-                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.08f, tip - side * 0.08f, Spray(new Vector2(0.3f, 0.2f), k), Spray(new Vector2(0.3f, 0.8f), k), Spray(new Vector2(1f, 0.55f), k), Spray(new Vector2(1f, 0.45f), k), top, top, top, top);
+                var top = new Color(tint.r, tint.g, tint.b, 1f);
+                Vector3 tipBase = foot + Vector3.up * height * 0.9f, tip = foot + Vector3.up * height * 1.02f + new Vector3(R(-0.1f, 0.1f), 0f, R(-0.1f, 0.1f)) * height * 0.03f;
+                for (int k = 0; k < 2; k++)
+                {
+                    float a = spin + k * Mathf.PI * 0.5f;
+                    var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * height * 0.03f;
+                    int which = random.Next(4);
+                    mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.3f, tip - side * 0.3f, Spray(new Vector2(0.15f, 0.25f), which), Spray(new Vector2(0.15f, 0.75f), which), Spray(new Vector2(0.95f, 0.6f), which), Spray(new Vector2(0.95f, 0.4f), which), top, top, top, top);
+                }
+                if (detail >= 0.7f)
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float a = spin + k * 1.5708f + R(-0.4f, 0.4f);
+                        var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                        Bough(foot + Vector3.up * height * R(0.86f, 0.93f), d, height * R(0.06f, 0.1f), -R(0.5f, 0.9f), 0.6f, top, top, top, false);
+                    }
+            }
+
+            // One spray along a curving bough from 'from', out along 'dirFlat' and drooping: a shallow roof of two
+            // half-cards from one of the atlas's sprays, and with 'hang' a spray hanging under it. Returns the
+            // bough's middle, where side sprays can grow.
+            Vector3 Bough(Vector3 from, Vector3 dirFlat, float length, float droopBy, float widthShare, Color cInner, Color cMid, Color cOuter, bool hang)
+            {
+                var side = new Vector3(-dirFlat.z, 0f, dirFlat.x);
+                Vector3 p0 = from;
+                Vector3 p1 = p0 + (dirFlat * Mathf.Cos(droopBy) + Vector3.down * Mathf.Sin(droopBy)) * length * 0.5f;
+                float droop2 = droopBy + 0.32f;
+                Vector3 p2 = p1 + (dirFlat * Mathf.Cos(droop2) + Vector3.down * Mathf.Sin(droop2)) * length * 0.5f;
+                float width = length * widthShare;
+                float roof = R(0.2f, 0.42f);      // how far each half of the spray tilts down from its spine
+                Vector3 wingL = (side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
+                Vector3 wingR = (-side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
+                int which = random.Next(4);
+                for (int half = 0; half < 2; half++)
+                {
+                    Vector3 w = half == 0 ? wingL : wingR;
+                    float v = half == 0 ? 0f : 1f;
+                    mb.QuadUV(p0, p1, p1 + w * 0.9f, p0 + w * 0.35f, Spray(new Vector2(0f, 0.5f), which), Spray(new Vector2(0.5f, 0.5f), which), Spray(new Vector2(0.5f, v), which), Spray(new Vector2(0f, v), which), cInner, cMid, cMid, cInner);
+                    mb.QuadUV(p1, p2, p2 + w * 0.25f, p1 + w * 0.9f, Spray(new Vector2(0.5f, 0.5f), which), Spray(new Vector2(1f, 0.5f), which), Spray(new Vector2(1f, Mathf.Lerp(0.5f, v, 0.3f)), which), Spray(new Vector2(0.5f, v), which), cMid, cOuter, cOuter, cMid);
+                }
+                if (hang)
+                {
+                    // twigs hanging under the bough: a whole spray turned down from its spine, so it has body seen from
+                    // the side and from below (its own outline is cut out, so no straight card edge shows)
+                    Vector3 down = Vector3.down * width * 0.3f;
+                    int other = (which + 1 + random.Next(3)) % 4;
+                    mb.QuadUV(p0 - down * 0.15f, p2 - down * 0.15f, p2 + down * 0.7f, p0 + down, Spray(new Vector2(0f, 0.5f), other), Spray(new Vector2(1f, 0.5f), other), Spray(new Vector2(1f, 0.02f), other), Spray(new Vector2(0f, 0.02f), other), cInner, cOuter, cMid, cMid);
+                }
+                return p1;
             }
         }
 
@@ -526,21 +595,19 @@ namespace Bwm
             {
                 if (detail < 0.7f) return;
                 var flat = new Vector3(dir.x, 0f, dir.z).normalized;
+                // each twig is a spray card (tools/treetex.py: fine branching twigs, cut out) reaching out and down from
+                // the limb's end, crossed with a second at right angles so it has body from every side
+                var white = new Color(1f, 1f, 1f, 1f);
                 for (int i = 0; i < count; i++)
                 {
                     float turn = R(-1.1f, 1.1f);
                     var outward = Quaternion.Euler(0f, turn * Mathf.Rad2Deg, 0f) * flat;
-                    Vector3 mid = at + (outward * R(0.5f, 0.9f) + Vector3.up * R(-0.1f, 0.35f)).normalized * length * 0.45f;
-                    Vector3 end = mid + (outward * R(0.2f, 0.6f) + Vector3.down * R(0.5f, 1f)).normalized * length * R(0.5f, 0.9f);
-                    Limb(at, mid, 0.014f, 0.009f, 3, twigColor, twigColor);
-                    Limb(mid, end, 0.009f, 0.004f, 3, twigColor, twigColor);
-                    // finer still: a spray of hanging tips off each twig
-                    for (int tip = 0; tip < 2; tip++)
-                    {
-                        Vector3 from = Vector3.Lerp(mid, end, R(0.1f, 0.7f));
-                        Vector3 to = from + (outward * R(-0.25f, 0.45f) + Vector3.down * R(0.6f, 1f) + new Vector3(R(-0.3f, 0.3f), 0f, R(-0.3f, 0.3f))).normalized * length * R(0.3f, 0.55f);
-                        Limb(from, to, 0.006f, 0.003f, 3, twigColor, twigColor);
-                    }
+                    Vector3 reach = (outward * R(0.55f, 0.9f) + Vector3.down * R(0.3f, 0.8f)).normalized * length * R(1.1f, 1.6f);
+                    Vector3 across = Vector3.Cross(reach.normalized, Vector3.up).normalized * length * R(0.55f, 0.8f);
+                    Vector3 down = Vector3.Cross(across.normalized, reach.normalized) * length * R(0.5f, 0.75f);
+                    Vector3 end = at + reach;
+                    mb.QuadUV(at - across * 0.15f, end - across, end + across, at + across * 0.15f, new Vector2(0f, 0.42f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.58f), white, white, white, white);
+                    mb.QuadUV(at - down * 0.15f, end - down, end + down, at + down * 0.15f, new Vector2(0f, 0.42f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.58f), white, white, white, white);
                 }
             }
 
@@ -767,9 +834,10 @@ namespace Bwm
         // The tree textures on a BWM/Fir material: the fronds atlas, and the bark ('bark': "FirBark" or "BirchBark")
         public static void SetTreeMaps(Material m, string bark)
         {
-            m.SetTexture("_MainTex", TreeMap("FirFronds_C.png", "color", true));
-            m.SetTexture("_FrondNormal", TreeMap("FirFronds_N.png", "normal", true));
-            m.SetTexture("_FrondMask", TreeMap("FirFronds_M.png", "data", true));
+            string sprays = bark == "BirchBark" ? "BirchTwigs" : "FirFronds";      // a birch's cards are sprays of bare twigs
+            m.SetTexture("_MainTex", TreeMap(sprays + "_C.png", "color", true));
+            m.SetTexture("_FrondNormal", TreeMap(sprays + "_N.png", "normal", true));
+            m.SetTexture("_FrondMask", TreeMap(sprays + "_M.png", "data", true));
             m.SetTexture("_BarkTex", TreeMap(bark + "_C.png", "color"));
             m.SetTexture("_BarkNormal", TreeMap(bark + "_N.png", "normal"));
         }
@@ -907,6 +975,17 @@ namespace Bwm
             normals.Add(Vector3.zero); normals.Add(Vector3.zero); normals.Add(Vector3.zero); normals.Add(Vector3.zero);
             tris.Add(v); tris.Add(v + 2); tris.Add(v + 1);
             tris.Add(v); tris.Add(v + 3); tris.Add(v + 2);
+        }
+
+        // A triangle with its own colour at each corner (a grass blade dark at its root and pale at its tip)
+        public void TriColors(Vector3 a, Vector3 b, Vector3 c, Color ca, Color cb, Color cc)
+        {
+            int v = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c);
+            colors.Add(ca); colors.Add(cb); colors.Add(cc);
+            uvs.Add(Vector2.zero); uvs.Add(Vector2.zero); uvs.Add(Vector2.zero);
+            normals.Add(Vector3.zero); normals.Add(Vector3.zero); normals.Add(Vector3.zero);
+            tris.Add(v); tris.Add(v + 1); tris.Add(v + 2);
         }
 
         // ...with a normal given at each corner (smooth round surfaces: trunks and limbs)

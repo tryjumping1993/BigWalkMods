@@ -151,7 +151,7 @@ public static class WinterIsleDressing
     }
 
     // A plant about 'height' metres tall (or the catalogue's own size times 'scale' when height is 0)
-    static void Plant(string kind, Vector2 p, float scale, float snow = 0.3f)
+    static void Plant(string kind, Vector2 p, float scale, float snow = 0.55f)      // (snow only on what faces well up: at 0.3 whole leaves went white)
     {
         if (!catalog.ContainsKey(kind)) throw new Exception("No '" + kind + "' in world\\catalog.tsv");
         float y = land.Height(p) - 0.08f;
@@ -400,13 +400,13 @@ public static class WinterIsleDressing
         // ---- trailside rock: domes sunk to their shoulders within a few steps of the paths, each with cobbles at its
         //      foot, so a walker passes between rocks instead of beside a field of them ----
         int trailside = 0;
-        for (float z = l.Z0; z < l.Z1; z += 7f)
-            for (float x = l.X0; x < l.X1; x += 7f)
+        for (float z = l.Z0; z < l.Z1; z += 5f)
+            for (float x = l.X0; x < l.X1; x += 5f)
             {
-                var p = new Vector2(x + R(-3f, 3f), z + R(-3f, 3f));
+                var p = new Vector2(x + R(-2.2f, 2.2f), z + R(-2.2f, 2.2f));
                 float h = l.Height(p), toPath = l.ToPath(p);
-                if (float.IsNaN(h) || h < 1.5f || toPath < 3.6f || toPath > 10f || l.Slope(p) > 0.5f || !l.Free(p, 0f) || InsideRock(p, 1.5f)) continue;
-                if (R(0f, 1f) > 0.34f + 0.5f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
+                if (float.IsNaN(h) || h < 1.5f || toPath < 3.6f || toPath > 12f || l.Slope(p) > 0.5f || !l.Free(p, 0f) || InsideRock(p, 1.5f)) continue;
+                if (R(0f, 1f) > 0.45f + 0.5f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
                 float d = Mathf.Min(R(2.2f, 7.5f), (toPath - 1.6f) * 1.7f);
                 Rock(Pick(BigRound), p, LowGround(p, d * 0.4f), d, R(0.38f, 0.58f), 0.45f, 10f);
                 int cobbles = random.Next(2, 6);
@@ -623,8 +623,8 @@ public static class WinterIsleDressing
                 if (R(0f, 1f) > (0.2f + 0.55f * near) * (0.4f + patch * 1.2f)) continue;
                 // by the trails it is mostly low bushes and ferns under snow, in clumps; further off, tufts and stones
                 float pick = R(0f, 1f), bushy = 0.32f + 0.25f * near;
-                if (pick < bushy && toPath > 3.4f) Plant(Pick(low), p, R(0.5f, 1.05f), 0.3f);      // (a bush nearer than that stands in the walker's face)
-                else if (pick < bushy + 0.3f) Plant(Pick(tufts), p, R(0.28f, 0.5f), 0.3f);
+                if (pick < bushy && toPath > 3.4f) Plant(Pick(low), p, R(0.5f, 1.05f), 0.55f);      // (a bush nearer than that stands in the walker's face)
+                else if (pick < bushy + 0.3f) Plant(Pick(tufts), p, R(0.28f, 0.5f), 0.5f);
                 else if (pick < bushy + 0.5f) Rock(Pick(SmallRound), p, LowGround(p, 0.3f), R(0.35f, 1.1f), R(0.45f, 0.65f), 0.35f, 25f, true, false);
                 else Plant(Pick(sticks), p, R(0.35f, 0.7f), 0.35f);
                 scattered++;

@@ -53,7 +53,7 @@ function Update-BwmTreeMaps {
     $script = Join-Path $Repo 'tools\treetex.py'
     $dir = Join-Path $Repo 'unity\Assets\Textures\Trees'
     $stale = $false
-    foreach ($f in 'FirFronds_C.png', 'FirFronds_N.png', 'FirFronds_M.png', 'FirBark_C.png', 'FirBark_N.png', 'BirchBark_C.png', 'BirchBark_N.png') {
+    foreach ($f in 'FirFronds_C.png', 'FirFronds_N.png', 'FirFronds_M.png', 'FirBark_C.png', 'FirBark_N.png', 'BirchBark_C.png', 'BirchBark_N.png', 'BirchTwigs_C.png', 'BirchTwigs_N.png', 'BirchTwigs_M.png') {
         $file = Join-Path $dir $f
         if (-not (Test-Path $file) -or (Get-Item $file).LastWriteTimeUtc -lt (Get-Item $script).LastWriteTimeUtc) { $stale = $true }
     }
