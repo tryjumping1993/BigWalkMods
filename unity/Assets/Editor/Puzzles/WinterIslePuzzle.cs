@@ -422,8 +422,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // little stream gullies winding through the lowland: the lines where a slow noise crosses its middle value,
         // cut a couple of metres deep with soft banks, a branch network from a second noise
         float g1 = Mathf.Abs(Mathf.PerlinNoise(x * 0.0055f + 61.1f, z * 0.0055f + 13.7f) - 0.5f), g2 = Mathf.Abs(Mathf.PerlinNoise(x * 0.011f + 7.3f, z * 0.011f + 88.8f) - 0.5f);
-        float gully = Mathf.Max(1f - Smooth(g1 / 0.03f), 0.6f * (1f - Smooth(g2 / 0.022f)));
-        lowland -= gully * 2.6f * Smooth(inside / 40f) * underMountain;
+        float gully = Mathf.Max(1f - Smooth(g1 / 0.075f), 0.6f * (1f - Smooth(g2 / 0.055f)));      // (wide and shallow: narrow ones made V-trenches on the 3 m grid)
+        gully = gully * gully * (3f - 2f * gully);
+        lowland -= gully * 1.6f * Smooth(inside / 40f) * underMountain;
         lowland += (Mathf.Max(ridgelets, -1.5f) + hummocks - dells) * Smooth(inside / 45f) * underMountain + fine * Smooth(inside / 8f);
         // in places the lowland is benched: level shelves a couple of metres apart with a bank between
         float benched = Smooth((Mathf.PerlinNoise(x * 0.0065f + 91.7f, z * 0.0065f + 33.1f) - 0.5f) / 0.12f) * Smooth(inside / 40f);
@@ -1532,11 +1533,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 {
                     var p = new Vector2(x + Rc(-3f, 3f), z + Rc(-3f, 3f));
                     int k = Cell_(p);
-                    if (!(height[k] > 8f)) continue;
+                    if (!(height[k] > 25f)) continue;      // the mountains' cliffs: on the lowland's knolls they stood like bunkers
                     float slope = Slope(k);
                     if (slope < 1.0f) continue;      // cliffs only: on merely steep snow they stood about like dice
                     if (MountainHeight(p) > 4f && Piste(p) > 0.05f) continue;
-                    if (!Free(p, 2f)) continue;
+                    if (!Free(p, 2f) || PathDistance(p) < 15f) continue;
                     if (Rc(0f, 1f) > Smooth((slope - 1.0f) / 0.5f) * 0.9f) continue;
                     float h0 = HeightAt(p);
                     Vector2 grad = new Vector2(HeightAt(p + Vector2.right * 2f) - HeightAt(p - Vector2.right * 2f), HeightAt(p + Vector2.up * 2f) - HeightAt(p - Vector2.up * 2f));
@@ -1547,7 +1548,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     if (!crags.TryGetValue(region, out MeshBuilder cb)) crags[region] = cb = new MeshBuilder();
                     // set into the slope: its back buried, its front standing out as a step
                     Vector3 foot = new Vector3(p.x - root.x, h0 - size.y * 0.8f - root.y, p.y - root.z);
-                    Kit.AddCragBlock(cb, foot, size, down, blocks, new Color(1f, 0.25f, 0f, 0.75f));      // (untrodden, a little bare, no sand, a crest)
+                    Kit.AddCragBlock(cb, foot, size, down, blocks, new Color(1f, 0f, 0f, 0.75f));      // (untrodden, not bare, no sand, a crest: the slope alone makes its faces rock)
                     blocks++;
                 }
             // drawn with the ground's own material, so a block's steep faces are the cliffs' rock and its top the snow
