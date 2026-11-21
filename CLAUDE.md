@@ -20,6 +20,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
+| `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 0.9 GB) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
 | (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods	railer\`. `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
 | `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
@@ -299,6 +300,14 @@ the user and friends, who must all have the same packs and SDK version.
   and records it in `unity\ProjectSettings\BigWalkPuzzleIds.json`. Builds reuse that root. Deleting the scene
   or that file gives the puzzle a new id, which breaks saves and multiplayer matching for it.
 - **Saves:** the companion only ever hosts on the save slot named "BWM Test". Never select another slot.
+- **Players' install** (`tools\install\`): `Install.cmd` finds Big Walk through Steam's library list and copies
+  `payload\` into the game folder: Doorstop enabled with paths relative to the game, BepInEx's core and .NET, the
+  SDK mod, the packs in `plugins\BigChristmasWalk\` (never the SDK's `BigPuzzleSDK` folder: packs there switch on its
+  creator keys) and Winter Walk. It records what it copied in `BepInEx\BigChristmasWalk.installed.txt` and backs up
+  what it replaced; a newer version updates in place; `Uninstall.cmd` removes it and restores the backup. It refuses
+  a game folder whose Doorstop points elsewhere (this PC's dev setup) unless `-Force`. Tested 2026-11-21 on a fake
+  folder and on this PC's game (installed with `-Force`, booted through Steam with 35 packs, uninstalled: the dev
+  files came back byte-identical). The first start generates BepInEx's interop (needs the internet once).
 - **SDK internals:** the framework and companion call the SDK's exporter, checks, map importer and reload by
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
 - **Game folder:** only `winhttp.dll`, `.doorstop_version` and `doorstop_config.ini` (enabled = false,
@@ -316,5 +325,5 @@ each time, and do not commit broken or half-built states.
 - Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
   material on the test island and causeway does not. Cause unknown.
 - `ClearGround` leaves dark flat patches where some boulders were.
-- Packaging a puzzle for friends (Thunderstore zip) is not built.
+- The players' zip has nowhere to live yet: the repo is private, and it is about 0.9 GB.
 - Nothing has been tested with two players.

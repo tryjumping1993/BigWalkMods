@@ -2,12 +2,13 @@
 #   tools\bwm.ps1 build <Puzzle> [-Resite] [-NoPreview] [-NoExport] [-AllowIssues]
 #   tools\bwm.ps1 build-all | list | dump-world | setup
 #   tools\bwm.ps1 launch        start the game with mods (a normal Steam launch stays vanilla)
+#   tools\bwm.ps1 package [<version>]   the players' download and installer (tools\install\Package.ps1)
 #   tools\bwm.ps1 log           the mod loader's lines about puzzles from the last game run
 # Unity commands run the editor headless and print only the framework's own "[BWM]" lines; the full Unity log
 # is logs\unity-<command>.log. Exit code 0 means the command succeeded.
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('build', 'build-all', 'list', 'dump-world', 'part-metrics', 'survey', 'setup', 'launch', 'log', 'companion', 'game', 'play')]
+    [ValidateSet('build', 'build-all', 'list', 'dump-world', 'part-metrics', 'survey', 'setup', 'launch', 'log', 'companion', 'game', 'play', 'package')]
     [string]$Command,
     [Parameter(Position = 1)][string]$Puzzle,
     [switch]$Resite,
@@ -173,6 +174,11 @@ switch ($Command) {
         $cmd = if ($Puzzle) { $Puzzle } else { 'help' }
         try { (Invoke-WebRequest -Uri ("http://127.0.0.1:17361/" + $cmd) -UseBasicParsing -TimeoutSec 200).Content; exit 0 }
         catch { Write-Output ("The companion did not answer (" + $_.Exception.Message + "). Is the game running with mods?"); exit 1 }
+    }
+    'package' {
+        # The players' zip with its installer (tools\install\README.txt is what they read)
+        & (Join-Path $PSScriptRoot 'install\Package.ps1') -Version $Puzzle
+        exit $LASTEXITCODE
     }
     'log' {
         $log = Join-Path $Repo 'profile\BepInEx\LogOutput.log'
