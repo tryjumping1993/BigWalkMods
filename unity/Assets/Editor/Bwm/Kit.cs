@@ -162,6 +162,48 @@ namespace Bwm
                 }
         }
 
+        // A block of crag added to a mesh being built: a squat prism with flat, faceted faces (a bevel round its top,
+        // the top tilted a little), its front ('facing', on the level) a near-vertical face. Grey, a shade of its own on
+        // each face; drawn with BWM/Snowy, snow lies on its top and ledges and the faces stay bare.
+        // 'ground': instead of its own greys, every corner carries this colour, for a block drawn with the island's
+        // ground material (BWM/Snow), which then gives its steep faces the cliffs' own rock and its top lying snow.
+        public static void AddCragBlock(MeshBuilder mb, Vector3 foot, Vector3 size, Vector2 facing, int seed, Color? ground = null)
+        {
+            var random = new System.Random(seed * 92821 + 5);
+            float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
+            var fwd = new Vector3(facing.x, 0f, facing.y).normalized;
+            var right = new Vector3(fwd.z, 0f, -fwd.x);
+            float grey = R(0.2f, 0.28f);      // dark: the cliff rock's own grey (lighter read as sugar cubes)
+            Color Face() { if (ground.HasValue) return ground.Value; float g = grey * R(0.82f, 1.15f); return new Color(g * 1.02f, g, g * 1.03f); }
+            float hx = size.x * 0.5f, hz = size.z * 0.5f, h = size.y;
+            // the base corners, and the top corners drawn in (more at the back, so the front is the steep face)
+            var low = new Vector3[4];
+            var high = new Vector3[4];
+            Vector2[] c = { new Vector2(-1, -1), new Vector2(1, -1), new Vector2(1, 1), new Vector2(-1, 1) };
+            float tilt = R(-0.12f, 0.08f) * h;
+            for (int k = 0; k < 4; k++)
+            {
+                float jx = R(0.85f, 1.15f), jz = R(0.85f, 1.15f);
+                low[k] = foot + right * (c[k].x * hx * jx) + fwd * (c[k].y * hz * jz);
+                float inset = c[k].y > 0 ? R(0.85f, 0.97f) : R(0.55f, 0.8f);      // c.y > 0 is the front
+                high[k] = foot + right * (c[k].x * hx * jx * R(0.7f, 0.92f)) + fwd * (c[k].y * hz * jz * inset) + Vector3.up * (h * R(0.85f, 1.1f) + c[k].y * tilt);
+            }
+            // a bevel: each top edge cut back, so the block has more than six faces
+            var bevel = new Vector3[4];
+            Vector3 topMid = (high[0] + high[1] + high[2] + high[3]) * 0.25f;
+            for (int k = 0; k < 4; k++) bevel[k] = Vector3.Lerp(high[k], topMid, R(0.18f, 0.32f)) + Vector3.up * R(0.05f, 0.18f) * h;
+            for (int k = 0; k < 4; k++)
+            {
+                int n = (k + 1) % 4;
+                Color f = Face();
+                mb.Tri(low[k], high[k], low[n], f); mb.Tri(low[n], high[k], high[n], f);
+                Color b2 = Face();
+                mb.Tri(high[k], bevel[k], high[n], b2); mb.Tri(high[n], bevel[k], bevel[n], b2);
+            }
+            Color top = Face();
+            mb.Tri(bevel[0], bevel[3], bevel[2], top); mb.Tri(bevel[0], bevel[2], bevel[1], top);
+        }
+
         // A glowing box for windows and lantern lights (into a mesh drawn with BWM/FairyLight: uv.x 1 = lit, uv.y = phase)
         public static void AddGlow(MeshBuilder mb, Vector3 centre, Vector3 size, float yaw, Color color, float phase)
         {
@@ -357,7 +399,7 @@ namespace Bwm
             float draft = freeboard * 4f, cap = R(0.06f, 0.16f);
             // (sea ice is greyish white with a faint blue in its broken edges, not a saturated blue)
             Color side = Color.Lerp(ice, new Color(0.78f, 0.83f, 0.86f, 1f), 0.65f), under = Color.Lerp(ice, new Color(0.42f, 0.5f, 0.56f, 1f), 0.6f), rim = Color.Lerp(ice, Color.white, 0.7f);
-            Vector3 middle = P(0f, 0f, freeboard + cap * 1.6f);
+            Vector3 middle = P(0f, 0f, freeboard + cap * 2.6f);      // (above the ring of lumps round it, or the cap dips in the middle like a hole)
             for (int k = 0; k < n; k++)
             {
                 float a0 = spin + 2f * Mathf.PI * k / n, a1 = spin + 2f * Mathf.PI * (k + 1) / n;
@@ -505,29 +547,18 @@ namespace Bwm
                     }
                 }
             }
-            // the leader: a slim snowy spire, three sprays standing on their stems round the axis and drawing in to a
-            // point, broad at their foot, with a ring of short sprays angled upwards round its base
+            // the top: a narrow cone of short sprays hugging the axis, shorter towards the tip, so the crown draws in to a
+            // soft point (spreading upward sprays made a palm-tree tuft, upright cards a glassy spike)
             {
                 var top = new Color(tint.r, tint.g, tint.b, 1f);
-                Vector3 spireBase = foot + Vector3.up * height * 0.83f, spireTip = foot + Vector3.up * height * 1.02f + new Vector3(R(-1f, 1f), 0f, R(-1f, 1f)) * height * 0.01f;
-                float spireWidth = height * 0.05f * Mathf.Max(girth, 0.7f);
-                for (int k = 0; k < 3; k++)
+                int tuft = detail >= 0.7f ? 9 : 5;
+                for (int k = 0; k < tuft; k++)
                 {
-                    float a = spin + k * 2.0944f + 0.3f;
-                    var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * spireWidth;
-                    var out_ = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * spireWidth * 0.35f;
-                    int which = random.Next(4);
-                    Vector3 midS = Vector3.Lerp(spireBase, spireTip, 0.4f) + out_;
-                    mb.QuadUV(spireBase - side + out_, spireBase + side + out_, midS + side * 0.75f, midS - side * 0.75f, Spray(new Vector2(0.2f, 0.05f), which), Spray(new Vector2(0.2f, 0.95f), which), Spray(new Vector2(0.55f, 0.9f), which), Spray(new Vector2(0.55f, 0.1f), which), top, top, top, top);
-                    mb.QuadUV(midS - side * 0.75f, midS + side * 0.75f, spireTip + side * 0.05f, spireTip - side * 0.05f, Spray(new Vector2(0.55f, 0.1f), which), Spray(new Vector2(0.55f, 0.9f), which), Spray(new Vector2(1f, 0.55f), which), Spray(new Vector2(1f, 0.45f), which), top, top, top, top);
+                    float f = (float)k / Mathf.Max(1, tuft - 1);
+                    float a = spin + k * 2.39996f;
+                    var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                    Bough(foot + Vector3.up * height * Mathf.Lerp(0.84f, 0.99f, f), d, height * Mathf.Lerp(0.075f, 0.022f, f), -Mathf.Lerp(0.95f, 1.35f, f), 0.5f, top, top, top, false);
                 }
-                if (detail >= 0.7f)
-                    for (int k = 0; k < 6; k++)
-                    {
-                        float a = spin + k * 1.0472f + R(-0.3f, 0.3f);
-                        var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                        Bough(foot + Vector3.up * height * R(0.8f, 0.88f), d, height * R(0.07f, 0.11f), -R(0.3f, 0.7f), 0.6f, top, top, top, false);
-                    }
             }
 
             // One spray along a curving bough from 'from', out along 'dirFlat' and drooping: a shallow roof of two

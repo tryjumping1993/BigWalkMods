@@ -118,14 +118,17 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // the forest, each a cleared ribbon 50 to 70 m wide, swinging from side to side and meeting at the bottom.
     // 1 on a piste, 0 off it.
     public const float TreeLine = 330f;      // metres above the sea
-    public static float Piste(Vector2 p)
+    public static float Piste(Vector2 p) => Piste(p, true);
+    // ...only the runs themselves, where the snow is groomed (the open bowl round them is not)
+    public static float Groomed(Vector2 p) => Piste(p, false);
+    static float Piste(Vector2 p, bool withBowl)
     {
         float ski = SkiFace(p);
         if (ski <= 0f) return 0f;
         Vector2 d = p - Peak;
         float along = d.magnitude;
         float off = Mathf.DeltaAngle(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, SkiBearing * Mathf.Rad2Deg) * Mathf.Deg2Rad;
-        float open = 1f - Smooth((along - 380f) / 140f);      // the bowl under the summit, all open
+        float open = withBowl ? 1f - Smooth((along - 380f) / 140f) : 0f;      // the bowl under the summit, all open
         float best = 0f;
         for (int run = 0; run < 3; run++)
         {
@@ -201,7 +204,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             skiH -= 18f * Mathf.Exp(-Mathf.Pow((alongFace - 300f) / 170f, 2f)) * (1f - Mathf.Min(1f, Mathf.Pow(skiOff / 0.6f, 2f)));
             skiH += 24f * Mathf.Exp(-Mathf.Pow((skiOff + 0.62f) / 0.12f, 2f)) * Smooth(alongFace / 160f) * (1f - Smooth((alongFace - 520f) / 200f)) * (0.6f + 0.8f * Mathf.PerlinNoise(alongFace * 0.01f, 4.2f));
             // a shoulder standing out of the face's north side, so that from the east the mountain is not a triangle
-            skiH += 55f * Mathf.Exp(-Mathf.Pow((alongFace - 640f) / 170f, 2f)) * Mathf.Exp(-Mathf.Pow((skiOff + 0.5f) / 0.14f, 2f));
+            skiH += 32f * Mathf.Exp(-Mathf.Pow((alongFace - 640f) / 240f, 2f)) * Mathf.Exp(-Mathf.Pow((skiOff + 0.56f) / 0.17f, 2f));      // (broad: a narrow one stood as a knob in front of the base)
+            // and on the bowl's other side a lower, snowy rim, so the bowl is held on both sides but not in a trough
+            skiH += 12f * Mathf.Exp(-Mathf.Pow((skiOff - 0.66f) / 0.13f, 2f)) * Smooth(alongFace / 200f) * (1f - Smooth((alongFace - 560f) / 180f));
             h = Mathf.Lerp(h, skiH, ski);
         }
         // aretes and cirques: five spurs run out from the summit with bowls hollowed between them (steep sides only)
@@ -250,7 +255,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // crags and spurs on the steep sides; the ski face only rolls a little
         // (big buttresses and couloirs; little of the finer ridged noise, which on a steep face ran down it in flutes)
         float rough = (Ridged(p.x * 0.006f + 11.3f, p.y * 0.006f + 4.9f) - 0.4f) * 70f + (Ridged(p.x * 0.017f + 2.1f, p.y * 0.017f + 7.7f) - 0.45f) * 10f + (Ridged(p.x * 0.05f + 6.3f, p.y * 0.05f + 1.2f) - 0.5f) * 2.5f;
-        float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 16f;
+        float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 9f;      // long rolls only
         float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 150f);      // none at the foot or on the summit
         float rib = Rib(p) * Smooth((h - TreeLine + 40f) / 60f);      // rock ribs only above the trees; below, the face is even ground under forest
         // below the bowl each run lies in its own shallow valley: the forest between stands on spurs some metres higher
@@ -413,7 +418,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
         float hummocks = (Fbm(x * 0.042f + 21.7f, z * 0.042f + 5.3f, 2) - 0.5f) * 4f;
         float dells = Smooth((Mathf.PerlinNoise(x * 0.019f + 77.1f, z * 0.019f + 12.9f) - 0.6f) / 0.12f) * 3.5f;
         float fine = (Mathf.PerlinNoise(x * 0.09f + 3.9f, z * 0.09f + 44.2f) - 0.5f) * 1.1f + (Mathf.PerlinNoise(x * 0.21f + 8.1f, z * 0.21f + 1.7f) - 0.5f) * 0.45f;
-        lowland += (Mathf.Max(ridgelets, -1.5f) + hummocks - dells) * Smooth(inside / 45f) + fine * Smooth(inside / 8f);
+        float underMountain = 1f - Smooth(MountainHeight(p) / 30f);      // (on the mountain the lowland's hummocks made dunes of the ski face)
+        // little stream gullies winding through the lowland: the lines where a slow noise crosses its middle value,
+        // cut a couple of metres deep with soft banks, a branch network from a second noise
+        float g1 = Mathf.Abs(Mathf.PerlinNoise(x * 0.0055f + 61.1f, z * 0.0055f + 13.7f) - 0.5f), g2 = Mathf.Abs(Mathf.PerlinNoise(x * 0.011f + 7.3f, z * 0.011f + 88.8f) - 0.5f);
+        float gully = Mathf.Max(1f - Smooth(g1 / 0.03f), 0.6f * (1f - Smooth(g2 / 0.022f)));
+        lowland -= gully * 2.6f * Smooth(inside / 40f) * underMountain;
+        lowland += (Mathf.Max(ridgelets, -1.5f) + hummocks - dells) * Smooth(inside / 45f) * underMountain + fine * Smooth(inside / 8f);
         // in places the lowland is benched: level shelves a couple of metres apart with a bank between
         float benched = Smooth((Mathf.PerlinNoise(x * 0.0065f + 91.7f, z * 0.0065f + 33.1f) - 0.5f) / 0.12f) * Smooth(inside / 40f);
         if (benched > 0f) lowland = Mathf.Lerp(lowland, Terrace(lowland, 2.4f, 0.25f), benched);
@@ -430,7 +441,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // flank, half its height for a high one), so its sea cliffs are steep, not a sheer drop of a hundred metres
         // drawn in long thin streaks
         float mountainHere = MountainHeight(p);
-        y += mountainHere * Smooth(inside / Mathf.Max(30f, mountainHere * 0.55f));
+        y += mountainHere * Smooth(inside / Mathf.Max(30f, mountainHere * 1.0f));
 
         // granite knolls: rounded domes
         foreach (var k in knolls)
@@ -1149,7 +1160,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         {
             if (under[k].x > 0.02f || !(height[k] > 4f)) continue;
             Vector2 p = At(k);
-            float piste = MountainHeight(p) > 4f ? Piste(p) : 0f;
+            float piste = MountainHeight(p) > 4f ? Groomed(p) : 0f;      // (corduroy on the runs only: in the open bowl and on the banks it read as stripes everywhere)
             if (piste > 0f) under[k] = new Vector2(-piste, under[k].y);
         }
         var tint = new Color[count];
@@ -1314,18 +1325,20 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 float tall = radius * Rs(0.5f, 0.9f), spin = Rs(0f, 6.28f);
                 Vector3 foot = On(at, -radius * 0.15f), crown = foot + Vector3.up * tall + new Vector3(Rs(-0.3f, 0.3f), 0f, Rs(-0.3f, 0.3f)) * radius;
                 Color col = granite * Rs(0.8f, 1.15f);
-                var rim = new Vector3[5];
-                var shoulder = new Vector3[5];
-                for (int sd = 0; sd < 5; sd++)
+                const int sides = 9;      // (round: five-sided stones read as flat chips)
+                var rim = new Vector3[sides];
+                var shoulder = new Vector3[sides];
+                for (int sd = 0; sd < sides; sd++)
                 {
-                    rim[sd] = foot + new Vector3(Mathf.Cos(spin + sd * 1.2566f), 0f, Mathf.Sin(spin + sd * 1.2566f)) * radius * Rs(0.8f, 1.15f);
-                    shoulder[sd] = Vector3.Lerp(rim[sd], crown, 0.55f) + Vector3.up * tall * 0.25f;
+                    float sa = spin + sd * 2f * Mathf.PI / sides;
+                    rim[sd] = foot + new Vector3(Mathf.Cos(sa), 0f, Mathf.Sin(sa)) * radius * Rs(0.88f, 1.1f);
+                    shoulder[sd] = Vector3.Lerp(rim[sd], crown, 0.5f) + Vector3.up * tall * 0.32f;
                 }
-                for (int sd = 0; sd < 5; sd++)
+                for (int sd = 0; sd < sides; sd++)
                 {
-                    int nxt = (sd + 1) % 5;
+                    int nxt = (sd + 1) % sides;
                     mb.Quad(rim[sd], rim[nxt], shoulder[nxt], shoulder[sd], col);
-                    mb.Tri(shoulder[sd], crown, shoulder[nxt], col);
+                    mb.Tri(shoulder[sd], crown, shoulder[nxt], col * 1.05f);
                 }
             }
             for (float z = Z0 + 2f; z < Z1; z += 2f)
@@ -1393,6 +1406,46 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             Vector3 foot = On(at, -0.04f);
                             int blades = random.Next(20, 36);      // a full clump of thin blades, not a few flat ones
                             float tallest = Rs(0.14f, 0.75f);
+                            int kind = random.Next(3);      // three kinds: stiff upright blades, arching grass, and seed stalks
+                            if (kind == 1)
+                            {
+                                for (int bl = 0; bl < blades; bl++)
+                                {
+                                    float a = Rs(0f, Mathf.PI * 2f), tall = tallest * Rs(0.4f, 0.9f);
+                                    var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                                    var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.008f, 0.016f);
+                                    Vector3 root0 = foot + outward * Rs(0f, 0.08f);
+                                    Vector3 bend = root0 + Vector3.up * tall * 0.75f + outward * tall * Rs(0.2f, 0.45f);
+                                    Vector3 tip = bend + Vector3.down * tall * Rs(0.2f, 0.5f) + outward * tall * Rs(0.35f, 0.6f);
+                                    Color blade = Color.Lerp(straw, dryStraw, Rs(0f, 1f));
+                                    Color bleached = Color.Lerp(blade, new Color(0.92f, 0.86f, 0.7f), 0.45f);
+                                    gb.TriColors(root0 - edge, root0 + edge, bend + edge * 0.6f, blade * 0.55f, blade * 0.55f, blade);
+                                    gb.TriColors(root0 - edge, bend + edge * 0.6f, bend - edge * 0.6f, blade * 0.55f, blade, blade);
+                                    gb.TriColors(bend - edge * 0.6f, bend + edge * 0.6f, tip, blade, blade, bleached);
+                                }
+                                tufts++;
+                                continue;
+                            }
+                            if (kind == 2)
+                            {
+                                int stalks = random.Next(6, 14);
+                                for (int bl = 0; bl < stalks; bl++)
+                                {
+                                    float a = Rs(0f, Mathf.PI * 2f), tall = tallest * Rs(0.9f, 1.5f);
+                                    var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                                    var edge = new Vector3(-outward.z, 0f, outward.x) * 0.006f;
+                                    Vector3 root0 = foot + outward * Rs(0f, 0.12f), tip = root0 + Vector3.up * tall + outward * tall * Rs(0.05f, 0.3f);
+                                    Color stalk = Color.Lerp(straw, dryStraw, Rs(0f, 1f)) * 0.8f;
+                                    gb.TriColors(root0 - edge, root0 + edge, tip, stalk * 0.6f, stalk * 0.6f, stalk);
+                                    // a seed head: a small dark spindle at the top
+                                    Vector3 head = tip + (tip - root0).normalized * 0.06f, side = edge * 4f;
+                                    Color seed = new Color(0.28f, 0.2f, 0.12f);
+                                    gb.TriColors(tip - side, tip + side, head, seed, seed, seed * 1.2f);
+                                    gb.TriColors(tip - side, tip + side, tip - (tip - root0).normalized * 0.05f, seed, seed, seed);
+                                }
+                                tufts++;
+                                continue;
+                            }
                             for (int bl = 0; bl < blades; bl++)
                             {
                                 float a = Rs(0f, Mathf.PI * 2f), lean = Rs(0.15f, 1.3f), tall = tallest * Rs(0.35f, 1f);
@@ -1464,6 +1517,43 @@ public sealed class WinterIslePuzzle : PuzzleDef
             foreach (var kv in litter) if (kv.Value.VertexCount > 0) b.MeshPiece("Litter " + kv.Key, kv.Value.ToMesh(), litterMaterial, false);
             foreach (var kv in grass) if (kv.Value.VertexCount > 0) b.MeshPiece("Grass " + kv.Key, kv.Value.ToMesh(), grassMaterial, false);
             Debug.Log("[BWM] Winter Isle scatter: " + lumps + " drifts, " + tufts + " tussocks, " + sticks + " sticks, " + stones + " stones and pebbles, in " + lumpVerts.Count + " districts");
+        }
+
+        // 7c. Crags: on the steep faces of the great mountain and of the eastern crag, rock built from faceted blocks
+        //     (Kit.AddCragBlock), each with its steep face turned down the slope, set into it in steps, so cliffs are
+        //     rock with snow on its ledges and not snow painted with grey
+        {
+            var cragRandom = new System.Random(5150);
+            float Rc(float lo, float hi) => lo + (hi - lo) * (float)cragRandom.NextDouble();
+            var crags = new Dictionary<int, MeshBuilder>();
+            int blocks = 0;
+            for (float z = Z0 + 4f; z < Z1; z += 9f)
+                for (float x = X0 + 4f; x < X1; x += 9f)
+                {
+                    var p = new Vector2(x + Rc(-3f, 3f), z + Rc(-3f, 3f));
+                    int k = Cell_(p);
+                    if (!(height[k] > 8f)) continue;
+                    float slope = Slope(k);
+                    if (slope < 1.0f) continue;      // cliffs only: on merely steep snow they stood about like dice
+                    if (MountainHeight(p) > 4f && Piste(p) > 0.05f) continue;
+                    if (!Free(p, 2f)) continue;
+                    if (Rc(0f, 1f) > Smooth((slope - 1.0f) / 0.5f) * 0.9f) continue;
+                    float h0 = HeightAt(p);
+                    Vector2 grad = new Vector2(HeightAt(p + Vector2.right * 2f) - HeightAt(p - Vector2.right * 2f), HeightAt(p + Vector2.up * 2f) - HeightAt(p - Vector2.up * 2f));
+                    Vector2 down = grad.sqrMagnitude > 1e-6f ? -grad.normalized : Vector2.up;
+                    // large and overlapping, so neighbours run together into bands of stepped rock
+                    var size = new Vector3(Rc(9f, 17f), Rc(5f, 10f), Rc(6f, 10f));
+                    int region = Mathf.FloorToInt((p.x - X0) / 300f) * 100 + Mathf.FloorToInt((p.y - Z0) / 300f);
+                    if (!crags.TryGetValue(region, out MeshBuilder cb)) crags[region] = cb = new MeshBuilder();
+                    // set into the slope: its back buried, its front standing out as a step
+                    Vector3 foot = new Vector3(p.x - root.x, h0 - size.y * 0.8f - root.y, p.y - root.z);
+                    Kit.AddCragBlock(cb, foot, size, down, blocks, new Color(1f, 0.25f, 0f, 0.75f));      // (untrodden, a little bare, no sand, a crest)
+                    blocks++;
+                }
+            // drawn with the ground's own material, so a block's steep faces are the cliffs' rock and its top the snow
+            // round it: part of the mountain, not boxes set on it
+            foreach (var kv in crags) b.MeshPiece("Crags " + kv.Key, kv.Value.ToMesh(), groundMaterial);
+            Debug.Log("[BWM] Winter Isle crags: " + blocks + " blocks of rock on the steep faces");
         }
 
         // 8. Ice: the lake, and the creek above and below it (sheets just over the beds players walk on)
@@ -1920,7 +2010,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Vector3 Ground3(Vector2 q) => new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z);
             int markers = 0, gates = 0;
             for (int run = 0; run < 3; run++)
-                for (float d = 562.5f; d < SkiRadius - 90f; d += 11.25f)      // from where the forest begins: in the open bowl they were a scatter of sticks
+                for (float d = 90f; d < SkiRadius - 90f; d += d < 560f ? 22.5f : 11.25f)      // (from the top: in the bowl too, the runs need marking)      // from where the forest begins: in the open bowl they were a scatter of sticks
                 {
                     Vector2 runMid = RunCentre(run, d, out float runHalf), runNext = RunCentre(run, d + 6f, out _);
                     Vector2 runDir = (runNext - runMid).normalized, runSide = new Vector2(runDir.y, -runDir.x);

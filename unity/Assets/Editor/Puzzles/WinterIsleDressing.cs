@@ -129,7 +129,8 @@ public static class WinterIsleDressing
         if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.Piste(p) > 0.15f) return ground;
         if (onTerrain && diameter > 1.2f && ground > 45f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && land.Slope(p) > 0.55f) return ground;      // none stuck on the mountain's steep faces: they lie at its foot
         if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;
-        if (onTerrain && diameter > 1.2f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.3f && ground > WinterIslePuzzle.TreeLine - 60f) return ground;      // nothing along the bowl's lip: a row of brown boulders hid the run below      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
+        if (onTerrain && diameter > 1.2f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.3f && ground > WinterIslePuzzle.TreeLine - 60f) return ground;
+        if (onTerrain && diameter > 2f && (p - WinterIslePuzzle.Peak).magnitude < 1100f && ground > 45f) return ground;      // the great mountain is its own rock: the game's beige boulders sat on its grey faces like stickers      // nothing along the bowl's lip: a row of brown boulders hid the run below      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
             // never float: the rock's bottom goes below the lowest ground under it, deeper on a slope
@@ -464,7 +465,10 @@ public static class WinterIsleDressing
                 if (wall) chance = 1f;
                 if (R(0f, 1f) > chance || !l.Free(p, 1.5f) || InsideRock(p, 1.2f)) continue;
                 float tallness = Mathf.Lerp(4.5f, 13.5f, Mathf.Clamp01(inGrove * R(0.55f, 1.15f))) * (h > 40f ? 0.8f : 1f);
-                tallness *= Mathf.Lerp(1f, 0.45f, Smooth01((h - (WinterIslePuzzle.TreeLine - 60f)) / 60f));      // stunted over the last stretch below the tree line
+                // over the last stretch below the tree line: stunted, and only in clumps with open snow between
+                float lineBand = Smooth01((h - (WinterIslePuzzle.TreeLine - 70f)) / 70f);
+                if (lineBand > 0f && (Mathf.PerlinNoise(p.x * 0.03f + 6.6f, p.y * 0.03f + 1.9f) < 0.3f + 0.45f * lineBand || R(0f, 1f) < lineBand * 0.5f)) continue;
+                tallness *= Mathf.Lerp(1f, 0.5f, lineBand);
                 if (wall) tallness = Mathf.Max(tallness, R(9f, 13f));
                 bool young = !wall && (edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f);      // saplings feather the edges and grow among the old trees
                 // beside a path a grown fir's boughs would hang across it (and through a walker's eyes): there it is a
@@ -608,6 +612,9 @@ public static class WinterIsleDressing
                     // planted, not grown)
                     float grove = Mathf.Max(Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f), Mathf.Max(Wood(p, false, false), l.Forest(p) * 0.7f));
                     float a = 0.07f * wood + 0.02f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.42f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
+                    // young firs under the old ones and along the woods' floor, half a metre to two and a half tall: the
+                    // layer a walker brushes past
+                    if (grove > 0.25f && roll > 0.93f - 0.12f * grove && s < 0.45f && !InsideRock(p, 0.8f) && l.ToPath(p) > 1.6f) { Tree("fir", p, h, R(0.6f, 2.5f), 1.1f, 0.25f); continue; }
                     if (roll < 0.016f * wood + 0.004f && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
                     else if (roll < a) Plant(Pick(woodland), p, R(0.6f, 1.0f));
                     else if (roll < b) Plant(Pick(under), p, R(0.6f, 1.1f));

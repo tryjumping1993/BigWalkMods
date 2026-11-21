@@ -172,9 +172,9 @@ Shader "BWM/Fir"
                 float clumps = Noise3(positionWS * 1.7) * 0.6 + Noise3(positionWS * 6.0) * 0.4;
                 float snow = mask.r * smoothstep(-0.2, 0.3, geometric.y) * smoothstep(0.1, 0.5, depth);
                 if (bark || wood)
-                    snow = max(smoothstep(0.62, 0.9, n.y + (clumps - 0.5) * 0.2), 0.8 * smoothstep(0.78, 0.92, dot(geometric, normalize(float3(0.72, 0.2, 0.66))) + (clumps - 0.5) * 0.5)
-                        * smoothstep(0.45, 0.6, Noise3(positionWS * float3(4, 1.1, 4) + 3.1)) * (bark ? 1.0 : 0.0));
-                if (core) snow = 0.0;
+                    snow = max(smoothstep(0.62, 0.9, n.y + (clumps - 0.5) * 0.2), 0.55 * smoothstep(0.85, 0.95, dot(geometric, normalize(float3(0.72, 0.2, 0.66))) + (clumps - 0.5) * 0.4)
+                        * smoothstep(0.6, 0.72, Noise3(positionWS * float3(5, 2.2, 5) + 3.1)) * (bark ? 1.0 : 0.0));      // (in small patches: a full strip read as a white stripe down the trunk)
+                if (core) snow = 0.75 * smoothstep(0.2, 0.6, geometric.y + (clumps - 0.5) * 0.4);      // (the distant version's crown takes snow too, or it reads dark green beside the snowy near trees)
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));

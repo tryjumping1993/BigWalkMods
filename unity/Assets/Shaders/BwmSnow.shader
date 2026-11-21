@@ -354,7 +354,7 @@ Shader "BWM/Snow"
                 float3 litterTex = SAMPLE_TEXTURE2D(_LitterTex, sampler_BareTex, positionWS.xz * _LitterTiling).rgb;
                 float3 gravelTex = SAMPLE_TEXTURE2D(_GravelTex, sampler_BareTex, positionWS.xz * _GravelTiling).rgb;
                 float underTrees = smoothstep(0.25, 0.7, i.under.x + (patchy - 0.5) * 0.4);
-                float scoured = saturate(max(path * (1.0 - path) * 4.0, saturate((i.form - 0.62) * 4.0)) + (patchy - 0.5) * 0.3) * (1.0 - underTrees);
+                float scoured = saturate(path * (1.0 - path) * 4.0 + (patchy - 0.5) * 0.3) * (1.0 - underTrees);      // (along path edges only: on every crest it left grey patches)
                 float3 heath, litter;
                 if (_GameGround > 0.5)
                 {

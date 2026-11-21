@@ -24,9 +24,9 @@ foot          0.00 1420 g2.4   0.00  600 a330
 lower-run     0.00 1150 g2.0   0.00  800 g2
 mid-run-down  0.00  700 g2.2   0.00 1300 g2
 mid-run-up    0.00  800 g2.0   0.00  400 g2
-forest        0.021 950 g1.6   0.06  760 g3
+forest        0.012 950 g1.8   0.05  880 g4
 bowl          0.00  300 g2.5   0.00 1100 g2
-summit        0.00   45 g3.0   0.00  900 g2
+summit        0.00  150 g2.5   0.00  900 g2
 cliffs        2.40  760 g25    2.60  250 a330
 "
 echo "$views" | while read -r name b d h tb td th; do

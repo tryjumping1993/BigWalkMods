@@ -421,8 +421,8 @@ def birch_twigs(out, n=2048, preview=None):
     u runs along the spray from where it joins the limb (0) to its tips (1), v across it."""
     rng = np.random.default_rng(77)
     cv = Canvas(n)
-    bark = (0.20, 0.12, 0.10)
-    tip = (0.33, 0.20, 0.16)
+    bark = (0.17, 0.12, 0.13)      # purple-brown, as a birch crown is in winter (redder read as olive leaves from afar)
+    tip = (0.27, 0.19, 0.21)
     segments = []
 
     def branch(p, ang, length, width, depth):
