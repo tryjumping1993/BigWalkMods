@@ -11,7 +11,7 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
 {
     public override string Name => "BlindSculptor";
     public override Vector2 Footprint => new Vector2(26f, 26f);
-    public override Vector2? FixedSite => new Vector2(-890f, -1520f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1674f, -798f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     const float Yard = 8f;
     static readonly Vector2[] Lumps = { new Vector2(-5.5f, 4.5f), new Vector2(6f, -2f), new Vector2(-2f, -5.8f) };

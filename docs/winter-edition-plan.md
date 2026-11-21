@@ -396,3 +396,12 @@ and finished assets for the puzzles.
   a parked train off at once, a train held 70 m short of an occupied station and following in when it cleared, the
   water tower by the new Plaza station; the pizzeria's front, dining room, window bar, counter, kitchen and hall.
   Not tried: pushing a throttle lever as a player (its wiring to the host is checked in the scene), two players.
+- **Puzzles spread out, and dinosaurs (user, 2026-11-21):** the user found the puzzles still clustered in the north-east.
+  A site checker (`tools/sites`) ported the island's constraints; three layouts were designed and judged, and fourteen
+  puzzles moved: within 400 m of the plaza went from 12 to 4, the closest pair from 58 m to 71 m apart, with puzzles now
+  by West Cliffs, High Shelf, Cirque Gate, North Shore, the island's middle and the south-east. Sites on slopes are cut in
+  as terraces; the old sites still guard the coast. South Shore and Seal Point stay empty: nothing near those platforms
+  can be walked to. Then eight Christmas dinosaurs that chase noisy players at 95 % of sprint speed and send a caught
+  player, empty-handed, back to the last tower they visited. Seen in the game: six moved puzzles on their new terraces,
+  the dinosaurs walking, test noise turning one, a chase at 3.3 m/s and a catch waking the player at The Tree. Not tried:
+  real voice or a controller's sprint and jump as noise, dropping carried things, two players.

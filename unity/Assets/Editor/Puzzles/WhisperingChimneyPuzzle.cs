@@ -10,7 +10,7 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
 {
     public override string Name => "WhisperingChimney";
     public override Vector2 Footprint => new Vector2(22f, 20f);
-    public override Vector2? FixedSite => new Vector2(-890f, -650f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1428f, -774f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     const float CabinZ = 34f;
 

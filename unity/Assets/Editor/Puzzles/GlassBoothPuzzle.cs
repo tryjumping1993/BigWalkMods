@@ -15,6 +15,7 @@ public sealed class GlassBoothPuzzle : PuzzleDef
 {
     public override string Name => "GlassBooth";
     public override Vector2 Footprint => new Vector2(24f, 14f);
+    public override Vector2? FixedSite => new Vector2(-2976f, -2268f);      // spread out from the plaza (tools/sites)
 
     // On the Winter Isle, a short walk in from the causeway's landing
     public override Vector2 Near => new Vector2(-565f, -750f);

@@ -11,7 +11,7 @@ public sealed class SnowGlobePuzzle : PuzzleDef
 {
     public override string Name => "SnowGlobe";
     public override Vector2 Footprint => new Vector2(24f, 24f);
-    public override Vector2? FixedSite => new Vector2(-920f, -1220f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1152f, -1434f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     const float Radius = 4.6f, PostRing = 7.6f;
     static readonly Color[] Colours =

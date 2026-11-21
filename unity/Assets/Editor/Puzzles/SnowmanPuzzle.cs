@@ -15,6 +15,7 @@ public sealed class SnowmanPuzzle : PuzzleDef
 {
     public override string Name => "Snowman";
     public override Vector2 Footprint => new Vector2(18f, 14f);
+    public override Vector2? FixedSite => new Vector2(-2556f, -1542f);      // spread out from the plaza (tools/sites)
 
     // On the Winter Isle, on the shelf west of the Glass Booth
     public override Vector2 Near => new Vector2(-640f, -770f);

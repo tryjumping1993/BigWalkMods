@@ -9,7 +9,7 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
 {
     public override string Name => "BaubleHunt";
     public override Vector2 Footprint => new Vector2(30f, 30f);
-    public override Vector2? FixedSite => new Vector2(-520f, -960f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-876f, -2172f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     static readonly Color[] Colours =
     {

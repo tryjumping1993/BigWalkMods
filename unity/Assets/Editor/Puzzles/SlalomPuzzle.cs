@@ -20,7 +20,7 @@ public sealed class SlalomPuzzle : PuzzleDef
         {
             Vector2 mid = WinterIslePuzzle.RunCentre(Run, StartAlong - 30f, out float half);
             Vector2 dir = (WinterIslePuzzle.RunCentre(Run, StartAlong - 24f, out _) - mid).normalized;
-            return mid + new Vector2(dir.y, -dir.x) * (half + 9f);
+            return mid - new Vector2(dir.y, -dir.x) * (half + 50f);      // beside the run, clear of the gondola, its terrace off the piste
         }
     }
 

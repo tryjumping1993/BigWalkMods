@@ -11,6 +11,7 @@ public sealed class LightTheTreePuzzle : PuzzleDef
 {
     public override string Name => "LightTheTree";
     public override Vector2 Footprint => new Vector2(22f, 24f);
+    public override Vector2? FixedSite => new Vector2(-1008f, -1632f);      // spread out from the plaza (tools/sites)
     public override Vector2 Near => new Vector2(-640f, -830f);
     public override float MinDistance => 0f;
     public override float MaxDistance => 220f;

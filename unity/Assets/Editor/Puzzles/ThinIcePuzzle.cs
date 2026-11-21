@@ -11,7 +11,7 @@ public sealed class ThinIcePuzzle : PuzzleDef
 {
     public override string Name => "ThinIce";
     public override Vector2 Footprint => new Vector2(26f, 30f);
-    public override Vector2? FixedSite => new Vector2(-1070f, -2030f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1272f, -1260f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     const int Cols = 6, Rows = 8;
     const float Tile = 1.7f, Deck = 1.2f;

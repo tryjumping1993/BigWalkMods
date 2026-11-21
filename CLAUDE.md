@@ -185,6 +185,23 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   shop) stops the snowfall inside (MineDriver). Vertex colours are read as linear: for a colour to look as written,
   use `new Color(...).linear` (the pizzeria's `B(r, g, b)` does). **Summit Disc Golf** (`SummitDiscGolfPuzzle.cs`)
   puts two carryable baskets and six frisbees on its terrace.
+- **Where puzzles go:** `tools\sites\sitecheck.py` checks a layout (`{"sites": {"Name": [x, z]}}`) against
+  everything the island has (railway bench and track, pistes, airport, lifts, lake, plaza, coast, other sites 70 m apart,
+  how much levelling) with the island's geometry ported exactly (`islegeom.py`); `--current` checks today's sites,
+  `--map` draws where free ground is. A site on a slope is cut in as a terrace (the blend round its flat is
+  clamp(1.5 x drop, 10, 36) m; run the checker with `--set cut_fail=18 --set ring_fail=24` for terraces). The puzzles
+  were spread out from the plaza on 2026-11-21 (four stay there as the hub); `WinterIslePuzzle.FormerSites` keeps their
+  old places as coast guards, so the coast (and the railway beside it) did not move. Every island puzzle has a FixedSite.
+- **Dinosaurs** (`DinosaursPuzzle.cs`, a scenery pack; `winterwalk\DinoDriver.cs`; `unity\Assets\PuzzleScripts\DinoControl.cs`):
+  eight friendly dinosaurs (long-necks, plated, horned; Christmas hats and scarves) wander round homes (`Homes`). Each PC
+  measures its own player's noise (voice loudness from the game's lips, x3 through a megaphone; sprinting, jumping,
+  waving, a cowbell) and reports it to the host through DinoControl; past `Threshold` of heard noise (fading to 40 m,
+  settling with time) a dinosaur chases the noisiest player at 95 % of the game's sprint speed (`tunings.forwardSprintSpeed`,
+  3.5 m/s). The caught player's own PC drops everything (hand and pockets) and wakes them at the last tower they came near
+  (The Tree's, the mine's, airport's, train's or summit's button post); flying, skiing fast, jetpacking or a ghost is out
+  of reach. Calm walks come from the network clock (nothing sent); chases are the host's orders. Tests: `DinoDriver.TestNoise`
+  (noise a second), `Peaceful`, `State`, `Last`, `LastReport`, `ChaseSpeed`. Sitting is not
+  counted as out of reach: the game reports a teleported test player as sitting.
 - **Puzzles' far parts:** a `PuzzleDef` can list `ExtraSites` (world x, z, radius) that the island levels and keeps
   clear like its site (`LookoutsPuzzle.cs`, whose four lookouts are kilometres apart). No paths are drawn to sites
   west of x = -2300; the train, the mine and the planes reach them.

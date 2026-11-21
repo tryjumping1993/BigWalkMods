@@ -423,6 +423,15 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // The pack's root stays where it was first placed (it must be over the game's terrain square, which the island
     // now runs well past); everything is built relative to it
     public override Vector2? FixedSite => new Vector2(-869f, -909.5f);
+    // Where puzzles stood before they were spread out (x, z, radius): kept as coast guards only, so the coast that grew
+    // round them stays as it is (without them a new inlet would reach the railway near -828, -1502)
+    static readonly Vector3[] FormerSites =
+    {
+        new Vector3(-890f, -650f, 14.87f), new Vector3(-890f, -1520f, 18.38f), new Vector3(-1070f, -2030f, 19.85f), new Vector3(-920f, -1220f, 16.97f),
+        new Vector3(-500f, -860f, 17.69f), new Vector3(-605f, -816f, 16.28f), new Vector3(-761f, -890f, 21.21f), new Vector3(-520f, -960f, 21.21f),
+        new Vector3(-583f, -756f, 13.89f), new Vector3(-640f, -770f, 11.40f), new Vector3(-520f, -790f, 14.87f), new Vector3(-780f, -800f, 19.80f),
+        new Vector3(-710f, -1250f, 21.93f), new Vector3(-1777.426f, -1573.016f, 7.07f),
+    };
 
     static readonly Color PackedSnow = new Color(0.8f, 0.85f, 0.93f);
 
@@ -810,6 +819,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             g = Mathf.Min(g, Mathf.Min(ToLine(p, Creek, out _), ToLine(p, Gorge)));
             g = Mathf.Min(g, (p - ShorePoint).magnitude - 90f);
             foreach (Vector3 site in b.OtherSites) g = Mathf.Min(g, (p - new Vector2(site.x, site.y)).magnitude - site.z);
+            foreach (Vector3 s in FormerSites) g = Mathf.Min(g, (p - new Vector2(s.x, s.y)).magnitude - s.z);
             return g;
         }
         var inside = new float[count];
@@ -959,7 +969,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
             var at = new Vector2(site.x, site.y);
             if (at.x < X0 || at.x > X1 || at.y < Z0 || at.y > Z1 || !(height[Cell_(at)] > 0.2f)) continue;      // not on the island
             sites.Add(at);
-            flats.Add((at, site.z + 2f, 10f));
+            // A site on a slope is cut in as a terrace: the blend round its flat widens with the height it has to make
+            // up at r + 12 (1.5 m of blend a metre, as the railway's banks), from 10 m on level ground to 36 m, so the
+            // banks lie back instead of standing as cliffs. Sites on level ground keep the 10 m blend.
+            float centre = Mathf.Round(height[Cell_(at)] * 2f) / 2f, drop = 0f;
+            for (int a = 0; a < 24; a++)
+            {
+                Vector2 q = at + new Vector2(Mathf.Cos(a * Mathf.PI / 12f), Mathf.Sin(a * Mathf.PI / 12f)) * (site.z + 12f);
+                if (q.x < X0 || q.x > X1 || q.y < Z0 || q.y > Z1) continue;
+                float hq = height[Cell_(q)];
+                if (hq > 0f) drop = Mathf.Max(drop, Mathf.Abs(hq - centre));
+            }
+            flats.Add((at, site.z + 2f, Mathf.Clamp(drop * 1.5f, 10f, 36f)));
         }
         if (rail) flats.Add((WinterIsleRail.TowerSpot(out _), 8f, 6f));      // the train tower's ground, beside the Plaza Halt
         var level = new float[flats.Count];

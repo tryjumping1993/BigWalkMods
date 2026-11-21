@@ -41,6 +41,7 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<TrainDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<PlaneDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<RoomLights>();
+            ClassInjector.RegisterTypeInIl2Cpp<DinoDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<JetpackDriver>();
             BlizzardMean = Config.Bind("General", "BlizzardMeanMinutes", 90f, "Blizzards arrive at random on the Winter Isle; this is the average wait between them, in minutes of play.");
             ClassInjector.RegisterTypeInIl2Cpp<WeatherDriver>();
@@ -59,6 +60,7 @@ namespace WinterWalk
             go.AddComponent<TrainDriver>();
             go.AddComponent<PlaneDriver>();
             go.AddComponent<RoomLights>();
+            go.AddComponent<DinoDriver>();
             go.AddComponent<JetpackDriver>();
             go.AddComponent<WeatherDriver>();
             go.AddComponent<MapDriver>();

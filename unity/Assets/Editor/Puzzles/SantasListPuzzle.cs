@@ -9,7 +9,7 @@ public sealed class SantasListPuzzle : PuzzleDef
 {
     public override string Name => "SantasList";
     public override Vector2 Footprint => new Vector2(24f, 26f);
-    public override Vector2? FixedSite => new Vector2(-500f, -860f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-816f, -1332f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     const float ListZ = 40f;
 

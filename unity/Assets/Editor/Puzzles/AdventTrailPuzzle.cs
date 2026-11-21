@@ -21,10 +21,10 @@ public sealed class AdventTrailPuzzle : PuzzleDef
         foreach (string dir in System.IO.Directory.GetDirectories(System.IO.Path.Combine(Application.dataPath, "Puzzles")))
         {
             string name = System.IO.Path.GetFileName(dir), file = System.IO.Path.Combine(dir, "site.json");
-            if (!System.IO.File.Exists(file) || name == "WinterIsle" || name == "BwmTutorial" || name == "IslandGear" || name == "TheTree" || name == "AdventTrail") continue;
+            if (!System.IO.File.Exists(file) || name == "WinterIsle" || name == "BwmTutorial" || name == "IslandGear" || name == "TheTree" || name == "AdventTrail"
+                || name == "CastIronPizza" || name == "SummitDiscGolf" || name == "Dinosaurs") continue;      // scenery packs: no puzzle to sign
             var s = JsonUtility.FromJson<SiteJson>(System.IO.File.ReadAllText(file));
             var at = new Vector2(s.x, s.z);
-            if (at.x < -2300f || at.x > -360f) continue;
             found.Add(((at - Plaza).magnitude, name, at));
         }
         found.Sort((a, c) => a.d != c.d ? a.d.CompareTo(c.d) : string.CompareOrdinal(a.name, c.name));

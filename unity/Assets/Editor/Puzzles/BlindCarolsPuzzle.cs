@@ -12,7 +12,7 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
 {
     public override string Name => "BlindCarols";
     public override Vector2 Footprint => new Vector2(22f, 20f);
-    public override Vector2? FixedSite => new Vector2(-520f, -790f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-2724f, -1554f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     public override void Build(PuzzleBuilder b)
     {

@@ -9,6 +9,7 @@ public sealed class BellRingersPuzzle : PuzzleDef
 {
     public override string Name => "BellRingers";
     public override Vector2 Footprint => new Vector2(30f, 30f);
+    public override Vector2? FixedSite => new Vector2(-1014f, -2130f);      // spread out from the plaza (tools/sites)
     public override Vector2 Near => new Vector2(-760f, -850f);
     public override float MinDistance => 0f;
     public override float MaxDistance => 220f;

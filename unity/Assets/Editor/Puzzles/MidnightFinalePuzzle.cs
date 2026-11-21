@@ -10,7 +10,7 @@ public sealed class MidnightFinalePuzzle : PuzzleDef
 {
     public override string Name => "MidnightFinale";
     public override Vector2 Footprint => new Vector2(28f, 28f);
-    public override Vector2? FixedSite => new Vector2(-780f, -800f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-612f, -846f);      // spread out from the plaza (tools/sites: a site checker and the layout it passed)
 
     const float LeverRing = 11f, LauncherRing = 4f;
     static readonly Color[] Colours = { new Color(0.95f, 0.2f, 0.15f), new Color(0.2f, 0.9f, 0.3f), new Color(0.3f, 0.5f, 1f), new Color(1f, 0.85f, 0.25f), new Color(0.9f, 0.3f, 0.9f), Color.white };
