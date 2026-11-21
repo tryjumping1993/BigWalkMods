@@ -276,6 +276,7 @@ namespace Bwm
                 if (other.Name == name || other.PuzzleType == 2 || !File.Exists(otherFile)) continue;
                 Site s = JsonUtility.FromJson<Site>(File.ReadAllText(otherFile));
                 builder.OtherSites.Add(new Vector3(s.x, s.z, other.Footprint.magnitude / 2f));
+                foreach (Vector3 extra in other.ExtraSites) builder.OtherSites.Add(extra);
             }
             def.Build(builder);
             Debug.Log("[BWM] Built " + root.GetComponentsInChildren<Transform>(true).Length + " objects");

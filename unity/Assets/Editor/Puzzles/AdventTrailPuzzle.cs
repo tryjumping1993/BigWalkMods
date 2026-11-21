@@ -12,15 +12,26 @@ public sealed class AdventTrailPuzzle : PuzzleDef
     public override Vector2 Footprint => new Vector2(16f, 14f);
     public override Vector2? FixedSite => new Vector2(-690f, -720f);      // chosen on the island's lowland; its build levels and clears it
 
-    // where the signs stand: by every other puzzle on the island (their sites), a little way towards the plaza
-    static readonly Vector2[] Sites =
+    // where the signs stand: by the 24 puzzles nearest the plaza (their sites as last built, from their site.json),
+    // a little way towards the plaza; not the far west, which no path reaches
+    [System.Serializable] class SiteJson { public float x, z, yaw; }
+    static List<Vector2> SignSites()
     {
-        new Vector2(-583f, -756f), new Vector2(-605f, -816f), new Vector2(-640f, -770f), new Vector2(-761f, -890f), new Vector2(-950f, -1459f),
-        new Vector2(-630f, -900f), new Vector2(-520f, -960f), new Vector2(-500f, -860f), new Vector2(-520f, -790f), new Vector2(-760f, -730f),
-        new Vector2(-850f, -830f), new Vector2(-890f, -650f), new Vector2(-1060f, -950f), new Vector2(-970f, -1070f), new Vector2(-750f, -1030f),
-        new Vector2(-870f, -1070f), new Vector2(-720f, -1120f), new Vector2(-880f, -1180f), new Vector2(-750f, -1190f), new Vector2(-700f, -1250f),
-        new Vector2(-770f, -1270f), new Vector2(-860f, -1270f), new Vector2(-610f, -1270f), new Vector2(-780f, -800f),
-    };
+        var found = new List<(float d, string name, Vector2 at)>();
+        foreach (string dir in System.IO.Directory.GetDirectories(System.IO.Path.Combine(Application.dataPath, "Puzzles")))
+        {
+            string name = System.IO.Path.GetFileName(dir), file = System.IO.Path.Combine(dir, "site.json");
+            if (!System.IO.File.Exists(file) || name == "WinterIsle" || name == "BwmTutorial" || name == "IslandGear" || name == "TheTree" || name == "AdventTrail") continue;
+            var s = JsonUtility.FromJson<SiteJson>(System.IO.File.ReadAllText(file));
+            var at = new Vector2(s.x, s.z);
+            if (at.x < -2300f || at.x > -360f) continue;
+            found.Add(((at - Plaza).magnitude, name, at));
+        }
+        found.Sort((a, c) => a.d != c.d ? a.d.CompareTo(c.d) : string.CompareOrdinal(a.name, c.name));
+        var sites = new List<Vector2>();
+        for (int i = 0; i < found.Count && i < 24; i++) sites.Add(found[i].at);
+        return sites;
+    }
     // the picture on each day's sign: 0 bell, 1 star, 2 candle, 3 tree (seven bells)
     static readonly int[] Picture = { 1, 0, 3, 2, 0, 1, 3, 0, 2, 1, 3, 0, 1, 2, 3, 0, 1, 3, 2, 0, 1, 2, 0, 3 };
     static readonly Vector2 Plaza = new Vector2(-705f, -795f);
@@ -60,13 +71,21 @@ public sealed class AdventTrailPuzzle : PuzzleDef
         // ---- the twenty-four signs, out across the island ----
         int bells = 0;
         var toppers = new MeshBuilder();
-        for (int day = 0; day < Sites.Length; day++)
+        List<Vector2> signSites = SignSites();
+        for (int day = 0; day < signSites.Count; day++)
         {
-            Vector2 s = Sites[day], toPlaza = (Plaza - s).normalized;
+            Vector2 s = signSites[day], toPlaza = (Plaza - s).normalized;
+            // towards the plaza; failing that (the plaza itself, the sea, no ground) the far side, then round the site
             Vector2 at = s + toPlaza * 27f;
-            if ((at - Plaza).magnitude < 34f) at = s - toPlaza * 27f;      // (not on the plaza: the far side instead)
-            if (!b.Ground.At(at.x, at.y, out float landY) || landY < 0.5f) at = s - toPlaza * 27f;      // (nor in the sea)
-            if (!b.Ground.At(at.x, at.y, out landY) || landY < 0.5f) at = s + new Vector2(toPlaza.y, -toPlaza.x) * 27f;      // (nor in the sea that way either: beside the site)
+            for (int k = 0; k < 12; k++)
+            {
+                float a = k * Mathf.PI / 6f;
+                Vector2 dir = new Vector2(toPlaza.x * Mathf.Cos(a) - toPlaza.y * Mathf.Sin(a), toPlaza.x * Mathf.Sin(a) + toPlaza.y * Mathf.Cos(a));
+                Vector2 tryAt = s + dir * 27f;
+                if ((tryAt - Plaza).magnitude < 34f || !b.Ground.At(tryAt.x, tryAt.y, out float landY) || landY < 0.5f) continue;
+                at = tryAt;
+                break;
+            }
             float lx = at.x - site.x, lz = at.y - site.z, yaw = Mathf.Atan2(-toPlaza.x, -toPlaza.y) * Mathf.Rad2Deg + 180f;
             Piece sign = b.Part("Sign", lx, lz, 1.2f, yaw).Named("Advent " + (day + 1));
             SetText(sign, "Day " + (day + 1));

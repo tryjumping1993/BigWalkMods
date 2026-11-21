@@ -44,6 +44,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // twenty summit plinths stand on it (TheTreePuzzle).
     public static Vector2 Summit => Peak;      // the great mountain's top (see Peak below)
     public const float SummitRadius = 21f;
+    public const float SummitLiftReach = 27f;      // the summit lift's top station, from the summit
     // The gondola: from a station just west of the plaza straight up to the summit's eastern edge
     static Vector2 GondolaDir => (Summit - Plaza).normalized;
     public static Vector2 GondolaBottom => Plaza + GondolaDir * 55f;
@@ -923,6 +924,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
 
         // 3. Level the plaza and every puzzle site on the island, each at the height the land has at its centre
+        bool rail = WinterIsleRail.Load();      // the mountain railway's line (tools/railroute.py): benched in 3c
+        if (!rail) Debug.LogWarning("[BWM] Winter Isle: no railway (unity/Land/WinterIsle.rail: run tools\\railroute.py)");
         var sites = new List<Vector2>();
         var flats = new List<(Vector2 at, float radius, float blend)> { (Plaza, PlazaRadius, 16f), (Summit, SummitRadius, 14f), (GondolaBottom, 10f, 9f) };
         // the mine's portals: where each tunnel's line meets the mountainside, with a level apron outside
@@ -943,6 +946,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if ((p - Plaza).magnitude < PlazaRadius + 16f || (p - Lake).magnitude < LakeRadius + 18f || (p - GondolaBottom).magnitude < 26f || (p - Summit).magnitude < 60f) return false;
                 if (MountainHeight(p) > 4f && Piste(p) > 0.05f) return false;
                 foreach (Vector3 site in b.OtherSites) if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 18f) return false;
+                if (rail && WinterIsleRail.Distance(p, 64f) < 45f) return false;
+                if (WinterIsleAirport.Outside(p) < 30f || WinterIsleAirport.StripOutside(p) < 20f) return false;
                 return true;
             }
             WinterIsleMine.PlaceStations(wanted, 13, p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : height[Cell_(p)], StationAllowed, X0, Z0, X1, Z1);
@@ -956,6 +961,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             sites.Add(at);
             flats.Add((at, site.z + 2f, 10f));
         }
+        if (rail) flats.Add((WinterIsleRail.TowerSpot(out _), 8f, 6f));      // the train tower's ground, beside the Plaza Halt
         var level = new float[flats.Count];
         for (int f = 0; f < flats.Count; f++) level[f] = Mathf.Round(height[Cell_(flats[f].at)] * 2f) / 2f;
         for (int k = 0; k < count; k++)
@@ -967,6 +973,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 float d = (p - flats[f].at).magnitude;
                 if (d < flats[f].radius + flats[f].blend) height[k] = Mathf.Lerp(level[f], height[k], Smooth((d - flats[f].radius) / flats[f].blend));
             }
+            float airport = WinterIsleAirport.Outside(p);      // the airport's runway and apron
+            if (airport < WinterIsleAirport.Blend) height[k] = Mathf.Lerp(WinterIsleAirport.Level, height[k], Smooth(airport / WinterIsleAirport.Blend));
         }
         // 3b. No walls: nowhere is the ground steeper than about 58 degrees (the sea counting as height 0). Two sweeps
         //     each way of "no higher than a neighbour plus a step" erode any sheer drop, inland or at the shore,
@@ -1108,6 +1116,65 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Debug.Log("[BWM] Winter Isle cliff bands: " + banded + " points");
         }
 
+        // 3c. The railway (WinterIsleRail): which stretches of the line run on the ground, in tunnels or on trestles,
+        //     then the ground benched to the line where it runs on it, a level bed with cuttings and embankments either
+        //     side (wider at the stations, and running on into each tunnel's portal). Each cell takes the bench of the
+        //     nearest point of the line. Then how much room the dressing leaves round the line, per cell
+        var railClear = new float[count];
+        for (int k = 0; k < count; k++) railClear[k] = 1e6f;
+        if (rail)
+        {
+            float GridHeight(Vector2 p)
+            {
+                if (p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1) return float.NaN;
+                float fx = Mathf.Clamp((p.x - X0) / Cell, 0f, nx - 0.001f), fz = Mathf.Clamp((p.y - Z0) / Cell, 0f, nz - 0.001f);
+                int i0 = (int)fx, j0 = (int)fz, k0 = j0 * row + i0;
+                float a0 = height[k0], a1 = height[k0 + 1], a2 = height[k0 + row], a3 = height[k0 + row + 1];
+                if (float.IsNaN(a0) || float.IsNaN(a1) || float.IsNaN(a2) || float.IsNaN(a3)) return height[Cell_(p)];
+                return Mathf.Lerp(Mathf.Lerp(a0, a1, fx - i0), Mathf.Lerp(a2, a3, fx - i0), fz - j0);
+            }
+            WinterIsleRail.Classify(GridHeight);
+            int lineCount = WinterIsleRail.Line.Count;
+            var nearestPoint = new Dictionary<int, (float d, int i)>();
+            var gaps = new float[lineCount];
+            for (int i = 0; i < lineCount; i++)
+            {
+                Vector3 lp = WinterIsleRail.Line[i];
+                var at = new Vector2(lp.x, lp.z);
+                float g = GridHeight(at);
+                gaps[i] = float.IsNaN(g) ? 6f : g - lp.y;
+                WinterIsleRail.Bench(i, gaps[i], out float half, out float bank, out _);
+                float reach = Mathf.Max(half + bank, WinterIsleRail.Keep(i) + 6f);
+                int r = Mathf.CeilToInt(reach / Cell) + 1, centre = Cell_(at);
+                for (int oj = -r; oj <= r; oj++)
+                    for (int oi = -r; oi <= r; oi++)
+                    {
+                        int ci = centre % row + oi, cj = centre / row + oj;
+                        if (ci < 0 || cj < 0 || ci > nx || cj > nz) continue;
+                        int k = cj * row + ci;
+                        if (float.IsNaN(height[k])) continue;
+                        float d = (At(k) - at).magnitude;
+                        if (d > reach) continue;
+                        if (nearestPoint.TryGetValue(k, out var had) && had.d <= d) continue;
+                        nearestPoint[k] = (d, i);
+                    }
+            }
+            int benched = 0;
+            foreach (var cell in nearestPoint)
+            {
+                int k = cell.Key, i = cell.Value.i;
+                float d = cell.Value.d;
+                WinterIsleRail.Bench(i, gaps[i], out float half, out float bank, out float strength);
+                float keep = WinterIsleRail.Keep(i);
+                if (keep > 0f) railClear[k] = d - keep;
+                if (strength <= 0f || d > half + bank) continue;
+                float pull = strength * (1f - Smooth((d - half) / bank));
+                height[k] = Mathf.Lerp(height[k], WinterIsleRail.Line[i].y - WinterIsleRail.BenchBelow, pull);
+                benched++;
+            }
+            Debug.Log("[BWM] Winter Isle railway: " + benched + " points of ground benched to the line");
+        }
+
         // 4. Where the causeway lands; then paths from the plaza to the landing and to every site, by the easiest
         //    gradient (Dijkstra over the grid: steep steps cost a great deal, very steep ones are not allowed)
         int landingCell = 0; float best = float.MaxValue;
@@ -1163,7 +1230,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         int routed = 0;
         var routes = new List<(List<Vector2> points, bool trail)>();
         var targets = new List<int> { landingCell };
-        foreach (Vector2 site in sites) targets.Add(Cell_(site));
+        foreach (Vector2 site in sites) if (site.x > -2300f) targets.Add(Cell_(site));      // (the far west is reached by train, mine or plane: a trail round the mountain's foot drew a dark ring)
         // Trails for exploring: to the highest ground walkable in each part of the island, the lake, and the beaches
         int trails = 0;
         int Highest(System.Func<Vector2, bool> where)
@@ -1206,6 +1273,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
         {
             if (station.x < -1500f) continue;
             int apron = Cell_(station + (Plaza - station).normalized * 6f);
+            if (reachable[apron]) trailEnds.Add(apron);
+        }
+        for (int s = 0; rail && s < WinterIsleRail.Stops.Count; s++)      // the railway's stations in the lowland: walked to from the plaza
+        {
+            Vector2 station = WinterIsleRail.Station(s);
+            if (station.x < -1500f) continue;
+            Vector2 toPlaza = (Plaza - station).normalized;
+            int apron = Cell_(station + toPlaza * (WinterIsleRail.StationHalf + 3f));
+            if (reachable[apron]) trailEnds.Add(apron);
+        }
+        {
+            int apron = Cell_(WinterIsleAirport.ApronMiddle);      // the airport
             if (reachable[apron]) trailEnds.Add(apron);
         }
         foreach (int end in trailEnds) if (end >= 0 && !targets.Contains(end)) { targets.Add(end); trails++; }
@@ -1257,6 +1336,12 @@ public sealed class WinterIslePuzzle : PuzzleDef
         for (float t = 0f; t <= 1f; t += 0.004f) structures.Add((Vector2.Lerp(GondolaBottom, GondolaTop, t), 10f));      // a lift line cut through the forest
         structures.Add((SkiLiftBottom, 16f));
         structures.Add((SkiLiftTop, 13f));
+        if (rail)      // the summit lift's stations and line
+        {
+            Vector2 liftFoot = WinterIsleRail.SummitLiftFoot(), liftTop = Summit + (liftFoot - Summit).normalized * SummitLiftReach;
+            structures.Add((liftFoot, 9f)); structures.Add((liftTop, 9f));
+            for (float t = 0f; t <= 1f; t += 0.05f) structures.Add((Vector2.Lerp(liftFoot, liftTop, t), 6f));
+        }
         for (float t = 0f; t <= 1f; t += 0.006f) structures.Add((Vector2.Lerp(SkiLiftBottom, SkiLiftTop, t), 8f));      // ...and the ski lift's
         {
             Vector2 finishAt = PisteFinish(out _, out _);
@@ -1267,6 +1352,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
             if (PathDistance(p) < 3.5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
             if (MountainHeight(p) > 4f && Piste(p) > 0.3f) return false;      // the pistes are kept clear; the ribs between them take rocks and trees
             foreach (var s in structures) if ((p - s.at).magnitude < s.radius + margin) return false;
+            if (railClear[Cell_(p)] < margin) return false;
+            if (WinterIsleAirport.Outside(p) < 4f + margin || WinterIsleAirport.StripOutside(p) < 3f + margin) return false;
             foreach (Vector3 site in b.OtherSites)
                 if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 3f + margin) return false;
             return true;
@@ -1295,6 +1382,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
 
         foreach (var st in structures) Block(st.at, st.radius + 3f);
+        for (int k = 0; k < count; k++) if (railClear[k] < 3f) blocked[k] = true;      // the railway's bed, banks and stations
+        for (int k = 0; k < count; k++) if (WinterIsleAirport.Outside(At(k)) < 6f || WinterIsleAirport.StripOutside(At(k)) < 4f) blocked[k] = true;      // the airport, the summit's airstrip
 
         // 6. The set dressing: the game's own rocks and plants, placed here and made by the Winter Walk plugin
         var toWater = new float[count];
@@ -1407,6 +1496,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if ((p - Plaza).magnitude < PlazaRadius + 14f || (p - Lake).magnitude < LakeRadius + 14f || (p - GondolaBottom).magnitude < 22f) return true;
                 foreach (Vector3 site in b.OtherSites) if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 10f) return true;
                 foreach (var c in cabins) if ((c.at - p).magnitude < 16f) return true;
+                if (railClear[Cell_(p)] < 8f) return true;      // no shed across the railway
+                if (WinterIsleAirport.Outside(p) < 10f) return true;      // ...or the airport
                 return false;
             }
             WinterIsleMine.FindRoute(p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : HeightAt(p), MineAvoid, X0, Z0, X1, Z1);
@@ -1623,7 +1714,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     for (int si = 0; si < Sub; si++)
                     {
                         int fi = i * Sub + si, fj = j * Sub + sj;
-                        if (WinterIsleMine.InCut(new Vector2(X0 + (fi + 0.5f) * Cell / Sub, Z0 + (fj + 0.5f) * Cell / Sub))) continue;      // the mine's open cuts
+                        Vector2 fineAt = new Vector2(X0 + (fi + 0.5f) * Cell / Sub, Z0 + (fj + 0.5f) * Cell / Sub);
+                        if (WinterIsleMine.InCut(fineAt) || WinterIsleRail.InCut(fineAt)) continue;      // the mine's open cuts, the railway's portals
                         int a = Vertex(fi, fj, i, j), bb = Vertex(fi + 1, fj, i, j), c = Vertex(fi, fj + 1, i, j), d = Vertex(fi + 1, fj + 1, i, j);
                         tris.Add(a); tris.Add(c); tris.Add(bb);
                         tris.Add(bb); tris.Add(c); tris.Add(d);
@@ -1666,7 +1758,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             for (int si = 0; si < Sub; si++)
                             {
                                 int f = (j * Sub + sj) * fw + i * Sub + si;
-                                if (WinterIsleMine.InCut(new Vector2(X0 + (i * Sub + si + 0.5f) * Cell / Sub, Z0 + (j * Sub + sj + 0.5f) * Cell / Sub))) continue;
+                                Vector2 fineAt = new Vector2(X0 + (i * Sub + si + 0.5f) * Cell / Sub, Z0 + (j * Sub + sj + 0.5f) * Cell / Sub);
+                                if (WinterIsleMine.InCut(fineAt) || WinterIsleRail.InCut(fineAt)) continue;
                                 int a = fineIndex[f], bb = fineIndex[f + 1], c = fineIndex[f + fw], d = fineIndex[f + fw + 1];
                                 tt.Add(Local(a)); tt.Add(Local(c)); tt.Add(Local(bb));
                                 tt.Add(Local(bb)); tt.Add(Local(c)); tt.Add(Local(d));
@@ -2310,8 +2403,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 11b. The ski lift: a chairlift from beside the lodge up to the bench at the tree line. Built as the gondola
         //      is (a line of markers "Ski Lift Line" P0.., pylons, two stations, the cable, and chairs that Winter Walk
         //      moves round the loop), but plainer and lower: single steel towers, open two-seat chairs on a hanger.
+        //      (Chairlift builds one; the summit lift, from the railway's Summit station up to the crest, is a second)
+        void Chairlift(string liftName, Vector2 liftFrom, Vector2 liftTo, int chairCount)
         {
-            Vector2 liftFrom = SkiLiftBottom, liftTo = SkiLiftTop;
             Vector2 dir3 = (liftTo - liftFrom).normalized, side3 = new Vector2(dir3.y, -dir3.x);
             float bottomDeck = HeightAt(liftFrom) + 0.5f, topDeck = HeightAt(liftTo) + 0.5f;
             const float CableOver = 4.6f, Clear = 5.5f;
@@ -2339,7 +2433,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     }
                 if (!raised) break;
             }
-            var markers = new GameObject("Ski Lift Line");
+            var markers = new GameObject(liftName + " Line");
             markers.transform.SetParent(b.Root.transform, false);
             for (int i = 0; i < line.Count; i++)
             {
@@ -2392,7 +2486,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     Vector2 q = at + side3 * ((w * 0.5f + 0.4f) * cx) + dir3 * ((d * 0.5f + 0.4f) * cz);
                     ring.Add(new Vector3(q.x - root.x, eave - root.y, q.y - root.z));
                 }
-                Kit.LightString(b, "Ski Lift " + label + " Station Lights", ring, 0.2f, 0.4f, false, false, 7 + label.Length);
+                Kit.LightString(b, liftName + " " + label + " Station Lights", ring, 0.2f, 0.4f, false, false, 7 + label.Length);
             }
             for (int sgn = -1; sgn <= 1; sgn += 2)
                 for (int i = 0; i < spans; i++)
@@ -2405,7 +2499,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     lm.Quad(a0 - u + v, c0 - u + v, c0 + u + v, a0 + u + v, steel * 0.5f);
                     lm.Quad(a0 + u - v, c0 + u - v, c0 - u - v, a0 - u - v, steel * 0.5f);
                 }
-            b.MeshPiece("Ski Lift", lm.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true);
+            b.MeshPiece(liftName, lm.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true);
 
             // the chairs: an open bench for two with a backrest, a footrest and a safety bar, on a hanger to the grip
             var chair = new MeshBuilder();
@@ -2421,15 +2515,15 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             Kit.AddBox(chair, new Vector3(0f, -Drop + 0.7f, -0.25f), new Vector3(0.08f, Drop - 0.7f, 0.08f), steel); // hanger
             Kit.AddBox(chair, new Vector3(0f, -0.2f, -0.25f), new Vector3(0.22f, 0.28f, 0.4f), steel * 0.8f);       // grip
-            Mesh chairMesh = b.SaveMesh("Ski Lift Chair", chair.ToMesh());
+            Mesh chairMesh = b.SaveMesh(liftName + " Chair", chair.ToMesh());
             Material chairMaterial = b.ShaderMaterial("BWM/Snowy", "Cabin", m => m.SetFloat("_SnowLine", 0.8f));
-            var chairsRoot = new GameObject("Ski Lift Chairs");
+            var chairsRoot = new GameObject(liftName + " Chairs");
             chairsRoot.transform.SetParent(b.Root.transform, false);
-            for (int i = 0; i < SkiLiftChairs; i++)
+            for (int i = 0; i < chairCount; i++)
             {
-                var liftChair = new GameObject("Ski Lift Chair " + i);
+                var liftChair = new GameObject(liftName + " Chair " + i);
                 liftChair.transform.SetParent(chairsRoot.transform, false);
-                liftChair.transform.position = new Vector3(liftFrom.x, bottomDeck + Drop + 0.3f, liftFrom.y) + new Vector3(dir3.x, 0f, dir3.y) * ((i - SkiLiftChairs / 2f) * 0.15f) + Vector3.up * i * 0.01f;
+                liftChair.transform.position = new Vector3(liftFrom.x, bottomDeck + Drop + 0.3f, liftFrom.y) + new Vector3(dir3.x, 0f, dir3.y) * ((i - chairCount / 2f) * 0.15f) + Vector3.up * i * 0.01f;
                 liftChair.transform.rotation = Quaternion.Euler(0f, yaw3, 0f);
                 var body = new GameObject("Body");
                 body.transform.SetParent(liftChair.transform, false);
@@ -2446,7 +2540,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     seat.Set("PuzzleSeat", "clickSize", new Vector3(0.6f, 0.6f, 0.6f));
                 }
             }
-            Debug.Log("[BWM] Winter Isle ski lift: " + Sdk.F(length) + " m from " + Sdk.F(bottomDeck) + " to " + Sdk.F(topDeck) + " m, " + (spans - 1) + " towers, " + SkiLiftChairs + " chairs");
+            Debug.Log("[BWM] Winter Isle " + liftName.ToLowerInvariant() + ": " + Sdk.F(length) + " m from " + Sdk.F(bottomDeck) + " to " + Sdk.F(topDeck) + " m, " + (spans - 1) + " towers, " + chairCount + " chairs");
+        }
+        Chairlift("Ski Lift", SkiLiftBottom, SkiLiftTop, SkiLiftChairs);
+        if (rail)      // the summit lift: from beyond the end of the railway, up the summit's last 60 m to the crest
+        {
+            Vector2 liftFoot = WinterIsleRail.SummitLiftFoot();
+            Chairlift("Summit Lift", liftFoot, Summit + (liftFoot - Summit).normalized * SummitLiftReach, 10);
         }
 
         // 11c. The terrain park: kickers of packed snow down the right-hand run below the cat track (the Big Air game's
@@ -2532,6 +2632,14 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         // 14. The coal mine under the mountain (WinterIsleMine)
         WinterIsleMine.Build(b, root, HeightAt);
+        if (rail) WinterIsleRail.Build(b, root, HeightAt);      // the mountain railway
+        WinterIsleAirport.Build(b, root, HeightAt);              // the airport and the summit's airstrip
+        if (rail)
+        {
+            float nearest = float.MaxValue;
+            foreach (Vector3 lp in WinterIsleRail.Line) nearest = Mathf.Min(nearest, WinterIsleAirport.Outside(new Vector2(lp.x, lp.z)));
+            Debug.Log("[BWM] Winter Isle: the railway passes " + Sdk.F(nearest) + " m from the airport's ground");
+        }
 
         // 12. The pistes' surface: an unseen sheet a hand's breadth over the snow of the three runs and the bowl, with
         //     no friction at all, so that anyone who steps onto a piste slides down it. (A spike: whether the game's

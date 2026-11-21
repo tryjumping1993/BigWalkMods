@@ -10,7 +10,7 @@ public sealed class SleighRunPuzzle : PuzzleDef
 {
     public override string Name => "SleighRun";
     public override Vector2 Footprint => new Vector2(18f, 48f);
-    public override Vector2? FixedSite => new Vector2(-870f, -1070f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1310f, -830f);      // chosen on the island's lowland; its build levels and clears it
 
     const float Half = 2.2f, WallH = 2.3f, Start = -20f, End = 21f, Seconds = 26f;
     static readonly float[] DoorZ = { -10f, 1f, 12f };

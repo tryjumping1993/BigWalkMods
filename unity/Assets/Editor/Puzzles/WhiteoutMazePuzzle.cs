@@ -11,7 +11,7 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
 {
     public override string Name => "WhiteoutMaze";
     public override Vector2 Footprint => new Vector2(30f, 32f);
-    public override Vector2? FixedSite => new Vector2(-720f, -1120f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-710f, -1250f);      // chosen on the island's lowland; its build levels and clears it
 
     const int N = 7;
     const float CellSize = 2.6f, WallH = 1.75f, WallT = 0.45f;

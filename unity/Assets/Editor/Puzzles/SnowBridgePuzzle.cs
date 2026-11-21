@@ -11,7 +11,7 @@ public sealed class SnowBridgePuzzle : PuzzleDef
 {
     public override string Name => "SnowBridge";
     public override Vector2 Footprint => new Vector2(22f, 34f);
-    public override Vector2? FixedSite => new Vector2(-860f, -1270f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-3005f, -2180f);      // chosen on the island's lowland; its build levels and clears it
 
     const float Up = 3f, Gap = 4.2f, BankLen = 8f, Pillar = 2.4f, BankW = 6f;
 

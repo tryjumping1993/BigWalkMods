@@ -2,10 +2,11 @@
 //
 // Every puzzle on the island rewards a gourd. The first five go round the tree's foot: five plinths, and holding
 // the button opens the next empty one. When all five hold a gourd the gondola opens (Winter Walk's
-// GondolaDriver watches "Tree Plinth 1".."5"), and the next twenty go to the summit, reached only by the
-// gondola, where a ring of plinths stands round a great gold star with its own hold button.
+// GondolaDriver watches "Tree Plinth 1".."5"). The next five go to the mine tower (the mine), five to the airport's
+// control tower (the biplanes), five to the railway's water tower by the Plaza Halt (the trains), and the last
+// twenty to the summit, where a ring of plinths stands round a great gold star with its own hold button.
 //
-// All 25 plinths are in this one pack and in one Tower Button list (tree first), because the SDK puts gourds
+// All 45 plinths are in this one pack and in one Tower Button list (tree first), because the SDK puts gourds
 // back from a save only into the plinths of a single Tower-type pack; a summit in a pack of its own would lose
 // its gourds on every reload. The SDK shows only as many plinths as there are modded puzzles installed, first
 // first, so the summit's plinths appear as puzzles are added. Lights wind up the tree and ring the plaza.
@@ -163,8 +164,12 @@ public sealed class TheTreePuzzle : PuzzleDef
             plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(x, z) * Mathf.Rad2Deg, 0f);
             plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
         }
-        // the list fills in this order: the tree's five (the gondola), the mine tower's five (the mine), the summit's twenty
+        // the list fills in this order: the tree's five (the gondola), the mine tower's five (the mine), the airport
+        // tower's five (the biplanes), the train tower's five (the railway), the summit's twenty. A save fills them from
+        // the first, whatever order they were filled in
         plinths.AddRange(MineTower(b, snowy));
+        plinths.AddRange(AirportTower(b, snowy));
+        plinths.AddRange(TrainTower(b, snowy));
         var summitPlinths = Summit(b, stone, bare, snowy);
         plinths.AddRange(summitPlinths);
 
@@ -265,6 +270,111 @@ public sealed class TheTreePuzzle : PuzzleDef
         }
         Kit.LightString(b, "Mine Tower Lights", lights, 0.3f, 0.5f, true, true, 31);
         return plinths;
+    }
+
+    // Five plinths in an arc before a tower at 'spot' (world x, z), the arc's middle 'centre' metres along 'toFront'
+    // from the spot; a hold button on a post beside them that opens them while it is held; lights round the arc.
+    // Local coordinates are from the plaza (this pack's root)
+    static List<UnityEngine.Object> PlinthArc(PuzzleBuilder b, string prefix, Vector2 spot, Vector2 toFront, float centre, float radius, int seed)
+    {
+        var plinths = new List<UnityEngine.Object>();
+        Vector2 c = spot - WinterIslePuzzle.Plaza;
+        Vector2 along = new Vector2(-toFront.y, toFront.x);
+        float yaw = Mathf.Atan2(toFront.x, toFront.y) * Mathf.Rad2Deg;
+        for (int i = 0; i < 5; i++)
+        {
+            float a = (i - 2f) * 0.5f;
+            Vector2 p = toFront * (centre + Mathf.Cos(a) * radius) + along * (Mathf.Sin(a) * radius);
+            Vector2 facing = (toFront * Mathf.Cos(a) + along * Mathf.Sin(a)).normalized;
+            Piece plinth = b.Empty(prefix + " Plinth " + (i + 1), c.x + p.x, c.y + p.y, 0.15f, true);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(facing.x, facing.y) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        Vector2 post = toFront * (centre + 2.6f) - along * (radius + 1.4f);
+        b.Box(prefix + " Button Post", c.x + post.x, c.y + post.y, new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, yaw, true);
+        Vector2 face = post + toFront * 0.11f;
+        Piece button = b.Part("Button Hold", c.x + face.x, c.y + face.y, 1.15f, yaw, true);
+        foreach (UnityEngine.Object p in plinths) button.On("PuzzleButton", "onPressed", p, "HoldToOpen");
+        var lights = new List<Vector3>();
+        for (int i = 0; i <= 6; i++)
+        {
+            float a = (i - 3) * 0.5f;
+            Vector2 p = toFront * (centre + Mathf.Cos(a) * (radius + 1.3f)) + along * (Mathf.Sin(a) * (radius + 1.3f));
+            lights.Add(new Vector3(c.x + p.x, 2.2f, c.y + p.y));
+        }
+        Kit.LightString(b, prefix + " Tower Lights", lights, 0.3f, 0.5f, true, true, seed);
+        return plinths;
+    }
+
+    // The airport's control tower, on its apron (WinterIsleAirport.TowerSpot): a stone foot, a steel frame, a glazed
+    // cab lit from inside with a red beacon on its roof. Its five plinths open the airport (Winter Walk's PlaneDriver
+    // takes the hangar's doors away and lets the biplanes be flown)
+    static List<UnityEngine.Object> AirportTower(PuzzleBuilder b, Material snowy)
+    {
+        Vector2 spot = WinterIsleAirport.TowerSpot, toFront = WinterIsleAirport.TowerFacing;
+        Vector2 c = spot - WinterIslePuzzle.Plaza, along = new Vector2(-toFront.y, toFront.x);
+        float yaw = Mathf.Atan2(toFront.x, toFront.y) * Mathf.Rad2Deg;
+        Vector3 At(float forward, float side, float up) { Vector2 p = c + toFront * forward + along * side; return b.WorldPoint(p.x, p.y, up) - b.Root.transform.position; }
+        var frame = new MeshBuilder();
+        var glow = new MeshBuilder();
+        Color steel = new Color(0.55f, 0.57f, 0.6f), red = new Color(0.7f, 0.12f, 0.1f), cream = new Color(0.9f, 0.86f, 0.76f);
+        Kit.AddBox(frame, At(0f, 0f, -0.5f), new Vector3(5.2f, 1.1f, 5.2f), Stone, yaw);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(sz * 1.7f, sx * 1.7f, 0.5f), new Vector3(0.34f, 9.6f, 0.34f), steel, yaw);
+        foreach (float up in new[] { 3.4f, 6.8f })
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(frame, At(sgn * 1.7f, 0f, up), new Vector3(3.6f, 0.22f, 0.22f), steel * 0.9f, yaw);
+                Kit.AddBox(frame, At(0f, sgn * 1.7f, up), new Vector3(0.22f, 0.22f, 3.6f), steel * 0.9f, yaw);
+            }
+        Kit.AddBox(frame, At(0f, 0f, 10f), new Vector3(6.4f, 0.3f, 6.4f), cream, yaw);                // the cab's floor and balcony
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(sz * 2.3f, sx * 2.3f, 10.3f), new Vector3(0.2f, 2.3f, 0.2f), cream, yaw);      // the cab's corners
+        Kit.AddBox(frame, At(0f, 0f, 10.3f), new Vector3(4.8f, 0.8f, 4.8f), red, yaw);                 // under the windows
+        Kit.AddBox(frame, At(0f, 0f, 12.6f), new Vector3(6f, 0.35f, 6f), red * 0.8f, yaw);             // the roof
+        Kit.AddBox(frame, At(0f, 0f, 12.95f), new Vector3(0.15f, 1.6f, 0.15f), steel, yaw);            // the beacon's mast
+        Kit.AddGlow(glow, At(0f, 0f, 11.75f), new Vector3(4.7f, 1.3f, 4.7f), yaw, new Color(1f, 0.85f, 0.55f), 0.2f);      // the lit windows
+        Kit.AddGlow(glow, At(0f, 0f, 14.7f), new Vector3(0.4f, 0.4f, 0.4f), yaw, new Color(1f, 0.15f, 0.1f), 0.7f);        // the beacon
+        b.MeshPiece("Airport Tower", frame.ToMesh(), snowy);
+        b.MeshPiece("Airport Tower Windows", glow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+        return PlinthArc(b, "Airport", spot, toFront, 1.2f, 5f, 41);
+    }
+
+    // The railway's water tower, beside the Plaza Halt (WinterIsleRail.TowerSpot): a timber tank with iron hoops and
+    // a pointed roof on four braced legs, its spout swung out towards the track. Its five plinths start the trains
+    // (Winter Walk's TrainDriver)
+    static List<UnityEngine.Object> TrainTower(PuzzleBuilder b, Material snowy)
+    {
+        var plinths = new List<UnityEngine.Object>();
+        if (!WinterIsleRail.Load()) { Debug.LogWarning("[BWM] The Tree: no railway (unity/Land/WinterIsle.rail); the train tower is left out"); return plinths; }
+        Vector2 spot = WinterIsleRail.TowerSpot(out Vector2 toTrack);
+        Vector2 toFront = -toTrack;      // the plinths on the side away from the track, where the path comes in
+        Vector2 c = spot - WinterIslePuzzle.Plaza, along = new Vector2(-toFront.y, toFront.x);
+        float yaw = Mathf.Atan2(toFront.x, toFront.y) * Mathf.Rad2Deg;
+        Vector3 At(float forward, float side, float up) { Vector2 p = c + toFront * forward + along * side; return b.WorldPoint(p.x, p.y, up) - b.Root.transform.position; }
+        var mb = new MeshBuilder();
+        Color timber = new Color(0.48f, 0.33f, 0.2f), iron = new Color(0.22f, 0.22f, 0.25f), red = new Color(0.68f, 0.12f, 0.1f), green = new Color(0.12f, 0.36f, 0.2f);
+        Kit.AddBox(mb, At(0f, 0f, -0.4f), new Vector3(5f, 0.8f, 5f), Stone, yaw);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(mb, At(sz * 1.8f, sx * 1.8f, 0.4f), new Vector3(0.4f, 7f, 0.4f), timber, yaw);
+        foreach (float up in new[] { 2.4f, 4.8f })
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(mb, At(sgn * 1.8f, 0f, up), new Vector3(3.8f, 0.25f, 0.25f), timber * 0.9f, yaw);
+                Kit.AddBox(mb, At(0f, sgn * 1.8f, up), new Vector3(0.25f, 0.25f, 3.8f), timber * 0.9f, yaw);
+            }
+        Kit.AddBox(mb, At(0f, 0f, 7.2f), new Vector3(5.6f, 0.3f, 5.6f), timber * 0.8f, yaw);
+        Kit.AddDisc(mb, At(0f, 0f, 7.5f), 2.7f, 3.6f, timber * 1.05f, 18);                                // the tank
+        foreach (float up in new[] { 7.9f, 9.1f, 10.4f }) Kit.AddDisc(mb, At(0f, 0f, up), 2.78f, 0.14f, iron, 18);      // hoops
+        for (int k = 0; k < 6; k++) Kit.AddDisc(mb, At(0f, 0f, 11.1f + k * 0.38f), 3.0f - k * 0.5f, 0.38f, k % 2 == 0 ? red : red * 0.85f, 18);      // the roof
+        Kit.AddStar(mb, At(0f, 0f, 13.9f), 0.45f, 0.08f, Gold);
+        Kit.AddBox(mb, At(-2.6f, 0f, 8.2f), new Vector3(0.45f, 0.45f, 2.6f), iron, yaw);                  // the spout, towards the track
+        Kit.AddBox(mb, At(2.74f, 0f, 8.5f), new Vector3(1.3f, 1.3f, 0.12f), green, yaw);                 // a wreath on the tank's front
+        b.MeshPiece("Train Tower", mb.ToMesh(), snowy);
+        return PlinthArc(b, "Train", spot, toFront, 1.0f, 4.6f, 51);
     }
 
     // The summit sanctuary, at WinterIslePuzzle.Summit: twenty plinths in a ring round a great gold star on a

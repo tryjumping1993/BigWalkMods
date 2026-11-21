@@ -1,4 +1,4 @@
-// Winter Walk: the Winter Isle's mine railway.
+﻿// Winter Walk: the Winter Isle's mine railway.
 //
 // The island's pack carries the mine (WinterIsleMine in the Unity project): the hall, the low tunnels, the track,
 // the mantrips ("Mine Trips/Mantrip 0"..) and the gates across every tunnel mouth ("Mine Gates"). Its build also
@@ -14,7 +14,8 @@
 // the mantrips start. The plinths are read every second, never counted from events (a save puts gourds back
 // without firing them).
 //
-// It also stops the island's snowfall for a player whose camera is underground.
+// It also stops the island's snowfall for a player whose camera is underground, in a railway tunnel or in the summit's
+// pizzeria.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -259,7 +260,29 @@ namespace WinterWalk
             }
             Underground = under;
             Rescue();
+            under |= TrainDriver.InTunnel || (cam != null && Indoors(cam.transform.position));      // a railway tunnel or a room stops the snowfall too
             if (snowfall != null && snowfall.activeSelf == under) snowfall.SetActive(!under);
+        }
+
+        // Rooms where it must not snow: empty objects named "Indoors ..." whose position, turn and size are the room's box
+        // (the summit pizzeria's, "Indoors Pizzeria")
+        readonly List<Transform> rooms = new List<Transform>();
+        float nextRoomLook;
+        bool Indoors(Vector3 eye)
+        {
+            if (rooms.Count == 0 && Time.unscaledTime >= nextRoomLook)
+            {
+                nextRoomLook = Time.unscaledTime + 5f;
+                GameObject room = GameObject.Find("Indoors Pizzeria");
+                if (room != null) rooms.Add(room.transform);
+            }
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (rooms[i] == null) { rooms.Clear(); return false; }
+                Vector3 p = rooms[i].InverseTransformPoint(eye);
+                if (Mathf.Abs(p.x) < 0.5f && Mathf.Abs(p.y) < 0.5f && Mathf.Abs(p.z) < 0.5f) return true;
+            }
+            return false;
         }
 
         // Nobody is left under the mine: the ground is cut away over the sheds, so a player shoved through a tunnel's

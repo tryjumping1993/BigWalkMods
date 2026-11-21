@@ -10,7 +10,7 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
 {
     public override string Name => "BlizzardWalk";
     public override Vector2 Footprint => new Vector2(28f, 34f);
-    public override Vector2? FixedSite => new Vector2(-970f, -1070f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1160f, -980f);      // chosen on the island's lowland; its build levels and clears it
 
     const float Deck = 1.5f, Width = 0.75f;
     // the walk's corners, from the turnstile to the arch

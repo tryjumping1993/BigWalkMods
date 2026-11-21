@@ -195,6 +195,7 @@ namespace BwmCompanion
                 case "mat": yield return Materials(r); break;
                 case "active": yield return SetActive(r); break;
                 case "inspect": yield return InspectFirst(r); break;
+                case "actions": yield return InputActions(); break;
                 case "treemat": yield return TreeMaterials(r); break;
                 case "trees": yield return NearTrees(r); break;
                 case "crest": yield return CrestInputs(r); break;
@@ -719,6 +720,21 @@ namespace BwmCompanion
             }
             sb.AppendLine("ambient: mode " + RenderSettings.ambientMode + " intensity " + F(RenderSettings.ambientIntensity) + " sky " + RenderSettings.ambientSkyColor);
             return sb.ToString();
+        }
+
+        // The game's input actions (Rewired): id, name, type, and what player 0 has on each now
+        static string InputActions()
+        {
+            var lines = new List<string>();
+            Rewired.Player player = Rewired.ReInput.players.GetPlayer(0);
+            for (int id = 0; id < 256; id++)
+            {
+                Rewired.InputAction a = Rewired.ReInput.mapping.GetAction(id);
+                if (a == null) continue;
+                string now = player == null ? "" : " now " + F(player.GetAxis(id)) + (player.GetButton(id) ? " (held)" : "");
+                lines.Add(id + " " + a.name + " (" + a.type + ", " + a.descriptiveName + ")" + now);
+            }
+            return lines.Count == 0 ? "no input actions found" : string.Join(Environment.NewLine, lines);
         }
 
         // The fields and properties of the first live object of a game type: /inspect?type=Train[&filter=speed]

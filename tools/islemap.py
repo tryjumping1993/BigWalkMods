@@ -48,6 +48,30 @@ for gzm in range(-2700, -450, 250): dr.line([P(x0, gzm), P(x0 + nx * cell, gzm)]
 plaza, summit = (-705, -795), (-2250, -1900)
 dr.line([P(-468, -700), P(-459, -747)], fill=(250, 250, 250, 255), width=5)
 dr.line([P(*plaza), P(*summit)], fill=(200, 30, 30, 255), width=4)
+# the railway (WinterIsle.railline beside the Winter Walk plugin): dark red on the ground and trestles, dashed in
+# tunnels; its stations as white squares
+line_file = os.path.join(REPO, "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.railline")
+rail_stations = []
+if os.path.exists(line_file):
+    pts, kinds = [], []
+    for l in open(line_file):
+        q = l.split()
+        if q and q[0] == "P": pts.append(((float(q[1]) + float(q[4])) / 2, (float(q[3]) + float(q[6])) / 2)); kinds.append(int(q[7]))
+        elif q and q[0] == "S": rail_stations.append(int(q[1]))
+    for i in range(len(pts) - 1):
+        if kinds[i] == 1 and (i // 3) % 2: continue
+        dr.line([P(*pts[i]), P(*pts[i + 1])], fill=(120, 20, 30, 255) if kinds[i] != 1 else (120, 20, 30, 170), width=5 if kinds[i] != 1 else 3)
+    for i in rail_stations:
+        px, pz = P(*pts[i]); dr.rectangle([px - 8, pz - 8, px + 8, pz + 8], fill=(255, 255, 255, 255), outline=(120, 20, 30, 255), width=3)
+# the airport's runway and the summit's airstrip (WinterIsleAirport.cs)
+def strip(cx, cz, bearing, u0, u1, half, colour):
+    a = math.radians(bearing); fx, fz = math.sin(a), math.cos(a); rx, rz = fz, -fx
+    dr.polygon([P(cx + fx * u + rx * v, cz + fz * u + rz * v) for u, v in ((u0, -half), (u1, -half), (u1, half), (u0, half))], fill=colour)
+strip(-870, -1855, 180, -160, 160, 22, (70, 70, 80, 255))
+strip(-2250, -1900, 308, 34, 168, 10, (110, 80, 50, 255))
+# the Lookouts' four stations (LookoutsPuzzle.cs)
+for lx, lz in ((-1400, -980), (-1250, -2000), (-2244.5, -1915), (-2750, -2120)):
+    px, pz = P(lx, lz); dr.regular_polygon((px, pz, 10), 4, fill=(250, 250, 250, 255), outline=(40, 100, 220, 255))
 sites = {}
 for f in glob.glob(os.path.join(REPO, "unity", "Assets", "Puzzles", "*", "site.json")):
     name = os.path.basename(os.path.dirname(f))
@@ -76,15 +100,16 @@ im.resize((1536, int(1536 * h / w))).save(os.path.join(out, "WinterIsleMap.png")
 # the key, for people: the same map with the puzzles named beside it
 keyw = 620
 sheet = Image.new("RGBA", (w + keyw, h), (24, 28, 36, 255)); sheet.paste(im, (0, 0))
-kd = ImageDraw.Draw(sheet); f = font(27)
+kd = ImageDraw.Draw(sheet); f = font(24)
 kd.text((w + 24, 20), "Puzzles", fill=(255, 255, 255, 255), font=font(40))
 for i, n in enumerate(order):
-    y = 84 + i * 43
-    kd.ellipse([w + 24, y, w + 58, y + 34], fill=colours[i % len(colours)] + (255,))
-    t = str(i + 1); kd.text((w + 41 - kd.textlength(t, font=font(20)) / 2, y + 6), t, fill=(255, 255, 255, 255), font=font(20))
-    kd.text((w + 72, y + 2), n, fill=(235, 235, 235, 255), font=f)
-y = 84 + len(order) * 43 + 14
-for label in ("green triangle: The Tree (plaza)", "gold star: the summit", "dark square: mine tower", "red line: gondola", "white line: causeway"):
-    kd.text((w + 24, y), label, fill=(200, 205, 215, 255), font=font(22)); y += 32
+    y = 84 + i * 34
+    kd.ellipse([w + 24, y, w + 52, y + 28], fill=colours[i % len(colours)] + (255,))
+    t = str(i + 1); kd.text((w + 38 - kd.textlength(t, font=font(17)) / 2, y + 5), t, fill=(255, 255, 255, 255), font=font(17))
+    kd.text((w + 66, y + 1), n, fill=(235, 235, 235, 255), font=f)
+y = 84 + len(order) * 34 + 14
+for label in ("green triangle: The Tree (plaza)", "gold star: the summit", "dark square: mine tower", "red line: gondola", "white line: causeway",
+              "dark red line: railway (dashed in tunnels)", "white squares: railway stations", "grey strip: airport runway", "brown strip: summit airstrip", "white diamonds: lookouts"):
+    kd.text((w + 24, y), label, fill=(200, 205, 215, 255), font=font(20)); y += 26
 sheet.convert("RGB").save(os.path.join(REPO, "docs", "winter-isle-map.png"))
 print("wrote the map:", len(order), "puzzles")

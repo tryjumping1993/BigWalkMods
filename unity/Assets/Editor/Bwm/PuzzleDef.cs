@@ -31,6 +31,9 @@ namespace Bwm
 
         // The SDK's puzzle type: 0 Puzzle (rewards a gourd), 1 Tower, 2 None (scenery, land, anything else)
         public virtual int PuzzleType => 0;
+        // Parts of the puzzle far from its site (world x, z and a radius), which the island levels and keeps clear
+        // like its site
+        public virtual System.Collections.Generic.IEnumerable<Vector3> ExtraSites => System.Array.Empty<Vector3>();
 
         public abstract void Build(PuzzleBuilder b);
     }

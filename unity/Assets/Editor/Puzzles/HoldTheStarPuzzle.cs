@@ -10,7 +10,7 @@ public sealed class HoldTheStarPuzzle : PuzzleDef
 {
     public override string Name => "HoldTheStar";
     public override Vector2 Footprint => new Vector2(36f, 36f);
-    public override Vector2? FixedSite => new Vector2(-630f, -900f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-2975f, -1565f);      // chosen on the island's lowland; its build levels and clears it
 
     const float Ring = 15f, OpenSeconds = 7f;
 

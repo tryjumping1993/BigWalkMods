@@ -11,7 +11,7 @@ public sealed class SnowballRangePuzzle : PuzzleDef
 {
     public override string Name => "SnowballRange";
     public override Vector2 Footprint => new Vector2(26f, 36f);
-    public override Vector2? FixedSite => new Vector2(-610f, -1270f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-2420f, -1610f);      // chosen on the island's lowland; its build levels and clears it
 
     static readonly Vector3[] Hoops = { new Vector3(-4.5f, 1.4f, 2f), new Vector3(3.5f, 1.9f, 6f), new Vector3(-2f, 2.4f, 10f), new Vector3(5f, 1.6f, 13f) };      // x, centre height, z
     static readonly Color[] Colours = { new Color(0.85f, 0.12f, 0.1f), new Color(0.15f, 0.6f, 0.25f), new Color(0.15f, 0.4f, 0.9f), new Color(0.95f, 0.75f, 0.2f) };

@@ -38,6 +38,8 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<MineDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<TrainDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<PlaneDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<JetpackDriver>();
             BlizzardMean = Config.Bind("General", "BlizzardMeanMinutes", 90f, "Blizzards arrive at random on the Winter Isle; this is the average wait between them, in minutes of play.");
             ClassInjector.RegisterTypeInIl2Cpp<WeatherDriver>();
@@ -51,7 +53,10 @@ namespace WinterWalk
             go.AddComponent<SkiDriver>();
             go.AddComponent<GondolaDriver>();
             go.AddComponent<GondolaDriver>().ConfigureLift("Ski Lift Line", "Ski Lift Chairs", "Ski Lift Chair ", 1.6f, 9f);      // the chairlift from the lodge
+            go.AddComponent<GondolaDriver>().ConfigureLift("Summit Lift Line", "Summit Lift Chairs", "Summit Lift Chair ", 1.6f, 5f);      // the summit lift, from the railway's Summit station to the crest
             go.AddComponent<MineDriver>();
+            go.AddComponent<TrainDriver>();
+            go.AddComponent<PlaneDriver>();
             go.AddComponent<JetpackDriver>();
             go.AddComponent<WeatherDriver>();
             go.AddComponent<MapDriver>();

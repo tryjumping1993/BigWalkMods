@@ -12,7 +12,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
 {
     public override string Name => "ReindeerCount";
     public override Vector2 Footprint => new Vector2(38f, 36f);
-    public override Vector2? FixedSite => new Vector2(-1060f, -950f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1580f, -710f);      // chosen on the island's lowland; its build levels and clears it
 
     const int Reindeer = 13;
     const float FieldX = 11f, FieldZ = 12f, ScreenH = 3.4f, LookoutUp = 2.6f;

@@ -11,7 +11,7 @@ public sealed class FootprintsPuzzle : PuzzleDef
 {
     public override string Name => "Footprints";
     public override Vector2 Footprint => new Vector2(26f, 34f);
-    public override Vector2? FixedSite => new Vector2(-850f, -830f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-1460f, -650f);      // chosen on the island's lowland; its build levels and clears it
 
     const float Spacing = 4.6f, PadSize = 1.9f, FieldZ = 7f;
 

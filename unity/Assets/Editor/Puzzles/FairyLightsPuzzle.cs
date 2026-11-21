@@ -11,7 +11,7 @@ public sealed class FairyLightsPuzzle : PuzzleDef
 {
     public override string Name => "FairyLights";
     public override Vector2 Footprint => new Vector2(36f, 36f);
-    public override Vector2? FixedSite => new Vector2(-700f, -1250f);      // chosen on the island's lowland; its build levels and clears it
+    public override Vector2? FixedSite => new Vector2(-860f, -2090f);      // chosen on the island's lowland; its build levels and clears it
 
     const float Out = 14f, PoleH = 7f, Phase = 7f;
     static readonly Color[] Colours = { new Color(0.85f, 0.12f, 0.1f), new Color(0.15f, 0.6f, 0.25f), new Color(0.15f, 0.4f, 0.9f), new Color(0.95f, 0.75f, 0.2f) };

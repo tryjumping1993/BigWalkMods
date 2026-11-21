@@ -363,3 +363,23 @@ and finished assets for the puzzles.
   mist and cloud that turn with the hour; blizzards as a Poisson process, mean two hours of real play. Seen in the
   game from the mainland by day and night, and a forced blizzard from the player's view (blurred: the idle test
   player was asleep). The veil's panels show faint vertical seams against the sky.
+- **More puzzles, an airport and a railway (user, 2026-11-21):** two more towers of five gourds each in The Tree's
+  list (after the mine's): the airport's control tower opens a runway on the south-east shelf with a hangar of
+  biplanes, and an airstrip on stilts out from the summit with two more (Winter Walk's PlaneDriver: throttle on
+  forward, steer and climb by the camera, jump to climb out once stopped); the railway's water tower starts eight
+  trains on a 9.3 km double-track line twice round the mountain and up a rack spiral inside the summit (about 5 km in
+  ten tunnels, 2.3 km on trestles, seven stations; 9 m/s, five minutes at every station), with a chairlift from its
+  end to the crest. Seen in the game: trains running and a seated player riding one through the stations, the Plaza
+  Halt, a portal and the south bay's trestle; a test biplane taking off from the runway and climbing. Twelve puzzles
+  moved out of the crowd round the plaza to the north-west shore, the east lowland, the hills round the airport and
+  the far west (by the railway's stations), and a new one, Lookouts: four lookouts with telescopes and
+  press-together levers kilometres apart, two to four of them by lobby size. Not tried: flying or riding with a
+  controller, two players, the summit lift.
+- **Cast Iron Pizza and disc golf at the summit (user, 2026-11-21):** the user's restaurant rebuilt from their photos
+  on a railed terrace out from the summit: the brick front with its striped awning, the logo on the window and the
+  fascia, the 1103B transom and a wreathed door; inside, burgundy over beadboard, a plank floor, a black ceiling with
+  pendant lamps, the window bar with ladder-back stools, black booths, the cat paintings, the plank counter with
+  chalkboards and string lights; behind it the kitchen (stacked red-panel ovens under a hood, the rack of countertop
+  ovens over pizza boxes, the sink, the pot shelf with copper pans) and the brick back hall. Two carryable disc golf
+  baskets and six frisbees on the terrace. Seen in the game: the front, the dining room, the kitchen and the stilts;
+  no snow falls inside. Not tried: sitting in the seats or throwing the frisbees with a controller.
