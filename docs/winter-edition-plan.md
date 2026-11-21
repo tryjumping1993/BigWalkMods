@@ -338,8 +338,8 @@ and finished assets for the puzzles.
   tower's five (the mine), the summit's twenty. The SDK shows one plinth per puzzle loaded, so the mine needs
   ten island puzzles and the summit thirty; five are built (Glass Booth, Light the Tree, Bell Ringers, Snowman,
   Downhill).
-- **Environment finished before the puzzles (user, 2026-11-21).** Built since, not yet seen in the game (Steam
-  would not start it):
+- **Environment finished before the puzzles (user, 2026-11-21).** Built since, and seen in the game the same day
+  (screenshots in `shots/env/`; nobody has ridden the lift or the half-pipe with a controller yet):
   - *Skiing and snowboarding:* a chairlift from beside the lodge up to the bench at the tree line (852 m, 15
     towers, 26 two-seat chairs; Winter Walk runs it as a second gondola and opens it with the gondola); gear racks
     at both its stations as well as the gondola's top; a terrain park on the right-hand run (three kickers and a
