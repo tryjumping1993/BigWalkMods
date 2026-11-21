@@ -355,7 +355,8 @@ namespace Bwm
             Quaternion turn = Quaternion.Euler(tilt.x, 0f, tilt.y);
             Vector3 P(float a, float rr, float y) => foot + turn * new Vector3(Mathf.Cos(a) * rr * radius, y, Mathf.Sin(a) * rr * radius);
             float draft = freeboard * 4f, cap = R(0.06f, 0.16f);
-            Color side = ice * 0.92f, under = ice * new Color(0.55f, 0.72f, 0.85f, 1f), rim = Color.Lerp(ice, Color.white, 0.55f);
+            // (sea ice is greyish white with a faint blue in its broken edges, not a saturated blue)
+            Color side = Color.Lerp(ice, new Color(0.78f, 0.83f, 0.86f, 1f), 0.65f), under = Color.Lerp(ice, new Color(0.42f, 0.5f, 0.56f, 1f), 0.6f), rim = Color.Lerp(ice, Color.white, 0.7f);
             Vector3 middle = P(0f, 0f, freeboard + cap * 1.6f);
             for (int k = 0; k < n; k++)
             {
@@ -366,9 +367,12 @@ namespace Bwm
                 Vector3 b0 = P(a0, r0 * 0.85f, -draft), b1 = P(a1, r1 * 0.85f, -draft);
                 mb.Quad(w0, w1, e1, e0, side);                    // the edge above the water
                 mb.Quad(b0, b1, w1, w0, under);                   // and below it, darker and bluer
-                Vector3 c0 = P(a0, r0 * 0.8f, freeboard + cap), c1 = P(a1, r1 * 0.8f, freeboard + cap);
+                float l0 = cap * (0.6f + 0.8f * (float)((k * 7919 + seed) % 13) / 13f), l1 = cap * (0.6f + 0.8f * (float)((((k + 1) % n) * 7919 + seed) % 13) / 13f);
+                Vector3 c0 = P(a0, r0 * 0.8f, freeboard + l0), c1 = P(a1, r1 * 0.8f, freeboard + l1);
+                Vector3 m0 = P(a0, r0 * 0.42f, freeboard + l0 * 1.5f + cap * 0.3f), m1 = P(a1, r1 * 0.42f, freeboard + l1 * 1.5f + cap * 0.3f);
                 mb.Quad(e0, e1, c1, c0, rim);                     // the bare rim, rising to the snow
-                mb.Tri(c0, c1, middle, snow);                     // the snow's domed cap
+                mb.Quad(c0, c1, m1, m0, snow);                    // the snow cap, lumpy
+                mb.Tri(m0, m1, middle, snow);
             }
         }
 
@@ -411,10 +415,10 @@ namespace Bwm
             const float barkRepeat = 1.1f;
             int round = Mathf.Max(1, Mathf.RoundToInt(2f * Mathf.PI * trunkR / barkRepeat));
             var bark = new Color(R(0.85f, 1.05f), R(0.85f, 1.0f), R(0.85f, 1.0f), 1f);
-            float[] ringY = { -0.4f, 0f, 0.18f, 0.45f, 0.9f, height * 0.25f, height * 0.5f, height * 0.75f, height * 0.93f };
+            float[] ringY = { -0.4f, 0f, 0.18f, 0.45f, 0.9f, height * 0.25f, height * 0.5f, height * 0.72f, height * 0.86f };      // (it ends inside the top whorls: no bare stick above the crown)
             float RingR(int ring, float a)
             {
-                float y = ringY[ring], t = Mathf.Clamp01(y / (height * 0.93f));
+                float y = ringY[ring], t = Mathf.Clamp01(y / (height * 0.93f));      // (tapering as if to the very top)
                 float r = trunkR * Mathf.Lerp(1f, 0.15f, Mathf.Pow(t, 1.1f));
                 float flare = Mathf.Clamp01(1f - y / 0.9f);      // the foot spreads into the ground, in buttresses
                 return r * (1f + flare * flare * (0.55f + 0.22f * Mathf.Sin(a * 5f + spin) + 0.1f * Mathf.Sin(a * 3f - spin)));
@@ -488,7 +492,11 @@ namespace Bwm
                     }
                     // a bough is not one blade: its main spray reaches two thirds of the way, and from its middle two side
                     // sprays fan out and droop further, each from a different part of the atlas
-                    Vector3 joint = Bough(root, dir, len * 0.72f, droop, widthShare * 0.9f, inner, mid, outer, true);
+                    Vector3 joint = Bough(root, dir, len * 0.72f, droop, widthShare * 0.9f, inner, mid, outer, false);
+                    // a second, lower layer turned a little aside, so the bough has depth from the side and from below
+                    // (a card hung straight down from the bough showed its straight top edge as a spoke)
+                    float aside = R(-0.25f, 0.25f);
+                    Bough(root + Vector3.down * len * 0.07f, new Vector3(Mathf.Cos(a + aside), 0f, Mathf.Sin(a + aside)), len * 0.62f, droop + 0.14f, widthShare * 0.72f, inner, mid, outer, false);
                     for (int sideSign = -1; sideSign <= 1; sideSign += 2)
                     {
                         float fan = R(0.4f, 0.75f) * sideSign;
@@ -497,24 +505,28 @@ namespace Bwm
                     }
                 }
             }
-            // the leader: a slim top shoot, and round it a few short sprays angled upwards, so the top is soft and
-            // a little irregular rather than a spearhead
+            // the leader: a slim snowy spire, three sprays standing on their stems round the axis and drawing in to a
+            // point, broad at their foot, with a ring of short sprays angled upwards round its base
             {
                 var top = new Color(tint.r, tint.g, tint.b, 1f);
-                Vector3 tipBase = foot + Vector3.up * height * 0.9f, tip = foot + Vector3.up * height * 1.02f + new Vector3(R(-0.1f, 0.1f), 0f, R(-0.1f, 0.1f)) * height * 0.03f;
-                for (int k = 0; k < 2; k++)
+                Vector3 spireBase = foot + Vector3.up * height * 0.83f, spireTip = foot + Vector3.up * height * 1.02f + new Vector3(R(-1f, 1f), 0f, R(-1f, 1f)) * height * 0.01f;
+                float spireWidth = height * 0.05f * Mathf.Max(girth, 0.7f);
+                for (int k = 0; k < 3; k++)
                 {
-                    float a = spin + k * Mathf.PI * 0.5f;
-                    var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * height * 0.03f;
+                    float a = spin + k * 2.0944f + 0.3f;
+                    var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * spireWidth;
+                    var out_ = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * spireWidth * 0.35f;
                     int which = random.Next(4);
-                    mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.3f, tip - side * 0.3f, Spray(new Vector2(0.15f, 0.25f), which), Spray(new Vector2(0.15f, 0.75f), which), Spray(new Vector2(0.95f, 0.6f), which), Spray(new Vector2(0.95f, 0.4f), which), top, top, top, top);
+                    Vector3 midS = Vector3.Lerp(spireBase, spireTip, 0.4f) + out_;
+                    mb.QuadUV(spireBase - side + out_, spireBase + side + out_, midS + side * 0.75f, midS - side * 0.75f, Spray(new Vector2(0.2f, 0.05f), which), Spray(new Vector2(0.2f, 0.95f), which), Spray(new Vector2(0.55f, 0.9f), which), Spray(new Vector2(0.55f, 0.1f), which), top, top, top, top);
+                    mb.QuadUV(midS - side * 0.75f, midS + side * 0.75f, spireTip + side * 0.05f, spireTip - side * 0.05f, Spray(new Vector2(0.55f, 0.1f), which), Spray(new Vector2(0.55f, 0.9f), which), Spray(new Vector2(1f, 0.55f), which), Spray(new Vector2(1f, 0.45f), which), top, top, top, top);
                 }
                 if (detail >= 0.7f)
-                    for (int k = 0; k < 4; k++)
+                    for (int k = 0; k < 6; k++)
                     {
-                        float a = spin + k * 1.5708f + R(-0.4f, 0.4f);
+                        float a = spin + k * 1.0472f + R(-0.3f, 0.3f);
                         var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                        Bough(foot + Vector3.up * height * R(0.86f, 0.93f), d, height * R(0.06f, 0.1f), -R(0.5f, 0.9f), 0.6f, top, top, top, false);
+                        Bough(foot + Vector3.up * height * R(0.8f, 0.88f), d, height * R(0.07f, 0.11f), -R(0.3f, 0.7f), 0.6f, top, top, top, false);
                     }
             }
 

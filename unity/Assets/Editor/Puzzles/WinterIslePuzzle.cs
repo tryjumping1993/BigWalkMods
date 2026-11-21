@@ -197,8 +197,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float skiH = PeakHeight * (SkiProfile(u - 0.012f) + SkiProfile(u) * 2f + SkiProfile(u + 0.012f)) / 4f;
             // the bowl under the headwall: an amphitheatre hollowed between two side ridges that run down to the trees
             float alongFace = dq.magnitude;
-            skiH -= 30f * Mathf.Exp(-Mathf.Pow((alongFace - 290f) / 140f, 2f)) * (1f - Mathf.Min(1f, Mathf.Pow(skiOff / 0.36f, 2f)));
-            skiH += 32f * Mathf.Exp(-Mathf.Pow((Mathf.Abs(skiOff) - 0.44f) / 0.08f, 2f)) * Smooth(alongFace / 120f) * (1f - Smooth((alongFace - 480f) / 160f));
+            // (wide and shallow, framed on one side only: two mirror-image arms made a straight trough down from the top)
+            skiH -= 18f * Mathf.Exp(-Mathf.Pow((alongFace - 300f) / 170f, 2f)) * (1f - Mathf.Min(1f, Mathf.Pow(skiOff / 0.6f, 2f)));
+            skiH += 24f * Mathf.Exp(-Mathf.Pow((skiOff + 0.62f) / 0.12f, 2f)) * Smooth(alongFace / 160f) * (1f - Smooth((alongFace - 520f) / 200f)) * (0.6f + 0.8f * Mathf.PerlinNoise(alongFace * 0.01f, 4.2f));
             // a shoulder standing out of the face's north side, so that from the east the mountain is not a triangle
             skiH += 55f * Mathf.Exp(-Mathf.Pow((alongFace - 640f) / 170f, 2f)) * Mathf.Exp(-Mathf.Pow((skiOff + 0.5f) / 0.14f, 2f));
             h = Mathf.Lerp(h, skiH, ski);
@@ -247,7 +248,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         if (h <= 0.5f) return Mathf.Max(0f, h);
         // crags and spurs on the steep sides; the ski face only rolls a little
-        float rough = (Ridged(p.x * 0.006f + 11.3f, p.y * 0.006f + 4.9f) - 0.4f) * 70f + (Ridged(p.x * 0.017f + 2.1f, p.y * 0.017f + 7.7f) - 0.45f) * 24f + (Ridged(p.x * 0.05f + 6.3f, p.y * 0.05f + 1.2f) - 0.5f) * 7f;
+        // (big buttresses and couloirs; little of the finer ridged noise, which on a steep face ran down it in flutes)
+        float rough = (Ridged(p.x * 0.006f + 11.3f, p.y * 0.006f + 4.9f) - 0.4f) * 70f + (Ridged(p.x * 0.017f + 2.1f, p.y * 0.017f + 7.7f) - 0.45f) * 10f + (Ridged(p.x * 0.05f + 6.3f, p.y * 0.05f + 1.2f) - 0.5f) * 2.5f;
         float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 16f;
         float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 150f);      // none at the foot or on the summit
         float rib = Rib(p) * Smooth((h - TreeLine + 40f) / 60f);      // rock ribs only above the trees; below, the face is even ground under forest
@@ -1954,9 +1956,28 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Kit.AddBox(furniture, Ground3(runMid) + Vector3.up * 5.6f, new Vector3(0.5f, 1.8f, runHalf * 1.6f + 0.9f), new Color(0.85f, 0.1f, 0.1f), archYaw);
                 Vector2 lodge = runMid + runSide * (runHalf + 22f) + runDir * 10f;
                 float lodgeYaw = Mathf.Atan2(runDir.x, runDir.y) * Mathf.Rad2Deg;
-                Kit.AddBox(furniture, Ground3(lodge) + Vector3.down * 1f, new Vector3(14f, 6.5f, 22f), new Color(0.5f, 0.32f, 0.2f), lodgeYaw);
-                Kit.AddBox(furniture, Ground3(lodge) + Vector3.up * 5.5f, new Vector3(16.4f, 0.7f, 24.4f), new Color(0.55f, 0.13f, 0.12f), lodgeYaw);
-                Kit.AddBox(furniture, Ground3(lodge) + Vector3.up * 6.2f, new Vector3(10f, 1.4f, 24.4f), new Color(0.55f, 0.13f, 0.12f), lodgeYaw);
+                // the lodge: a big log A-frame facing the run, a long row of lit windows, a deck with benches in front,
+                // and a smaller hut beside it
+                var lodgeGlow = new MeshBuilder();
+                float faceRun = Mathf.Atan2(-runSide.x, -runSide.y) * Mathf.Rad2Deg;
+                Vector3 lodgeFoot = Ground3(lodge);
+                Kit.AddCabin(furniture, lodgeGlow, lodgeFoot, new Vector2(12f, 18f), faceRun, 4401);
+                Quaternion lt = Quaternion.Euler(0f, faceRun, 0f);
+                var warm = new Color(1f, 0.72f, 0.36f);
+                for (int wi = -3; wi <= 3; wi++)
+                {
+                    if (wi == -1) continue;      // the door
+                    Kit.AddGlow(lodgeGlow, lodgeFoot + lt * new Vector3(wi * 1.6f, 1.6f, 9.03f), new Vector3(1.1f, 1.2f, 0.06f), faceRun, warm, wi * 0.13f + 0.5f);
+                    Kit.AddGlow(lodgeGlow, lodgeFoot + lt * new Vector3(wi * 1.0f, 4.6f, 9.03f), new Vector3(0.7f, 0.9f, 0.06f), faceRun, warm, wi * 0.17f + 0.2f);
+                }
+                Kit.AddBox(furniture, lodgeFoot + lt * new Vector3(0f, 0f, 12f), new Vector3(14f, 0.35f, 5.5f), new Color(0.42f, 0.29f, 0.18f), faceRun);      // the deck
+                for (int bi = -1; bi <= 1; bi += 2)
+                {
+                    Kit.AddBox(furniture, lodgeFoot + lt * new Vector3(bi * 4f, 0.35f, 13.5f), new Vector3(3f, 0.45f, 0.5f), new Color(0.36f, 0.24f, 0.15f), faceRun);      // benches
+                    Kit.AddBox(furniture, lodgeFoot + lt * new Vector3(bi * 4f, 0.8f, 13.5f), new Vector3(1.4f, 0.08f, 0.9f), new Color(0.36f, 0.24f, 0.15f), faceRun);
+                }
+                Kit.AddCabin(furniture, lodgeGlow, Ground3(lodge + runDir * 16f + runSide * 4f), new Vector2(5f, 6f), faceRun + 12f, 4402);
+                b.MeshPiece("Lodge Windows", lodgeGlow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
             }
             b.MeshPiece("Piste Furniture", furniture.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), false);
             Debug.Log("[BWM] Winter Isle pistes: " + markers + " marker poles, " + gates + " slalom gates, a finish arch and a lodge");

@@ -128,7 +128,8 @@ public static class WinterIsleDressing
         if (onTerrain && diameter > 2.5f && land.Forest(p) > 0.4f) return ground;
         if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.Piste(p) > 0.15f) return ground;
         if (onTerrain && diameter > 1.2f && ground > 45f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && land.Slope(p) > 0.55f) return ground;      // none stuck on the mountain's steep faces: they lie at its foot
-        if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
+        if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;
+        if (onTerrain && diameter > 1.2f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.3f && ground > WinterIslePuzzle.TreeLine - 60f) return ground;      // nothing along the bowl's lip: a row of brown boulders hid the run below      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
             // never float: the rock's bottom goes below the lowest ground under it, deeper on a slope
@@ -151,11 +152,14 @@ public static class WinterIsleDressing
     }
 
     // A plant about 'height' metres tall (or the catalogue's own size times 'scale' when height is 0)
-    static void Plant(string kind, Vector2 p, float scale, float snow = 0.55f)      // (snow only on what faces well up: at 0.3 whole leaves went white)
+    static void Plant(string kind, Vector2 p, float scale, float snow = 0.42f)      // (at 0.3 whole leaves went white; at 0.55 they kept their summer green)
     {
         if (!catalog.ContainsKey(kind)) throw new Exception("No '" + kind + "' in world\\catalog.tsv");
         float y = land.Height(p) - 0.08f;
         Kind k = catalog[kind];
+        // nothing of the game's own flora up the ski mountain: above the trees it is snow and rock, and on the ski face
+        // only our firs grow (grass trees in an alpine bowl read wrong)
+        if ((p - WinterIslePuzzle.Peak).magnitude < 1500f && (land.Height(p) > WinterIslePuzzle.TreeLine - 40f || WinterIslePuzzle.SkiFace(p) > 0.4f) && !kind.Contains("Log") && !kind.Contains("Litter")) return;
         Cover.Add((p, Mathf.Max(k.size.x, k.size.z) * scale * 0.4f));
         output.Append("tree:").Append(kind).Append('\t').Append(F(p.x)).Append('\t').Append(F(y)).Append('\t').Append(F(p.y)).Append('\t')
             .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(scale)).Append('\t').Append(F(snow)).Append('\n');
@@ -355,7 +359,7 @@ public static class WinterIsleDressing
             var p = new Vector2(R(l.X0, l.X1), R(l.Z0, l.Z1));
             float toShore = l.ToShore(p);
             if (toShore > -6f || toShore < -40f || l.Beach(p) || InsideRock(p, 3f) || R(0f, 1f) > 0.14f) continue;
-            Rock(Pick(new[] { "rock-pillar", "rock-whale", "rock-boulder01", "rock-knuckles" }), p, -3f, R(5f, 12f), 0.15f, 0.5f, 6f);
+            Rock(Pick(new[] { "rock-whale", "rock-boulder01", "rock-knuckles" }), p, -3f, R(4f, 9f), 0.25f, 0.5f, 6f);      // (no pillars: they stood round the mountain's foot like spikes)
             coast++;
             int around = random.Next(0, 4);
             for (int j = 0; j < around; j++)
@@ -409,6 +413,15 @@ public static class WinterIsleDressing
                 if (R(0f, 1f) > 0.45f + 0.5f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
                 float d = Mathf.Min(R(2.2f, 7.5f), (toPath - 1.6f) * 1.7f);
                 Rock(Pick(BigRound), p, LowGround(p, d * 0.4f), d, R(0.38f, 0.58f), 0.45f, 10f);
+                // a few more round it, smaller and turned differently, so it is a cluster and not one rock
+                int companions = random.Next(0, 4);
+                for (int i = 0; i < companions; i++)
+                {
+                    Vector2 q = p + new Vector2(R(-1f, 1f), R(-1f, 1f)).normalized * d * R(0.7f, 1.3f);
+                    float dq = d * R(0.3f, 0.7f);
+                    if (l.ToPath(q) < 2.5f || InsideRock(q, 0.2f) || float.IsNaN(l.Height(q))) continue;
+                    Rock(Pick(BigRound), q, LowGround(q, dq * 0.4f), dq, R(0.35f, 0.6f), 0.45f, 18f);
+                }
                 int cobbles = random.Next(2, 6);
                 for (int i = 0; i < cobbles; i++)
                 {
@@ -451,7 +464,7 @@ public static class WinterIsleDressing
                 if (wall) chance = 1f;
                 if (R(0f, 1f) > chance || !l.Free(p, 1.5f) || InsideRock(p, 1.2f)) continue;
                 float tallness = Mathf.Lerp(4.5f, 13.5f, Mathf.Clamp01(inGrove * R(0.55f, 1.15f))) * (h > 40f ? 0.8f : 1f);
-                tallness *= Mathf.Lerp(1f, 0.4f, Smooth01((h - (WinterIslePuzzle.TreeLine - 170f)) / 170f));      // stunted towards the tree line
+                tallness *= Mathf.Lerp(1f, 0.45f, Smooth01((h - (WinterIslePuzzle.TreeLine - 60f)) / 60f));      // stunted over the last stretch below the tree line
                 if (wall) tallness = Mathf.Max(tallness, R(9f, 13f));
                 bool young = !wall && (edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f);      // saplings feather the edges and grow among the old trees
                 // beside a path a grown fir's boughs would hang across it (and through a walker's eyes): there it is a
@@ -556,11 +569,11 @@ public static class WinterIsleDressing
 
         // ---- plants ----
         string[] heath = { "TeatreeCoast_Solo", "TeatreeCoast_Wall", "PovertyBush", "SeaberrySaltbush", "CoastSaltbush", "CorreaWhite_Bush", "CoastBeardHeath_Tall", "CoastalWattle_Bush", "CommonBoobialla", "TeatreeCoast_Bush" };
-        string[] shoreTrees = { "TeatreeCoast_Hero", "TeatreeCoast", "BanksiaCoast", "BanksiaCoast_Senior", "TeatreeCoast_Dead_Tall" };
+        string[] shoreTrees = { "TeatreeCoast_Dead_Tall", "TeatreeCoast_Dead", "BanksiaCoast_Dead", "TeatreeCoast_Dead_Tall" };      // (in leaf they read as summer)
         // winter woodland: mostly bare, dead-looking broadleaf (evergreen gum and banksia read as summer from afar,
         // where only their impostors draw), a few hardy evergreens, and thickets
-        string[] woodland = { "SheoakDrooping_Short", "Paperbark_Thicket", "KangarooApple", "HazelPomaderris", "AustralianBlackthorn_Bush", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short" };
-        string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead_ClosedForest", "SheoakDrooping", "Blackwood", "SheoakSwamp", "Paperbark", "TeatreeCoast_Dead_Tall", "BrownStringybark_Dead_Short" };
+        string[] woodland = { "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short", "AustralianBlackthorn_Bush", "BrownStringybark_Dead_Short" };
+        string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead_ClosedForest", "TeatreeCoast_Dead_Tall", "BrownStringybark_Dead_Short" };
         string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath", "HazelPomaderris_Thicket", "Paperbark_Bush", "BushyNeedlewood", "PricklyMoses" };
         string[] tops = { "GrassTree", "GrassTree_Short", "GrassTree_NoFlower", "ButtonGrass", "PricklyMoses", "TreeEverlasting" };
         string[] dead = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "LillyPilly_ForestTall_Dead" };
