@@ -405,3 +405,6 @@ and finished assets for the puzzles.
   player, empty-handed, back to the last tower they visited. Seen in the game: six moved puzzles on their new terraces,
   the dinosaurs walking, test noise turning one, a chase at 3.3 m/s and a catch waking the player at The Tree. Not tried:
   real voice or a controller's sprint and jump as noise, dropping carried things, two players.
+- **Gondola slower, dinosaurs at night (user, 2026-11-21):** the gondola's cable speed down a third (28 to 18.75 m/s, about
+  105 s to the summit) after the trailer showed it too fast; the dinosaurs come out only from 19 h to 6 h. Seen in the game:
+  none out at 13 h, all eight at 22 h, a night chase ending at dawn, cabins at 19 m/s.

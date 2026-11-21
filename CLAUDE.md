@@ -193,7 +193,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   were spread out from the plaza on 2026-11-21 (four stay there as the hub); `WinterIslePuzzle.FormerSites` keeps their
   old places as coast guards, so the coast (and the railway beside it) did not move. Every island puzzle has a FixedSite.
 - **Dinosaurs** (`DinosaursPuzzle.cs`, a scenery pack; `winterwalk\DinoDriver.cs`; `unity\Assets\PuzzleScripts\DinoControl.cs`):
-  eight friendly dinosaurs (long-necks, plated, horned; Christmas hats and scarves) wander round homes (`Homes`). Each PC
+  eight friendly dinosaurs (long-necks, plated, horned; Christmas hats and scarves) wander round homes (`Homes`), only at
+  night (`NightFrom` 19 h to `NightTo` 6 h; by day they keep out of sight, showing or hiding only with no player within
+  60 m, and a chase ends at dawn; `ForceNight` for tests). Each PC
   measures its own player's noise (voice loudness from the game's lips, x3 through a megaphone; sprinting, jumping,
   waving, a cowbell) and reports it to the host through DinoControl; past `Threshold` of heard noise (fading to 40 m,
   settling with time) a dinosaur chases the noisiest player at 95 % of the game's sprint speed (`tunings.forwardSprintSpeed`,

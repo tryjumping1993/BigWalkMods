@@ -12,7 +12,9 @@
 // sitting): it drops everything the player carries, in hand and in every pocket, where they stand, and a moment later
 // wakes them at the last tower they visited (The Tree's, the mine's, the airport's, the train's or the summit's; The
 // Tree's to begin with), and tells the host, which calls the dinosaur off.
-// For testing: TestNoise (noise a second added to this player's), Threshold, Peaceful (no chases), State, Last.
+// They only come out at night (NightFrom to NightTo, by the game's clock): by day they keep out of sight, each one
+// appearing or vanishing only while no player is close enough to see it happen, and a chase still running at dawn ends.
+// For testing: ForceNight (1 night, 0 day, -1 the clock), TestNoise (noise a second added to this player's), Threshold, Peaceful (no chases), State, Last.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -33,6 +35,9 @@ namespace WinterWalk
         public static bool Peaceful;                 // no chases (the companion can set it)
         public static float Noise;                   // read-only: this player's noise a second, lately
         public static string Tower = "The Tree";     // read-only: where this player wakes if caught
+        public static float NightFrom = 19f, NightTo = 6f;      // the hours the dinosaurs are out
+        public static int ForceNight = -1;           // for testing: 1 night, 0 day, -1 the game's clock
+        public static bool Night;                    // read-only: whether they are out
         public static int Heard;                     // read-only (host): noise reports heard
         public static float MostAnnoyed;             // read-only (host): the most annoyed dinosaur's level
         public static string LastReport = "";
@@ -386,6 +391,7 @@ namespace WinterWalk
                 {
                     d.annoyed = Mathf.Max(0f, d.annoyed - Calming * dt);
                     if (d.annoyed <= 0f) { d.loudest = 0; d.loudestAmount = 0f; }
+                    if (!Night) { d.annoyed = 0f; d.loudest = 0; d.loudestAmount = 0f; continue; }
                     if (!Peaceful && d.annoyed >= Threshold && d.loudest != 0 && PlayerById(d.loudest) != null)
                     {
                         d.mode = 1; d.target = d.loudest; d.t0 = now; d.chaseSince = now; d.p0 = d.pos; d.v0 = Vector2.zero; d.farSince = 0; d.safeSince = 0;
@@ -398,7 +404,7 @@ namespace WinterWalk
                 if (d.mode == 1)
                 {
                     PlayerCharacter pc = PlayerById(d.target);
-                    if (pc == null || Peaceful || now - d.chaseSince > GiveUpAfter || (d.safeSince > 0 && now - d.safeSince > 3.0)) { GoHome(d, now); changed = true; continue; }
+                    if (pc == null || Peaceful || !Night || now - d.chaseSince > GiveUpAfter || (d.safeSince > 0 && now - d.safeSince > 3.0)) { GoHome(d, now); changed = true; continue; }
                     Vector3 tp = pc.transform.position;
                     Vector2 to = new Vector2(tp.x, tp.z) - d.pos;
                     float dist = to.magnitude;
@@ -504,6 +510,39 @@ namespace WinterWalk
             if (d.eyes != null && d.eyes.gameObject.activeSelf != (d.mode == 1)) d.eyes.gameObject.SetActive(d.mode == 1);
         }
 
+        static bool IsNight()
+        {
+            if (ForceNight >= 0) return ForceNight == 1;
+            try
+            {
+                Enviro.EnviroManager env = Enviro.EnviroManager.instance;
+                if (env == null || env.Time == null) return false;
+                float h = env.Time.Settings.timeOfDay;
+                return NightFrom > NightTo ? (h >= NightFrom || h < NightTo) : (h >= NightFrom && h < NightTo);
+            }
+            catch (Exception) { return false; }
+        }
+
+        // a dinosaur shows or hides only while nobody is near enough to watch it happen
+        void SetOut(Dino d, bool wanted)
+        {
+            GameObject go = d.root.gameObject;
+            if (go.activeSelf == wanted) return;
+            try
+            {
+                var all = PlayerCharacter.allPlayerCharacters;
+                for (int i = 0; all != null && i < all.Count; i++)
+                {
+                    PlayerCharacter pc = all[i];
+                    if (pc == null) continue;
+                    Vector3 p = pc.transform.position;
+                    if ((new Vector2(p.x, p.z) - d.shown).sqrMagnitude < 60f * 60f) return;
+                }
+            }
+            catch (Exception) { }
+            go.SetActive(wanted);
+        }
+
         void Update()
         {
             try
@@ -515,6 +554,7 @@ namespace WinterWalk
                     if (!Find()) return;
                 }
                 Bind();
+                Night = IsNight();
                 double now = Mirror.NetworkTime.time;
                 float dt = Mathf.Min(Time.deltaTime, 0.1f);
                 bool host = IsHost;
@@ -570,8 +610,15 @@ namespace WinterWalk
                     if (version != seenVersion) { seenVersion = version; Decode(ctlOrders != null ? (string)ctlOrders.GetValue(null) : "", now); }
                 }
                 int chasing = 0;
-                for (int i = 0; i < dinos.Count; i++) { Show(dinos[i], i, now, dt); if (dinos[i].mode == 1) chasing++; }
-                State = dinos.Count + " dinosaurs, " + chasing + " chasing" + (Peaceful ? " (peaceful)" : "") + (Present ? "" : " (no DinoControl: this PC runs them alone)");
+                int outNow = 0;
+                for (int i = 0; i < dinos.Count; i++)
+                {
+                    Show(dinos[i], i, now, dt);
+                    SetOut(dinos[i], Night || dinos[i].mode != 0);
+                    if (dinos[i].root.gameObject.activeSelf) outNow++;
+                    if (dinos[i].mode == 1) chasing++;
+                }
+                State = dinos.Count + " dinosaurs, " + outNow + " out (" + (Night ? "night" : "day") + "), " + chasing + " chasing" + (Peaceful ? " (peaceful)" : "") + (Present ? "" : " (no DinoControl: this PC runs them alone)");
             }
             catch (Exception e)
             {

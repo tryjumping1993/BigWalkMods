@@ -24,7 +24,7 @@ namespace WinterWalk
     {
         public GondolaDriver(IntPtr ptr) : base(ptr) { }
 
-        float LineSpeed = 28f;               // metres a second on the cable (100 km/h): the line climbs 590 m over 1.9 km, about 70 s
+        float LineSpeed = 18.75f;            // metres a second on the cable (67 km/h; a third slower than it was, the user found 28 too fast): 590 m up over 1.9 km, about 105 s
         float StationSpeed = 0.7f;           // metres a second through a station
         const float StationLength = 12f;     // the slow stretch at each end
         const float Ease = 45f;              // metres over which a cabin speeds up or slows down
