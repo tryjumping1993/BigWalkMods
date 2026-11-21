@@ -783,7 +783,7 @@ public sealed class CastIronPizzaPuzzle : PuzzleDef
             float xm = (x0 + x1) * 0.5f;
             Pic(dine, S(xm, Sill * 0.5f, -0.3f), rgt, up, x1 - x0, Sill, "beadboard", B(232, 230, 224));
             TBox(dine, xm, Sill - 0.03f, -0.39f, x1 - x0 + 0.24f, 0.04f, 0.18f, "trim_white", Cream);
-            foreach (float x in new[] { x0 - 0.05f, x1 + 0.05f }) TBox(dine, x, Sill, -0.3125f, 0.1f, Lintel - Sill, 0.025f, "trim_white", Cream);
+            foreach (float x in new[] { x0 - 0.05f, x1 + 0.05f }) TBox(dine, x, 0f, -0.3125f, 0.1f, Lintel, 0.025f, "trim_white", Cream);      // to the floor: they also close the gap beside the panel
             TBox(dine, xm, Lintel, -0.3125f, x1 - x0 + 0.2f, 0.1f, 0.025f, "trim_white", Cream);
             TBox(dine, xm, 0f, -0.309f, x1 - x0, 0.12f, 0.018f, "trim_white", Cream);
         }

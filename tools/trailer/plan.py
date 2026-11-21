@@ -152,8 +152,10 @@ def read_rail():
     if os.path.exists(f):
         for line in open(f):
             q = line.split()
-            if q and q[0] == "P":
+            if q and q[0] == "P" and len(q) >= 8:      # double track: both rails' middles, then the kind
                 pts.append(((float(q[1]) + float(q[4])) / 2, (float(q[2]) + float(q[5])) / 2, (float(q[3]) + float(q[6])) / 2, int(q[7])))
+            elif q and q[0] == "P" and len(q) >= 5:    # single track (the loop): the middle, then the kind
+                pts.append((float(q[1]), float(q[2]), float(q[3]), int(q[4])))
     return np.array(pts) if pts else np.zeros((0, 4))
 
 
