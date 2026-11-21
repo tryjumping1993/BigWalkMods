@@ -132,10 +132,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         float best = 0f;
         for (int run = 0; run < 3; run++)
         {
-            float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f)      // they draw together at the foot
-                + (run == 1 ? 0.1f : 0.065f) * Mathf.Sin(along / (run == 1 ? 150f : 190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
+            float centre = RunOffset(run, along);
             float across = Mathf.Abs(off - centre) * along;      // metres from the run's middle
-            float half = (run == 1 ? 19f : 13f) + 3f * Mathf.Sin(along / 130f + run * 1.7f);      // the middle run is the wide main one
+            float half = RunHalf(run, along);
             best = Mathf.Max(best, 1f - Smooth((across - half) / 6f));
         }
         return ski * Mathf.Max(open * (1f - Rib(p)), best);
@@ -148,24 +147,38 @@ public sealed class WinterIslePuzzle : PuzzleDef
         direction = (RunCentre(1, SkiRadius - 104f, out _) - mid).normalized;
         return mid;
     }
+    // A run's line across the face (radians off the face's bearing) and its half-width, at a distance from the peak:
+    // down the fall line with gentle doglegs, drawing together over the last 600 m into one broad run-out; wide on
+    // open pitches and narrow in places, by a factor of two or three (the mountain-shots.sh camera follows run 1)
+    static float RunOffset(int run, float along) => (run - 1) * 0.34f * Smooth((SkiRadius - 60f - along) / 600f)
+        + (run == 1 ? 0.045f : 0.04f) * Mathf.Sin(along / (run == 1 ? 260f : 240f + run * 30f) + run * 2.1f) * Smooth((along - 300f) / 200f);
+    static float RunHalf(int run, float along) => (run == 1 ? 20f : 14f) * (0.55f + 0.9f * Mathf.PerlinNoise(along * 0.006f + run * 3.1f, 0.5f))
+        + 38f * Smooth((along - (SkiRadius - 330f)) / 170f);
     public static Vector2 RunCentre(int run, float along, out float half)
     {
-        float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f) + (run == 1 ? 0.1f : 0.065f) * Mathf.Sin(along / (run == 1 ? 150f : 190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
-        half = (run == 1 ? 19f : 13f) + 3f * Mathf.Sin(along / 130f + run * 1.7f);
+        float centre = RunOffset(run, along);
+        half = RunHalf(run, along);
         float angle = SkiBearing - centre;      // Piste measures 'off' as bearing minus angle
         return Peak + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * along;
     }
     // 1 where the ski face is forest: below the tree line, off the pistes
-    public static float SkiForest(Vector2 p, float height) => SkiFace(p) * (1f - Smooth((Piste(p) - 0.1f) / 0.3f)) * (1f - Smooth((height - TreeLine + 150f) / 150f)) * Smooth((height - 6f) / 10f);      // a hard edge at a piste, thinning out over the last 150 m below the tree line
-    // The ski face's height, as a share of the peak's, at u from the summit (0) to the foot (1): about 35 degrees
-    // down the headwall, 30 on the upper pitch, a bench, 30 again, a second bench, 22 on the lower pitch, 8 on the run-out
+    public static float SkiForest(Vector2 p, float height)
+    {
+        // the forest reaches higher on the spurs between the runs (tongues up the ridges) than beside them
+        float along = (p - Peak).magnitude, clear = float.MaxValue;
+        for (int run = 0; run < 3; run++) { Vector2 c = RunCentre(run, along, out float half); clear = Mathf.Min(clear, (p - c).magnitude - half); }
+        float line = TreeLine + 60f * Smooth((clear - 25f) / 45f) - 30f;
+        return SkiFace(p) * (1f - Smooth((Piste(p) - 0.1f) / 0.3f)) * (1f - Smooth((height - line + 120f) / 120f)) * Smooth((height - 6f) / 10f);
+    }      // a hard edge at a piste, thinning out over the last 150 m below the tree line
+    // The ski face's height, as a share of the peak's, at u from the summit (0) to the foot (1): concave, as a ski
+    // mountain is, about 35 degrees under the summit easing to 8 at the foot, with two rolls on the way (a gentle
+    // bench above each and a steeper pitch below), so the face is never one plane and never hides its top
     static float SkiProfile(float u)
     {
-        float[] at = { 0f, 0.10f, 0.27f, 0.39f, 0.57f, 0.68f, 0.82f, 1f }, share = { 1f, 0.79f, 0.52f, 0.505f, 0.22f, 0.205f, 0.065f, 0f };      // (two long benches, 170 and 160 m)
         u = Mathf.Clamp01(u);
-        for (int i = 0; i + 1 < at.Length; i++)
-            if (u <= at[i + 1]) return Mathf.Lerp(share[i], share[i + 1], (u - at[i]) / (at[i + 1] - at[i]));
-        return 0f;
+        float share = Mathf.Pow(1f - u, 1.7f);
+        share += 0.012f * Mathf.Exp(-Mathf.Pow((u - 0.42f) / 0.035f, 2f)) + 0.01f * Mathf.Exp(-Mathf.Pow((u - 0.63f) / 0.035f, 2f));
+        return share;
     }
     static float MountainRadius(Vector2 p) => Mathf.Lerp(SteepRadius, SkiRadius, SkiFace(p));
     // how far the mountain's ground reaches at p (for the island's outline): the main cone or any lesser peak
@@ -198,15 +211,16 @@ public sealed class WinterIslePuzzle : PuzzleDef
             // pitch and a gentle run-out (SkiProfile), the steps a little higher or lower across the face
             float u = Mathf.Clamp01(d / SkiRadius + 0.03f * Mathf.Sin(skiOff * 5f + 1f) * Mathf.Sin(Mathf.Clamp01(d / SkiRadius) * Mathf.PI));
             float skiH = PeakHeight * (SkiProfile(u - 0.012f) + SkiProfile(u) * 2f + SkiProfile(u + 0.012f)) / 4f;
-            // the bowl under the headwall: an amphitheatre hollowed between two side ridges that run down to the trees
+            // the cirque under the headwall: its floor hollowed and falling towards the trees, held on both sides by
+            // rock ribs that stand well apart (close together they made a trough down from the top) and rise only
+            // once below the summit's crest
             float alongFace = dq.magnitude;
-            // (wide and shallow, framed on one side only: two mirror-image arms made a straight trough down from the top)
-            skiH -= 18f * Mathf.Exp(-Mathf.Pow((alongFace - 300f) / 170f, 2f)) * (1f - Mathf.Min(1f, Mathf.Pow(skiOff / 0.6f, 2f)));
-            skiH += 24f * Mathf.Exp(-Mathf.Pow((skiOff + 0.62f) / 0.12f, 2f)) * Smooth(alongFace / 160f) * (1f - Smooth((alongFace - 520f) / 200f)) * (0.6f + 0.8f * Mathf.PerlinNoise(alongFace * 0.01f, 4.2f));
-            // a shoulder standing out of the face's north side, so that from the east the mountain is not a triangle
-            skiH += 32f * Mathf.Exp(-Mathf.Pow((alongFace - 640f) / 240f, 2f)) * Mathf.Exp(-Mathf.Pow((skiOff + 0.56f) / 0.17f, 2f));      // (broad: a narrow one stood as a knob in front of the base)
-            // and on the bowl's other side a lower, snowy rim, so the bowl is held on both sides but not in a trough
-            skiH += 12f * Mathf.Exp(-Mathf.Pow((skiOff - 0.66f) / 0.13f, 2f)) * Smooth(alongFace / 200f) * (1f - Smooth((alongFace - 560f) / 180f));
+            skiH -= 22f * Mathf.Exp(-Mathf.Pow((alongFace - 330f) / 160f, 2f)) * (1f - Mathf.Min(1f, Mathf.Pow(skiOff / 0.55f, 2f)));
+            float ribRise = Smooth((alongFace - 140f) / 160f) * (1f - Smooth((alongFace - 600f) / 180f));
+            skiH += 44f * Mathf.Exp(-Mathf.Pow((skiOff + 0.72f) / 0.12f, 2f)) * ribRise * (0.7f + 0.6f * Mathf.PerlinNoise(alongFace * 0.012f, 4.2f));
+            skiH += 30f * Mathf.Exp(-Mathf.Pow((skiOff - 0.74f) / 0.11f, 2f)) * ribRise * (0.7f + 0.6f * Mathf.PerlinNoise(alongFace * 0.012f, 9.6f));
+            // a broad shoulder out to the north, so the mountain is not a cone from the east
+            skiH += 32f * Mathf.Exp(-Mathf.Pow((alongFace - 640f) / 240f, 2f)) * Mathf.Exp(-Mathf.Pow((skiOff + 0.56f) / 0.17f, 2f));
             h = Mathf.Lerp(h, skiH, ski);
         }
         // aretes and cirques: five spurs run out from the summit with bowls hollowed between them (steep sides only)
@@ -241,7 +255,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float shape = lp == 1 ? Mathf.Pow(1f - x * x, 1.3f)                     // a dome
                 : lp == 0 ? 1f - Mathf.Pow(x, 0.85f) * (0.75f + 0.25f * x)        // a ridge with a broad top
                 : Mathf.Pow(1f - x, 1.1f) * (1f - 0.12f * Mathf.Exp(-x * 9f));     // a knob, its top blunted
-            if (x < 1f) h = SoftMax(h, lesser.height * shape * (1f - ski), 45f);
+            float lesserH = lesser.height * shape * (1f - ski), lesserSoft = 45f * Smooth(lesserH / 60f);
+            if (x < 1f) h = lesserSoft > 0.01f ? SoftMax(h, lesserH, lesserSoft) : Mathf.Max(h, lesserH);
             // ...and a ridge from the main summit out to it, its saddle a fifth lower than the lesser top, so the
             // three are one massif and not three cones
             Vector2 rel = q - Peak;
@@ -249,7 +264,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float beside = (rel - lesser.off * f).magnitude;
             float crest = lesser.height * (1f - 0.2f * Mathf.Sin(f * Mathf.PI)) + (PeakHeight - lesser.height) * (1f - f) * (1f - f);
             crest += (Mathf.PerlinNoise(f * 6f + lesser.height, 3.7f) - 0.5f) * 40f * Mathf.Sin(f * Mathf.PI);      // a broken crest: notches and knobs
-            if (beside < 260f) h = SoftMax(h, (crest - beside * 1.15f) * (1f - ski), 30f);
+            // (a soft maximum adds a quarter of its width where the two are equal, so its width shrinks to nothing as
+            // the ridge's height goes to nothing: otherwise it lifted all the low ground round it by several metres)
+            float ridgeH = (crest - beside * 1.15f) * (1f - ski);
+            float ridgeSoft = 30f * Smooth(ridgeH / 40f);
+            h = ridgeSoft > 0.01f ? SoftMax(h, ridgeH, ridgeSoft) : Mathf.Max(h, ridgeH);
         }
         if (h <= 0.5f) return Mathf.Max(0f, h);
         // crags and spurs on the steep sides; the ski face only rolls a little
@@ -436,7 +455,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         float high = RidgeHeight(p);
         float mountain = Mathf.Clamp01(high / 30f);
         high += (Ridged(x * 0.022f + 5.1f, z * 0.022f + 8.3f) - 0.45f) * 14f * mountain + (Ridged(x * 0.06f + 1.7f, z * 0.06f + 3.9f) - 0.5f) * 4f * mountain;
-        high = Mathf.Max(0f, high) * Smooth(inside / 16f);
+        high = Mathf.Max(0f, high);
+        high *= Smooth(inside / Mathf.Max(24f, high * 0.9f));      // (down to the sea over a width that grows with its height: within 16 m it stood as a wall of flutes)
         y += Mathf.Lerp(high, Terrace(high, 8f, 0.32f), 0.25f);
         // the great mountain comes down to the sea over a width that grows with its height there (30 m for a low
         // flank, half its height for a high one), so its sea cliffs are steep, not a sheer drop of a hundred metres
@@ -616,6 +636,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
             toEdge = Mathf.Min(toEdge, shape);
             float coves = Mathf.Lerp(CoastBroad(p), CoastFull(p), Smooth((Guard(p) - 30f) / 55f))
                 + (Mathf.PerlinNoise(p.x * 0.05f + 6.6f, p.y * 0.05f + 2.4f) - 0.5f) * 14f * (1f - BeachAmount(p));      // rocky shores ragged, beaches smooth
+            // ...but where the great mountain comes down to the sea, only the broad line: the mountain fades out by its
+            // distance from the water, so every narrow inlet carved its flank into fins and spires
+            if (MountainReach(p) > -150f)
+            {
+                float mountainHere = MountainHeight(p);
+                if (mountainHere > 5f) coves = Mathf.Lerp(coves, CoastBroad(p), Smooth(mountainHere / 50f));
+            }
             // the coves can push the coast outwards, but never off the grid (the land would end there in a straight
             // cut): the coast stays about 45 m inside it, wavering, with room for the submerged rim
             float toGrid = Mathf.Min(Mathf.Min(p.x - X0, X1 - p.x), Mathf.Min(p.y - Z0, Z1 - p.y));
@@ -748,6 +775,38 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (d < flats[f].radius + flats[f].blend) height[k] = Mathf.Lerp(level[f], height[k], Smooth((d - flats[f].radius) / flats[f].blend));
             }
         }
+        // 3b. No walls: nowhere is the ground steeper than about 58 degrees (the sea counting as height 0). Two sweeps
+        //     each way of "no higher than a neighbour plus a step" erode any sheer drop, inland or at the shore,
+        //     into a steep slope, whatever made it
+        {
+            float step = 1.6f * Cell, stepDiag = step * 1.41421f;
+            int walled = 0;
+            void Limit(int k, int n, float s)
+            {
+                float hn = float.IsNaN(height[n]) ? 0f : height[n];
+                if (height[k] > hn + s) { height[k] = hn + s; walled++; }
+            }
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int j = 0; j <= nz; j++)
+                    for (int i = 0; i <= nx; i++)
+                    {
+                        int k = j * row + i;
+                        if (float.IsNaN(height[k])) continue;
+                        if (i > 0) Limit(k, k - 1, step);
+                        if (j > 0) { Limit(k, k - row, step); if (i > 0) Limit(k, k - row - 1, stepDiag); if (i < nx) Limit(k, k - row + 1, stepDiag); }
+                    }
+                for (int j = nz; j >= 0; j--)
+                    for (int i = nx; i >= 0; i--)
+                    {
+                        int k = j * row + i;
+                        if (float.IsNaN(height[k])) continue;
+                        if (i < nx) Limit(k, k + 1, step);
+                        if (j < nz) { Limit(k, k + row, step); if (i < nx) Limit(k, k + row + 1, stepDiag); if (i > 0) Limit(k, k + row - 1, stepDiag); }
+                    }
+            }
+            Debug.Log("[BWM] Winter Isle: " + walled + " lowerings to take sheer drops back to 58 degrees");
+        }
         float Slope(int k)      // steepest rise to a neighbour, as a gradient (1 = 45 degrees)
         {
             int i = k % row, j = k / row;
@@ -769,17 +828,64 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (craggy[k] <= 0f || height[k] < 1f) continue;
                 Vector2 p = At(k);
                 float facets = (Ridged(p.x * 0.11f + 4.4f, p.y * 0.11f + 9.1f) - 0.4f) * 2.6f + (Mathf.PerlinNoise(p.x * 0.31f + 2.2f, p.y * 0.31f + 6.6f) - 0.5f) * 1.4f;
-                // strata: the rock lies in beds, so a steep face is cliff bands with ledges between, gently tilted and
-                // a little uneven, where snow lies (noise alone ran straight down a cliff in streaks)
-                // (irregular: beds of varying thickness, tilted more in some places than others, and only in broken
-                // lengths, so they read as rock and not as contour lines)
-                float tilt = p.x * 0.06f + p.y * 0.035f + (Mathf.PerlinNoise(p.x * 0.012f + 7.7f, p.y * 0.012f + 2.2f) - 0.5f) * 14f;
-                float nearTop = Smooth(((p - Summit).magnitude - SummitRadius - 25f) / 40f);      // (none round the summit: they stood it on a drum)
-                float bed = (height[k] > 12f ? 5f : 3f) + 6f * Mathf.PerlinNoise(p.x * 0.009f + 31.3f, p.y * 0.009f + 5.1f);
-                float banded = Terrace(height[k] + tilt, bed, 0.5f) - tilt;
-                float broken = Smooth((Mathf.PerlinNoise(p.x * 0.018f + 12.9f, p.y * 0.018f + 44.4f) - 0.42f) / 0.16f);
-                height[k] = Mathf.Lerp(height[k], banded, craggy[k] * 0.7f * nearTop * broken) + facets * craggy[k] * 0.55f;
+                height[k] += facets * craggy[k] * 0.35f;
             }
+            // facets: steep ground is broken into planar faces some 24 m across, each the plane the slope has at its
+            // middle, so that neighbouring faces meet at creases and steps: buttresses and slabs, not smooth noise
+            // (one face in four is laid back into a ledge that holds snow)
+            var preFacet = (float[])height.Clone();
+            float SampleH(Vector2 q)
+            {
+                float fx = Mathf.Clamp((q.x - X0) / Cell, 0f, nx - 0.001f), fz = Mathf.Clamp((q.y - Z0) / Cell, 0f, nz - 0.001f);
+                int i0 = (int)fx, j0 = (int)fz, k0 = j0 * row + i0;
+                float tx = fx - i0, tz = fz - j0;
+                float a0 = preFacet[k0], a1 = preFacet[k0 + 1], a2 = preFacet[k0 + row], a3 = preFacet[k0 + row + 1];
+                if (float.IsNaN(a0) || float.IsNaN(a1) || float.IsNaN(a2) || float.IsNaN(a3)) return preFacet[Cell_(q)];
+                return Mathf.Lerp(Mathf.Lerp(a0, a1, tx), Mathf.Lerp(a2, a3, tx), tz);
+            }
+            const float FacetCell = 24f;
+            var planes = new Dictionary<long, (Vector2 at, float h, Vector2 grad)>();
+            (Vector2 at, float h, Vector2 grad) Plane(int ci, int cj)
+            {
+                long key = ((long)ci << 32) ^ (uint)cj;
+                if (planes.TryGetValue(key, out var pl)) return pl;
+                float jx = Mathf.PerlinNoise(ci * 0.71f + 3.3f, cj * 0.71f + 9.1f), jz = Mathf.PerlinNoise(ci * 0.71f + 17.7f, cj * 0.71f + 1.9f);
+                var facetAt = new Vector2((ci + 0.15f + 0.7f * jx) * FacetCell, (cj + 0.15f + 0.7f * jz) * FacetCell);
+                float hc = SampleH(facetAt);
+                var grad = new Vector2(SampleH(facetAt + Vector2.right * 9f) - SampleH(facetAt - Vector2.right * 9f), SampleH(facetAt + Vector2.up * 9f) - SampleH(facetAt - Vector2.up * 9f)) / 18f;
+                if (Mathf.PerlinNoise(ci * 1.37f + 5.5f, cj * 1.37f + 2.4f) > 0.62f) grad *= 0.35f;      // a ledge
+                pl = (facetAt, hc, grad);
+                planes[key] = pl;
+                return pl;
+            }
+            int faceted = 0;
+            for (int k = 0; k < count; k++)
+            {
+                if (craggy[k] <= 0f || height[k] < 3f) continue;
+                Vector2 p = At(k);
+                if ((p - Summit).magnitude < SummitRadius + 30f) continue;
+                float byShore = Smooth((inside[k] - 25f) / 45f);      // none at the sea's edge: there a plane fitted to the cliff top stood out as a row of teeth
+                if (byShore <= 0f) continue;
+                int ci = Mathf.FloorToInt(p.x / FacetCell), cj = Mathf.FloorToInt(p.y / FacetCell);
+                float nearestD = float.MaxValue, secondD = float.MaxValue; (Vector2 at, float h, Vector2 grad) nearest = default, second = default;
+                for (int oj = -1; oj <= 1; oj++)
+                    for (int oi = -1; oi <= 1; oi++)
+                    {
+                        var facet = Plane(ci + oi, cj + oj);
+                        float dd = (facet.at - p).sqrMagnitude;
+                        if (dd < nearestD) { secondD = nearestD; second = nearest; nearestD = dd; nearest = facet; }
+                        else if (dd < secondD) { secondD = dd; second = facet; }
+                    }
+                // where two faces meet, a short steep blend instead of a sheer step (sheer steps ran down a face in flutes)
+                float planeH = nearest.h + Vector2.Dot(nearest.grad, p - nearest.at);
+                float otherH = second.h + Vector2.Dot(second.grad, p - second.at);
+                float edge = Smooth((Mathf.Sqrt(secondD) - Mathf.Sqrt(nearestD)) / 7f);
+                planeH = Mathf.Lerp((planeH + otherH) * 0.5f, planeH, edge);
+                planeH = Mathf.Clamp(planeH, height[k] - 6f, height[k] + 6f);      // creases and ledges, never a wall tens of metres high
+                height[k] = Mathf.Lerp(height[k], planeH, craggy[k] * 0.9f * byShore);
+                faceted++;
+            }
+            Debug.Log("[BWM] Winter Isle crags: " + faceted + " points of steep ground faceted into " + planes.Count + " faces");
         }
 
         // 4. Where the causeway lands; then paths from the plaza to the landing and to every site, by the easiest
@@ -1438,11 +1544,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
                                     Vector3 root0 = foot + outward * Rs(0f, 0.12f), tip = root0 + Vector3.up * tall + outward * tall * Rs(0.05f, 0.3f);
                                     Color stalk = Color.Lerp(straw, dryStraw, Rs(0f, 1f)) * 0.8f;
                                     gb.TriColors(root0 - edge, root0 + edge, tip, stalk * 0.6f, stalk * 0.6f, stalk);
-                                    // a seed head: a small dark spindle at the top
-                                    Vector3 head = tip + (tip - root0).normalized * 0.06f, side = edge * 4f;
-                                    Color seed = new Color(0.28f, 0.2f, 0.12f);
-                                    gb.TriColors(tip - side, tip + side, head, seed, seed, seed * 1.2f);
-                                    gb.TriColors(tip - side, tip + side, tip - (tip - root0).normalized * 0.05f, seed, seed, seed);
+                                    // a seed head: a slim pale tassel drooping from the top (a dark diamond read as a cut-out)
+                                    Vector3 droopTo = tip + ((tip - root0).normalized * 0.04f + outward * 0.07f + Vector3.down * 0.05f), side = edge * 1.6f;
+                                    Color seed = Color.Lerp(stalk, new Color(0.85f, 0.78f, 0.62f), 0.5f);
+                                    gb.TriColors(tip - side, tip + side, droopTo, seed, seed, seed * 0.9f);
                                 }
                                 tufts++;
                                 continue;
@@ -1520,43 +1625,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Debug.Log("[BWM] Winter Isle scatter: " + lumps + " drifts, " + tufts + " tussocks, " + sticks + " sticks, " + stones + " stones and pebbles, in " + lumpVerts.Count + " districts");
         }
 
-        // 7c. Crags: on the steep faces of the great mountain and of the eastern crag, rock built from faceted blocks
-        //     (Kit.AddCragBlock), each with its steep face turned down the slope, set into it in steps, so cliffs are
-        //     rock with snow on its ledges and not snow painted with grey
-        {
-            var cragRandom = new System.Random(5150);
-            float Rc(float lo, float hi) => lo + (hi - lo) * (float)cragRandom.NextDouble();
-            var crags = new Dictionary<int, MeshBuilder>();
-            int blocks = 0;
-            for (float z = Z0 + 4f; z < Z1; z += 9f)
-                for (float x = X0 + 4f; x < X1; x += 9f)
-                {
-                    var p = new Vector2(x + Rc(-3f, 3f), z + Rc(-3f, 3f));
-                    int k = Cell_(p);
-                    if (!(height[k] > 25f)) continue;      // the mountains' cliffs: on the lowland's knolls they stood like bunkers
-                    float slope = Slope(k);
-                    if (slope < 1.0f) continue;      // cliffs only: on merely steep snow they stood about like dice
-                    if (MountainHeight(p) > 4f && Piste(p) > 0.05f) continue;
-                    if (!Free(p, 2f) || PathDistance(p) < 15f) continue;
-                    if (Rc(0f, 1f) > Smooth((slope - 1.0f) / 0.5f) * 0.9f) continue;
-                    float h0 = HeightAt(p);
-                    Vector2 grad = new Vector2(HeightAt(p + Vector2.right * 2f) - HeightAt(p - Vector2.right * 2f), HeightAt(p + Vector2.up * 2f) - HeightAt(p - Vector2.up * 2f));
-                    Vector2 down = grad.sqrMagnitude > 1e-6f ? -grad.normalized : Vector2.up;
-                    // large and overlapping, so neighbours run together into bands of stepped rock
-                    var size = new Vector3(Rc(9f, 17f), Rc(5f, 10f), Rc(6f, 10f));
-                    int region = Mathf.FloorToInt((p.x - X0) / 300f) * 100 + Mathf.FloorToInt((p.y - Z0) / 300f);
-                    if (!crags.TryGetValue(region, out MeshBuilder cb)) crags[region] = cb = new MeshBuilder();
-                    // set into the slope: its back buried, its front standing out as a step
-                    Vector3 foot = new Vector3(p.x - root.x, h0 - size.y * 0.8f - root.y, p.y - root.z);
-                    Kit.AddCragBlock(cb, foot, size, down, blocks, new Color(1f, 0f, 0f, 0.75f));      // (untrodden, not bare, no sand, a crest: the slope alone makes its faces rock)
-                    blocks++;
-                }
-            // drawn with the ground's own material, so a block's steep faces are the cliffs' rock and its top the snow
-            // round it: part of the mountain, not boxes set on it
-            foreach (var kv in crags) b.MeshPiece("Crags " + kv.Key, kv.Value.ToMesh(), groundMaterial);
-            Debug.Log("[BWM] Winter Isle crags: " + blocks + " blocks of rock on the steep faces");
-        }
-
         // 8. Ice: the lake, and the creek above and below it (sheets just over the beds players walk on)
         var ice = new MeshBuilder();
         var iceColor = new Color(0.62f, 0.80f, 0.93f);
@@ -1581,7 +1649,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (inside[k] < -10f && Rf(0f, 1f) > 0.3f) continue;      // most of them hug the shore
                 Vector2 p = At(k) + new Vector2(Rf(-1.5f, 1.5f), Rf(-1.5f, 1.5f));
                 float radius = Rf(0.9f, 3.6f) * Mathf.Lerp(1.2f, 0.6f, Mathf.Clamp01(-inside[k] / 30f));
-                var floeSnow = new Color(0.93f, 0.95f, 0.98f);
+                var floeSnow = new Color(0.97f, 0.98f, 1f);
                 Vector3 at = new Vector3(p.x - root.x, -root.y, p.y - root.z);
                 Vector2 rock = new Vector2(Rf(-5f, 5f), Rf(-5f, 5f));
                 Kit.AddFloe(ice, at, radius, Rf(0.12f, 0.3f), rock, tries, iceColor, floeSnow);
@@ -1636,7 +1704,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 part.AddComponent<MeshFilter>().sharedMesh = l == 0 ? model.near : model.far;
                 var rend = part.AddComponent<MeshRenderer>();
                 rend.sharedMaterial = model.material;
-                lods[l] = new LOD(l == 0 ? 0.05f : 0.004f, new Renderer[] { rend });
+                lods[l] = new LOD(l == 0 ? 0.012f : 0.002f, new Renderer[] { rend });      // (the far version showed at mid distance as grey-green and bare)
             }
             go.AddComponent<LODGroup>().SetLODs(lods);
             CapsuleCollider trunk = go.AddComponent<CapsuleCollider>();
@@ -2013,6 +2081,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             for (int run = 0; run < 3; run++)
                 for (float d = 90f; d < SkiRadius - 90f; d += d < 560f ? 22.5f : 11.25f)      // (from the top: in the bowl too, the runs need marking)      // from where the forest begins: in the open bowl they were a scatter of sticks
                 {
+                    if (d < 560f && run != 1) continue;      // (in the open bowl three runs' poles stood scattered over it)
                     Vector2 runMid = RunCentre(run, d, out float runHalf), runNext = RunCentre(run, d + 6f, out _);
                     Vector2 runDir = (runNext - runMid).normalized, runSide = new Vector2(runDir.y, -runDir.x);
                     for (int sgn = -1; sgn <= 1; sgn += 2)

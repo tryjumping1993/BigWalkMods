@@ -392,7 +392,7 @@ namespace Bwm
                 r = eased;
             }
             int bite = random.Next(n);
-            r[bite] *= 0.55f; r[(bite + 1) % n] *= 0.7f;      // a piece broken off
+            r[bite] *= 0.85f;      // a corner worn off (a deep bite read as a notch cut out)
             float spin = R(0f, Mathf.PI * 2f);
             Quaternion turn = Quaternion.Euler(tilt.x, 0f, tilt.y);
             Vector3 P(float a, float rr, float y) => foot + turn * new Vector3(Mathf.Cos(a) * rr * radius, y, Mathf.Sin(a) * rr * radius);

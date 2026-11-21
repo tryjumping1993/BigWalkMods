@@ -130,7 +130,8 @@ public static class WinterIsleDressing
         if (onTerrain && diameter > 1.2f && ground > 45f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && land.Slope(p) > 0.55f) return ground;      // none stuck on the mountain's steep faces: they lie at its foot
         if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;
         if (onTerrain && diameter > 1.2f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.3f && ground > WinterIslePuzzle.TreeLine - 60f) return ground;
-        if (onTerrain && diameter > 2f && (p - WinterIslePuzzle.Peak).magnitude < 1100f && ground > 45f) return ground;      // the great mountain is its own rock: the game's beige boulders sat on its grey faces like stickers      // nothing along the bowl's lip: a row of brown boulders hid the run below      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
+        if (onTerrain && diameter > 2f && (p - WinterIslePuzzle.Peak).magnitude < 1100f && ground > 45f) return ground;      // the great mountain is its own rock: the game's beige boulders sat on its grey faces like stickers
+        if (onTerrain && diameter > 4.5f && (p - WinterIslePuzzle.Peak).magnitude < 980f && WinterIslePuzzle.SkiFace(p) < 0.5f) return ground;      // ...down to the sea: the game's big cliff rocks on its steep shores stood as walls of flutes with arches under them      // nothing along the bowl's lip: a row of brown boulders hid the run below      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
             // never float: the rock's bottom goes below the lowest ground under it, deeper on a slope
@@ -347,7 +348,7 @@ public static class WinterIsleDressing
                 float h = l.Height(p);
                 if (float.IsNaN(h) || h > 2.5f || h < -2.5f || l.Beach(p) || !l.Free(p, 2f) || InsideRock(p, 0.5f)) continue;
                 float rough = Mathf.PerlinNoise(p.x * 0.03f + 5.5f, p.y * 0.03f + 91.2f);
-                if (R(0f, 1f) > 0.2f + rough * 0.5f) continue;
+                if (R(0f, 1f) > 0.32f + rough * 0.55f) continue;      // (dense: a snow slope ending in bare water read as a hard edge)
                 if (rough > 0.5f && R(0f, 1f) < 0.22f)
                     Rock("rock-cliff01", p, Mathf.Min(h, 0.3f), R(8f, 15f), R(0.5f, 0.62f), 0.5f, 5f);      // a shelf of rock running into the sea
                 else
@@ -412,8 +413,8 @@ public static class WinterIsleDressing
                 float h = l.Height(p), toPath = l.ToPath(p);
                 if (float.IsNaN(h) || h < 1.5f || toPath < 3.6f || toPath > 12f || l.Slope(p) > 0.5f || !l.Free(p, 0f) || InsideRock(p, 1.5f)) continue;
                 if (R(0f, 1f) > 0.45f + 0.5f * Mathf.Clamp01((Mathf.PerlinNoise(p.x * 0.03f + 3.1f, p.y * 0.03f + 61.9f) - 0.45f) * 4f)) continue;
-                float d = Mathf.Min(R(2.2f, 7.5f), (toPath - 1.6f) * 1.7f);
-                Rock(Pick(BigRound), p, LowGround(p, d * 0.4f), d, R(0.38f, 0.58f), 0.45f, 10f);
+                float d = Mathf.Min(R(0f, 1f) < 0.3f ? R(6f, 11f) : R(2.4f, 7.5f), (toPath - 1.6f) * 1.9f);      // (some taller than a walker: the path squeezes past them)
+                Rock(Pick(BigRound), p, LowGround(p, d * 0.4f), d, R(0.26f, 0.45f), 0.45f, 10f);
                 // a few more round it, smaller and turned differently, so it is a cluster and not one rock
                 int companions = random.Next(0, 4);
                 for (int i = 0; i < companions; i++)
@@ -454,7 +455,11 @@ public static class WinterIsleDressing
                 // glades: open ground inside a grove, a few tens of metres across
                 if (forest < 0.5f && inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
                 // the ski forest has glades too, larger and fewer, and clumps rather than an even stand
-                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(p.x * 0.013f + 17.7f, p.y * 0.013f + 61.3f) > 0.62f) continue;
+                // (glades in long strips down the fall line, not round holes: the noise is stretched along the
+                // direction away from the summit)
+                Vector2 fromTop = p - WinterIslePuzzle.Peak;
+                float downhill = fromTop.magnitude, round_ = Mathf.Atan2(fromTop.y, fromTop.x) * downhill;
+                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(downhill * 0.004f + 17.7f, round_ * 0.022f + 61.3f) > 0.68f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
@@ -466,8 +471,22 @@ public static class WinterIsleDressing
                 if (R(0f, 1f) > chance || !l.Free(p, 1.5f) || InsideRock(p, 1.2f)) continue;
                 float tallness = Mathf.Lerp(4.5f, 13.5f, Mathf.Clamp01(inGrove * R(0.55f, 1.15f))) * (h > 40f ? 0.8f : 1f);
                 // over the last stretch below the tree line: stunted, and only in clumps with open snow between
-                float lineBand = Smooth01((h - (WinterIslePuzzle.TreeLine - 70f)) / 70f);
-                if (lineBand > 0f && (Mathf.PerlinNoise(p.x * 0.03f + 6.6f, p.y * 0.03f + 1.9f) < 0.3f + 0.45f * lineBand || R(0f, 1f) < lineBand * 0.5f)) continue;
+                // the tree line is ragged: tongues of forest run up the spurs between the runs (far from any run), and
+                // the stretch just below the line elsewhere has only clumps
+                float lineBand = Smooth01((h - (WinterIslePuzzle.TreeLine - 90f)) / 90f);
+                if (lineBand > 0f)
+                {
+                    float clearOfRuns = float.MaxValue;
+                    float fromPeak = (p - WinterIslePuzzle.Peak).magnitude;
+                    for (int run = 0; run < 3; run++)
+                    {
+                        Vector2 rc = WinterIslePuzzle.RunCentre(run, fromPeak, out float rh);
+                        clearOfRuns = Mathf.Min(clearOfRuns, (p - rc).magnitude - rh);
+                    }
+                    float tongue = Smooth01((clearOfRuns - 25f) / 40f);      // on a spur between runs
+                    float clump = Mathf.PerlinNoise(p.x * 0.035f + 6.6f, p.y * 0.035f + 1.9f);
+                    if (clump < 0.35f + 0.5f * lineBand * (1f - tongue * 0.85f) || R(0f, 1f) < lineBand * 0.35f * (1f - tongue)) continue;
+                }
                 tallness *= Mathf.Lerp(1f, 0.5f, lineBand);
                 if (wall) tallness = Mathf.Max(tallness, R(9f, 13f));
                 bool young = !wall && (edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f);      // saplings feather the edges and grow among the old trees
@@ -576,9 +595,9 @@ public static class WinterIsleDressing
         string[] shoreTrees = { "TeatreeCoast_Dead_Tall", "TeatreeCoast_Dead", "BanksiaCoast_Dead", "TeatreeCoast_Dead_Tall" };      // (in leaf they read as summer)
         // winter woodland: mostly bare, dead-looking broadleaf (evergreen gum and banksia read as summer from afar,
         // where only their impostors draw), a few hardy evergreens, and thickets
-        string[] woodland = { "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short", "AustralianBlackthorn_Bush", "BrownStringybark_Dead_Short" };
+        string[] woodland = { "BanksiaCoast_Dead", "TeatreeCoast_Dead", "BrownStringybark_Dead_Skinny", "Messmate_Dead_Short", "BrownStringybark_Dead_Short" };
         string[] tall = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "LillyPilly_ForestTall_Dead", "Messmate_Dead_ClosedForest", "TeatreeCoast_Dead_Tall", "BrownStringybark_Dead_Short" };
-        string[] under = { "Paperbark_Bush", "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "BrownStringybark_Bush", "AustralianMulberry", "TreeBroomHeath", "HazelPomaderris_Thicket", "Paperbark_Bush", "BushyNeedlewood", "PricklyMoses" };
+        string[] under = { "BushyNeedlewood", "TreeEverlasting", "PricklyMoses", "TreeBroomHeath", "BushyNeedlewood", "PricklyMoses" };      // (the broad-leaved ones read as summer)
         string[] tops = { "GrassTree", "GrassTree_Short", "GrassTree_NoFlower", "ButtonGrass", "PricklyMoses", "TreeEverlasting" };
         string[] dead = { "Messmate_Dead", "Messmate_Dead_Short", "BrownStringybark_Dead", "BrownStringybark_Dead_Skinny", "BanksiaCoast_Dead", "TeatreeCoast_Dead", "LillyPilly_ForestTall_Dead" };
         string[] logs = { "Litter_Log_Dry", "Litter_Log_Dry_Small", "Litter_Log_Wet", "Litter_Log_Wet_Small", "Litter_Stump_Wet" };

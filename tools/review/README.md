@@ -40,6 +40,7 @@ Rounds so far (original / winter):
 | 16 | 9/6 | 9/5 | 9/5 | 9/6 | 9/6 | 8/7 | paths (after the new firs, the game's ground layers, cirques and strata; the strata read as contour terraces) |
 | 17 | 8/7 | 9/5 | 9/6 | 9/7 | 8/5 | 7/7 | landform, vegetation (first time), paths |
 | 18 | 9/7 | 9/5 | 9/5 | 9/6 | 9/5 | 8/7 | landform, paths |
+| 19 | 8/6 | 9/5 | 9/5 | 9/6 | 9/4 | 7/6 | landform (just), paths (after the crag blocks: they read as stacked boxes) |
 
 What each round's gaps led to is in the git log. Things the reviewer has asked for more than once: clutter lying
 on the snow, dense woods a walker is inside of, a shore that is not raw terrain, peaks that are not smooth cones.
@@ -71,6 +72,7 @@ ski slope". The terrain reviewer's brief is `brief.md`.
 | 6 | 4 | 3 | 4 | 5 | 3 | 5 | 6 | NO |
 | 7 | 5 | 4 | 4 | 4 | 3 | 5 | 6 | NO |
 | 8 | 5 | 3 | 4 | 5 | 3 | 5 | 5 | NO |
+| 9 | 5 | 4 | 5 | 5 | 2 | 6 | 5 | NO |
 
 Round 4 lost ground on pistes and snow: the fir walls planted along the runs' edges put three cameras inside
 branches, the berm along each edge showed as a dark brown outline from the air, and bare patches and shrubs still
