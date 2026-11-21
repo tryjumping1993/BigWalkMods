@@ -125,8 +125,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f)      // they draw together at the foot
                 + (run == 1 ? 0.1f : 0.065f) * Mathf.Sin(along / (run == 1 ? 150f : 190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
             float across = Mathf.Abs(off - centre) * along;      // metres from the run's middle
-            float half = (run == 1 ? 36f : 21f) + 5f * Mathf.Sin(along / 130f + run * 1.7f);      // the middle run is the wide main one
-            best = Mathf.Max(best, 1f - Smooth((across - half) / 9f));
+            float half = (run == 1 ? 19f : 13f) + 3f * Mathf.Sin(along / 130f + run * 1.7f);      // the middle run is the wide main one
+            best = Mathf.Max(best, 1f - Smooth((across - half) / 6f));
         }
         return ski * Mathf.Max(open * (1f - Rib(p)), best);
     }
@@ -141,7 +141,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     public static Vector2 RunCentre(int run, float along, out float half)
     {
         float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f) + (run == 1 ? 0.1f : 0.065f) * Mathf.Sin(along / (run == 1 ? 150f : 190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
-        half = (run == 1 ? 36f : 21f) + 5f * Mathf.Sin(along / 130f + run * 1.7f);
+        half = (run == 1 ? 19f : 13f) + 3f * Mathf.Sin(along / 130f + run * 1.7f);
         float angle = SkiBearing - centre;      // Piste measures 'off' as bearing minus angle
         return Peak + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * along;
     }
@@ -804,8 +804,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             foreach (Vector2 e in beachEnds) if ((e - p).magnitude < 150f) far = false;
             if (far) { pointEnds.Add(p); trailEnds.Add(k); }
         }
-        foreach (Vector2 station in WinterIsleMine.Stations)      // every mine station is somewhere to walk to
+        foreach (Vector2 station in WinterIsleMine.Stations)      // a mine station is somewhere to walk to (not those on the mountain's far sides: a trail round its foot drew a dark ring on the rock)
         {
+            if (station.x < -1500f) continue;
             int apron = Cell_(station + (Plaza - station).normalized * 6f);
             if (reachable[apron]) trailEnds.Add(apron);
         }
@@ -1329,13 +1330,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
                         {
                             Vector2 at = p + new Vector2(Rs(-0.9f, 0.9f), Rs(-0.9f, 0.9f));
                             Vector3 foot = On(at, -0.04f);
-                            int blades = random.Next(10, 19);
+                            int blades = random.Next(20, 36);      // a full clump of thin blades, not a few flat ones
                             float tallest = Rs(0.14f, 0.75f);
                             for (int bl = 0; bl < blades; bl++)
                             {
                                 float a = Rs(0f, Mathf.PI * 2f), lean = Rs(0.15f, 1.3f), tall = tallest * Rs(0.35f, 1f);
                                 var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                                var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.008f, 0.018f);
+                                var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.006f, 0.014f);
                                 Vector3 root0 = foot + outward * Rs(0f, 0.1f), tip = root0 + Vector3.up * tall + outward * (tall * lean);
                                 gb.Tri(root0 - edge, root0 + edge, tip, Color.Lerp(straw, dryStraw, Rs(0f, 1f)));      // drawn from both sides (Cull off)
                             }
@@ -1848,7 +1849,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Vector3 Ground3(Vector2 q) => new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z);
             int markers = 0, gates = 0;
             for (int run = 0; run < 3; run++)
-                for (float d = 420f; d < SkiRadius - 90f; d += 11.25f)
+                for (float d = 562.5f; d < SkiRadius - 90f; d += 11.25f)      // from where the forest begins: in the open bowl they were a scatter of sticks
                 {
                     Vector2 runMid = RunCentre(run, d, out float runHalf), runNext = RunCentre(run, d + 6f, out _);
                     Vector2 runDir = (runNext - runMid).normalized, runSide = new Vector2(runDir.y, -runDir.x);

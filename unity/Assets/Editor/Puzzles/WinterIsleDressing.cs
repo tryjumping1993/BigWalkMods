@@ -127,6 +127,7 @@ public static class WinterIsleDressing
         if (!catalog.TryGetValue(kind, out Kind k)) throw new Exception("No '" + kind + "' in world\\catalog.tsv");
         if (onTerrain && diameter > 2.5f && land.Forest(p) > 0.4f) return ground;
         if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.Piste(p) > 0.15f) return ground;
+        if (onTerrain && diameter > 1.2f && ground > 45f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && land.Slope(p) > 0.55f) return ground;      // none stuck on the mountain's steep faces: they lie at its foot
         if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
@@ -428,8 +429,11 @@ public static class WinterIsleDressing
         for (float z = l.Z0; z < l.Z1; z += 4.6f)
             for (float x = l.X0; x < l.X1; x += 4.6f)
             {
+              for (int twice = 0; twice < 2; twice++)      // the ski forest is planted twice over: from the air it must be a dark mass the runs are cut through
+              {
                 var p = new Vector2(x + R(-2.1f, 2.1f), z + R(-2.1f, 2.1f));
                 float h = l.Height(p);
+                if (twice == 1 && l.Forest(p) < 0.5f) continue;
                 if (float.IsNaN(h) || h < 2.5f || h > 340f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;      // (the tree line is high on the great mountain)
                 float forest = l.Forest(p);
                 float inGrove = Mathf.Max(Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 200f) / 60f)), forest);
@@ -467,6 +471,7 @@ public static class WinterIsleDressing
                 Firs.Add((p, tallness, random.Next(1, 1000000)));
                 if (spruce) { Tree("spruce", p, h, tallness * 1.3f, 0.9f, tallness * 0.14f); spruces++; }
                 else Tree("fir", p, h, tallness, 1.1f, tallness * 0.22f);
+              }
             }
 
         // ---- birches: bare, pale stands on the low ground where the firs are not, and a few alone ----
@@ -476,6 +481,7 @@ public static class WinterIsleDressing
                 var p = new Vector2(x + R(-2.4f, 2.4f), z + R(-2.4f, 2.4f));
                 float h = l.Height(p);
                 if (float.IsNaN(h) || h < 2f || h > 36f || l.Slope(p) > 0.45f || l.ToShore(p) < 14f || l.Beach(p)) continue;
+                if ((p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.3f) continue;      // the ski face is firs only
                 float stand = Mathf.PerlinNoise(p.x * 0.012f + 57.3f, p.y * 0.012f + 140.8f) + (Mathf.PerlinNoise(p.x * 0.05f + 3.3f, p.y * 0.05f + 8.1f) - 0.5f) * 0.2f;
                 float inStand = Smooth01((stand - 0.5f) / 0.1f) * (1f - Smooth01((Grove(p) - 0.41f) / 0.1f));
                 if (R(0f, 1f) > inStand * 0.7f + 0.004f || !l.Free(p, 1.5f) || InsideRock(p, 0.9f)) continue;

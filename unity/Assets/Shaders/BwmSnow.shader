@@ -299,7 +299,10 @@ Shader "BWM/Snow"
                 float3 bareRock = lerp(rockColor, dot(rockColor, float3(0.34, 0.33, 0.33)) * float3(0.93, 0.98, 1.07), 0.8);      // alpine rock is cold grey, not sandstone
                 // snow caught on the rock's flatter parts, in patches with an edge (a soft dusting reads as a smear)
                 float caught = Crisp(strata * 0.6 + Noise3(positionWS * 1.3 + 3.0) * 0.25 + Noise3(positionWS * 4.1) * 0.15, grainN.x * 0.08, 0.54);
-                rockColor = lerp(rockColor, _Color.rgb * 0.92, saturate((ground.y - 0.3) * 2.5) * caught * 0.85);
+                // ...and lying whole on whatever is not steep: snow under about 40 degrees, bare rock over about 52, a broken
+                // edge between (an even speckle over every face read as noise, not as snow on a mountain)
+                float lying = smoothstep(0.6, 0.77, ground.y + (Noise3(positionWS * 0.45 + 9.0) - 0.5) * 0.16 + (Noise3(positionWS * 2.3) - 0.5) * 0.07);
+                rockColor = lerp(rockColor, _Color.rgb * 0.92, max(lying * 0.95, saturate((ground.y - 0.45) * 2.5) * caught * 0.35));
 
                 // bare ground and sand where the snow is thin
                 float2 groundUV = positionWS.xz * _GroundTiling;
@@ -346,7 +349,7 @@ Shader "BWM/Snow"
                 float snowy = (1.0 - rock) * (1.0 - earthy * 0.8);
                 // Ice: here and there in the hollows of level ground the wind has swept the snow off a sheet of blue ice
                 float icy = Crisp(ValueNoise(positionWS.xz * 0.045 + 61.0) * 0.55 + ValueNoise(positionWS.xz * 0.19 + 7.0) * 0.3 + (0.5 - i.form) * 0.9, grainN.x * 0.03, 0.74)
-                    * snowy * (1.0 - path) * smoothstep(0.965, 0.99, ground.y);
+                    * snowy * (1.0 - path) * smoothstep(0.965, 0.99, ground.y) * (1.0 - smoothstep(50.0, 90.0, positionWS.y));      // (none up the mountain: on the pistes it read as stains)
                 // calmer and rougher stretches, so no two places look the same; packed paths are nearly flat
                 float calm = lerp(0.55, 1.15, ValueNoise(positionWS.xz * 0.021 + 13.0));
                 float pressed = smoothstep(0.008, 0.03, -trail), bank = smoothstep(0.004, 0.02, trail) * snowy;

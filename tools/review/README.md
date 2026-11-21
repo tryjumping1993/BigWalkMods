@@ -36,6 +36,7 @@ Rounds so far (original / winter):
 | 12 | 9/7 | 9/5 | 9/6 | 9/6 | 9/6 | 8/7 | landform, rocks, coast (both narrowly), paths |
 | 13 | 9/7 | 9/5 | 9/6 | 9/6 | 8/6 | 7/7 | landform, rocks, coast (both narrowly), paths |
 | 14 | 9/7 | 9/6 | 9/6 | 9/6 | 8/6.5 | 8/7.5 | landform, coast (marginal), paths |
+| 15 | 9/7 | 9/6 | 9/7 | 9/5 | 8/7 | 7/8 | landform, rocks, coast, paths (ground a near miss) |
 
 What each round's gaps led to is in the git log. Things the reviewer has asked for more than once: clutter lying
 on the snow, dense woods a walker is inside of, a shore that is not raw terrain, peaks that are not smooth cones.
@@ -63,6 +64,7 @@ ski slope". The terrain reviewer's brief is `brief.md`.
 | 2 | 5 | 4 | 5 | 6 | 4 | 3 | 3 | NO |
 | 3 | 6 | 5 | 5 | 5 | 4 | 5 | 7 | NO |
 | 4 | 6 | 5 | 4 | 5 | 5 | 5 | 5 | NO |
+| 5 | 5 | 5 | 5 | 5 | 3 | 5 | 5 | NO |
 
 Round 4 lost ground on pistes and snow: the fir walls planted along the runs' edges put three cameras inside
 branches, the berm along each edge showed as a dark brown outline from the air, and bare patches and shrubs still
