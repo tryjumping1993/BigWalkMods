@@ -353,3 +353,8 @@ and finished assets for the puzzles.
   - *Decorations:* a candy-striped gate with a wreath and a star at the island's end of the causeway, candy-striped
     posts along it, real wreaths on the hamlet's doors.
   - Still not done: other players' skis and boards are not shown (nothing tells one PC what gear another wears).
+- **Gear and jetpacks (user, 2026-11-21):** the game's tools at five gear stations round the island (Island Gear),
+  so a group can kit itself out; three jetpacks among the presents under The Tree, worn on the back, fired by a
+  second press of jump in the air, 40 s of fuel. Seen in the game: the stations and their tools, the jetpack
+  strapping on at a present and sitting on the player's back, and flight with the test switch (about 20 m up in
+  three seconds). Not tried: firing it from a real controller's jump button.

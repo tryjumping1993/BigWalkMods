@@ -118,6 +118,14 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   saves meshes by piece name, and a second "Piste Sheet" asset replaces the first). The ski lift (lodge to the bench
   at the tree line) is a second `GondolaDriver`, set up by `ConfigureLift`, and opens with the gondola; its state is
   `GondolaDriver.LiftState`. Other players' gear is not shown.
+- **Jetpacks** (`winterwalk\JetpackDriver.cs`): walking up to one of the opened presents under The Tree ("Jetpack
+  Present...") straps a jetpack on and fills its 40 s tank; jump, let go, press jump again in the air and it fires
+  while held. Jump is read from Rewired (the game's input) by the action named with "jump", else the space bar.
+  `game 'set?path=WinterWalk.JetpackDriver.TestFire&value=true'` fires it without a controller; `Up`, `Back` and
+  `Scale` move the worn model live. Other players' jetpacks are not shown.
+- **Island Gear** (`IslandGearPuzzle.cs`, a scenery pack): five stations of the game's own tools (binoculars,
+  walkie-talkies, megaphone, torches, GPS, map, compass, laser, night vision, a backpack and belt on hooks), at
+  the landing, the plaza, the summit, the lodge and the mining yard. Items are not saved: a reload resets them.
 - **Towers:** the SDK supports one tower button list, and shows one plinth per puzzle loaded, first in the list
   first. The Tree's list is its own five plinths (the gondola), then the mine tower's five (the mine), then the
   summit's twenty; the mine tower and the summit have their own hold buttons wired to `HoldToOpen`. So the mine

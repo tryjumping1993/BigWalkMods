@@ -99,6 +99,47 @@ public sealed class TheTreePuzzle : PuzzleDef
             b.MeshPiece("Presents", presents.ToMesh(), bare, false);
         }
 
+        // ---- three jetpacks among the presents: each a jetpack standing in an opened box, its lid leaning beside it.
+        //      Walking up to one straps a jetpack on (Winter Walk's JetpackDriver finds them by name: "Jetpack Present",
+        //      "Jetpack Present 2", ...) and fills its tank. The model Winter Walk hangs on a player's back is kept
+        //      hidden here as "Jetpack Model" ----
+        {
+            var opened = new MeshBuilder();
+            for (int i = 0; i < 3; i++)
+            {
+                float a = Mathf.PI * 0.5f + 2f * Mathf.PI * i / 3f + 0.35f, r = 7.4f;
+                var at = new Vector3(Mathf.Cos(a) * r, 0.6f, Mathf.Sin(a) * r);
+                float facing = Mathf.Atan2(at.x, at.z) * Mathf.Rad2Deg;      // looking out from the tree
+                Color paper = i == 0 ? new Color(0.8f, 0.1f, 0.1f) : i == 1 ? new Color(0.12f, 0.42f, 0.2f) : new Color(0.15f, 0.3f, 0.75f);
+                Quaternion turn = Quaternion.Euler(0f, facing, 0f);
+                Kit.AddBox(opened, at, new Vector3(1.0f, 0.35f, 0.8f), paper, facing);                                      // the box, opened
+                Kit.AddBox(opened, at + turn * new Vector3(0f, 0f, 0f), new Vector3(1.02f, 0.36f, 0.1f), Gold, facing);    // its ribbon
+                Kit.AddBox(opened, at + turn * new Vector3(0.85f, 0f, 0.1f), new Vector3(1.0f, 0.06f, 0.8f), paper, facing + 18f);      // the lid, on the snow beside it
+                AddJetpack(opened, at + Vector3.up * 0.3f, facing);
+                Piece marker = b.Empty(i == 0 ? "Jetpack Present" : "Jetpack Present " + (i + 1), at.x, at.z, 1f, false);
+            }
+            b.MeshPiece("Jetpack Presents", opened.ToMesh(), bare, false);
+            var model = new MeshBuilder();
+            AddJetpack(model, Vector3.zero, 0f);
+            var models = new GameObject("Jetpack Models");
+            models.transform.SetParent(b.Root.transform, false);
+            var jet = new GameObject("Jetpack Model");
+            jet.transform.SetParent(models.transform, false);
+            jet.AddComponent<MeshFilter>().sharedMesh = b.SaveMesh("Jetpack Model", model.ToMesh());
+            jet.AddComponent<MeshRenderer>().sharedMaterial = bare;
+            var flame = new MeshBuilder();      // the flames under its nozzles, shown while it fires
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(flame, new Vector3(sgn * 0.11f, -0.42f, -0.02f), new Vector3(0.09f, 0.28f, 0.09f), new Color(1f, 0.75f, 0.2f));
+                Kit.AddBox(flame, new Vector3(sgn * 0.11f, -0.6f, -0.02f), new Vector3(0.05f, 0.2f, 0.05f), new Color(1f, 0.45f, 0.1f));
+            }
+            var flameGo = new GameObject("Flame");
+            flameGo.transform.SetParent(jet.transform, false);
+            flameGo.AddComponent<MeshFilter>().sharedMesh = b.SaveMesh("Jetpack Flame", flame.ToMesh());
+            flameGo.AddComponent<MeshRenderer>().sharedMaterial = b.ShaderMaterial("BWM/FairyLight", "Jet Flame", m => { m.SetFloat("_Twinkle", 0.6f); m.SetFloat("_Glow", 3.5f); m.SetFloat("_Speed", 18f); });
+            models.SetActive(false);
+        }
+
         // ---- lights winding up the tree: five turns, hugging the boughs ----
         var spiral = new List<Vector3>();
         const int points = 60;
@@ -147,6 +188,27 @@ public sealed class TheTreePuzzle : PuzzleDef
     // lantern at its top, five plinths in an arc before it and a hold button that opens them while it is held.
     // When the five hold gourds, Winter Walk opens the mine (MineDriver). Local coordinates are from the plaza.
     const int MinePlinths = 5;
+    // A jetpack, its straps' side at 'foot' and facing along 'yaw': two silver tanks on a red frame with gold trim,
+    // nozzles underneath, a little dial on the left tank. About 0.5 m tall, its middle at foot + 0.25 m (the model on
+    // a player's back is this with foot at the origin)
+    static void AddJetpack(MeshBuilder mb, Vector3 foot, float yaw)
+    {
+        Quaternion t = Quaternion.Euler(0f, yaw, 0f);
+        Vector3 P(float x, float y, float z) => foot + t * new Vector3(x, y, z);
+        var silver = new Color(0.78f, 0.8f, 0.84f); var red = new Color(0.75f, 0.1f, 0.08f); var dark = new Color(0.18f, 0.18f, 0.2f);
+        Kit.AddBox(mb, P(0f, -0.25f, 0.02f), new Vector3(0.36f, 0.5f, 0.06f), red, yaw);            // the frame against the back
+        foreach (int sgn in new[] { -1, 1 })
+        {
+            for (int k = 0; k < 4; k++)      // a tank: a stack of discs, rounded at the top
+                Kit.AddDisc(mb, P(sgn * 0.11f, -0.22f + k * 0.1f, -0.08f), 0.075f - (k == 3 ? 0.02f : 0f), 0.1f, silver, 12);
+            Kit.AddBox(mb, P(sgn * 0.11f, -0.3f, -0.08f), new Vector3(0.1f, 0.08f, 0.1f), dark, yaw);      // the nozzle
+            Kit.AddBox(mb, P(sgn * 0.19f, -0.05f, 0.04f), new Vector3(0.04f, 0.42f, 0.03f), dark, yaw);     // a strap
+        }
+        Kit.AddBox(mb, P(0f, 0.17f, -0.03f), new Vector3(0.3f, 0.05f, 0.12f), Gold, yaw);         // gold trim across the top
+        Kit.AddBox(mb, P(0f, -0.24f, -0.04f), new Vector3(0.3f, 0.05f, 0.1f), Gold, yaw);        // and the bottom
+        Kit.AddBall(mb, P(-0.11f, 0.08f, -0.16f), 0.03f, new Color(0.95f, 0.95f, 0.9f));          // the fuel dial
+    }
+
     static List<UnityEngine.Object> MineTower(PuzzleBuilder b, Material snowy)
     {
         var plinths = new List<UnityEngine.Object>();

@@ -37,6 +37,7 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<MineDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<JetpackDriver>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -47,6 +48,7 @@ namespace WinterWalk
             go.AddComponent<GondolaDriver>();
             go.AddComponent<GondolaDriver>().ConfigureLift("Ski Lift Line", "Ski Lift Chairs", "Ski Lift Chair ", 1.6f, 9f);      // the chairlift from the lodge
             go.AddComponent<MineDriver>();
+            go.AddComponent<JetpackDriver>();
             L.LogInfo("Winter Walk loaded");
         }
     }
