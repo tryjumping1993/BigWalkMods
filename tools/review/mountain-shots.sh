@@ -11,6 +11,7 @@ PX=-2250; PZ=-1900; B=0.32
 sm(){ echo "(lambda t: t*t*(3-2*t))(min(1,max(0,$1)))"; }
 swing(){ python -c "import math; print(round(0.065*math.sin($1/235.0+2.1)*$(sm "($1-300)/200.0"), 4))"; }
 mkdir -p shots/mountain
+c "set?path=WinterWalk.GondolaDriver.ForceOpen&value=true" >/dev/null      # the cabins out on the line
 c "time?hour=13" >/dev/null
 # name, bearing offset from the ski face's (radians), distance from the peak, camera height (a: above the sea,
 # g: above the ground), then what it looks at: bearing offset, distance, height (a or g)

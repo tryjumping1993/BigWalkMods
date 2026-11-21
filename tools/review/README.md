@@ -34,6 +34,7 @@ Rounds so far (original / winter):
 | 10 | 9/7 | 9/5 | 9/7 | 9/5 | 8/6 | 7/6 | landform, rocks, paths |
 | 11 | 9/7 | 9/6 | 9/6 | 10/5 | 8/6 | 8/7 | landform, rocks (just), paths |
 | 12 | 9/7 | 9/5 | 9/6 | 9/6 | 9/6 | 8/7 | landform, rocks, coast (both narrowly), paths |
+| 13 | 9/7 | 9/5 | 9/6 | 9/6 | 8/6 | 7/7 | landform, rocks, coast (both narrowly), paths |
 
 What each round's gaps led to is in the git log. Things the reviewer has asked for more than once: clutter lying
 on the snow, dense woods a walker is inside of, a shore that is not raw terrain, peaks that are not smooth cones.
@@ -59,6 +60,7 @@ ski slope". The terrain reviewer's brief is `brief.md`.
 |---|---|---|---|---|---|---|---|---|
 | 1 | 4 | 3 | 4 | 4 | 5 | 3 | 5 | NO |
 | 2 | 5 | 4 | 5 | 6 | 4 | 3 | 3 | NO |
+| 3 | 6 | 5 | 5 | 5 | 4 | 5 | 7 | NO |
 
 Round 2's snow score fell because the corduroy added after round 1 rang into moire at distance (it now follows
 lines from the summit and fades once a pixel cannot hold it). The same rings cost the terrain review's ground score

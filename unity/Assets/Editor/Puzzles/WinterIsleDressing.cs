@@ -436,15 +436,20 @@ public static class WinterIsleDressing
                 // glades: open ground inside a grove, a few tens of metres across
                 if (forest < 0.5f && inGrove > 0.3f && Mathf.PerlinNoise(p.x * 0.031f + 77.7f, p.y * 0.031f + 31.3f) > 0.7f) continue;
                 // the ski forest has glades too, larger and fewer, and clumps rather than an even stand
-                if (forest >= 0.5f && Mathf.PerlinNoise(p.x * 0.013f + 17.7f, p.y * 0.013f + 61.3f) > 0.68f) continue;
+                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(p.x * 0.013f + 17.7f, p.y * 0.013f + 61.3f) > 0.62f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
                 float chance = inGrove * 0.9f * thick + 0.015f + edge;
+                // along a piste the forest is a wall: full-grown firs, close, no gaps (below the thinning under the tree line)
+                float pisteHere = WinterIslePuzzle.Piste(p);
+                bool wall = forest > 0.5f && pisteHere > 0.005f && pisteHere <= 0.3f && h < WinterIslePuzzle.TreeLine - 110f;
+                if (wall) chance = 1f;
                 if (R(0f, 1f) > chance || !l.Free(p, 1.5f) || InsideRock(p, 1.2f)) continue;
                 float tallness = Mathf.Lerp(4.5f, 13.5f, Mathf.Clamp01(inGrove * R(0.55f, 1.15f))) * (h > 40f ? 0.8f : 1f);
                 tallness *= Mathf.Lerp(1f, 0.4f, Smooth01((h - (WinterIslePuzzle.TreeLine - 170f)) / 170f));      // stunted towards the tree line
-                bool young = edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f;      // saplings feather the edges and grow among the old trees
+                if (wall) tallness = Mathf.Max(tallness, R(9f, 13f));
+                bool young = !wall && (edge > 0f ? R(0f, 1f) < 0.65f : R(0f, 1f) < 0.16f);      // saplings feather the edges and grow among the old trees
                 // beside a path a grown fir's boughs would hang across it (and through a walker's eyes): there it is a
                 // pine, its crown overhead, or a sapling
                 bool byPath = l.ToPath(p) < tallness * 0.34f + 1.5f;

@@ -123,7 +123,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         for (int run = 0; run < 3; run++)
         {
             float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f)      // they draw together at the foot
-                + 0.065f * Mathf.Sin(along / (190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
+                + (run == 1 ? 0.1f : 0.065f) * Mathf.Sin(along / (run == 1 ? 150f : 190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
             float across = Mathf.Abs(off - centre) * along;      // metres from the run's middle
             float half = (run == 1 ? 36f : 21f) + 5f * Mathf.Sin(along / 130f + run * 1.7f);      // the middle run is the wide main one
             best = Mathf.Max(best, 1f - Smooth((across - half) / 9f));
@@ -140,7 +140,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     }
     public static Vector2 RunCentre(int run, float along, out float half)
     {
-        float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f) + 0.065f * Mathf.Sin(along / (190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
+        float centre = (run - 1) * 0.36f * Smooth((SkiRadius - 40f - along) / 420f) + (run == 1 ? 0.1f : 0.065f) * Mathf.Sin(along / (run == 1 ? 150f : 190f + run * 45f) + run * 2.1f) * Smooth((along - 300f) / 200f);
         half = (run == 1 ? 36f : 21f) + 5f * Mathf.Sin(along / 130f + run * 1.7f);
         float angle = SkiBearing - centre;      // Piste measures 'off' as bearing minus angle
         return Peak + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * along;
@@ -215,6 +215,12 @@ public sealed class WinterIslePuzzle : PuzzleDef
         float roll = (Mathf.PerlinNoise(p.x * 0.004f + 3.3f, p.y * 0.004f + 8.8f) - 0.5f) * 16f;
         float body = Smooth(h / 60f) * Smooth((p - Peak).magnitude / 150f);      // none at the foot or on the summit
         float rib = Rib(p) * Smooth((h - TreeLine + 40f) / 60f);      // rock ribs only above the trees; below, the face is even ground under forest
+        // below the bowl each run lies in its own shallow valley: the forest between stands on spurs some metres higher
+        if (ski > 0f)
+        {
+            float alongSpur = (p - Peak).magnitude;
+            h += ski * 9f * (1f - Smooth(Piste(p) / 0.9f)) * Smooth((alongSpur - 520f) / 140f) * (1f - Smooth((alongSpur - 1180f) / 140f)) * (0.55f + 0.9f * Mathf.PerlinNoise(p.x * 0.006f + 3.1f, p.y * 0.006f + 7.9f));
+        }
         float berm = ski > 0f ? ski * 0.7f * Mathf.Clamp01(1f - Mathf.Abs(Piste(p) - 0.4f) / 0.25f) : 0f;      // a low bank along each piste's edge
         return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, ski * (1f - rib)) * body + rib * ski * 16f * body + berm);
     }
@@ -459,9 +465,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Component follow = b.AddCustomScript(fall, "SnowfallFollow");
         Sdk.Set(follow, "areaCentre", new Vector3((X0 + X1) / 2f, 0f, (Z0 + Z1) / 2f));
         Sdk.Set(follow, "areaSize", new Vector3(X1 - X0, 0f, Z1 - Z0));
-        Sdk.Set(follow, "mineHub", new Vector3(WinterIsleMine.Hub.x, WinterIsleMine.Floor, WinterIsleMine.Hub.y));
-        string[] tunnels = { "mineA", "mineB", "mineC" };
-        for (int i = 0; i < 3; i++) Sdk.Set(follow, tunnels[i], new Vector3(WinterIsleMine.Dir(i).x, WinterIsleMine.Threshold[i] - 3f, WinterIsleMine.Dir(i).y));
     }
 
     public override void Build(PuzzleBuilder b)
@@ -640,9 +643,29 @@ public sealed class WinterIslePuzzle : PuzzleDef
         var sites = new List<Vector2>();
         var flats = new List<(Vector2 at, float radius, float blend)> { (Plaza, PlazaRadius, 16f), (Summit, SummitRadius, 4f), (GondolaBottom, 10f, 9f) };
         // the mine's portals: where each tunnel's line meets the mountainside, with a level apron outside
-        WinterIsleMine.FindPortals(p => height[Cell_(p)]);
-        int mineFlat = flats.Count;
-        for (int portal = 0; portal < 3; portal++) flats.Add((WinterIsleMine.Apron(portal), WinterIsleMine.ApronRadius, 9f));
+        {
+            Vector2 Bearing(float a) => new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            Vector2 finish = PisteFinish(out Vector2 finishDir, out float finishHalf);
+            var wanted = new List<Vector2>
+            {
+                Peak + Bearing(0.52f) * 1330f,                                                      // the mine tower's, north of the pistes' foot
+                finish - new Vector2(finishDir.y, -finishDir.x) * (finishHalf + 18f) + finishDir * 8f,    // by the finish and the lodge
+                Plaza + new Vector2(0f, -(PlazaRadius + 24f)),
+                Lake + (Plaza - Lake).normalized * (LakeRadius + 32f),
+                Plaza + (ShorePoint - Plaza).normalized * 135f,                                     // towards the causeway
+                Peak + Bearing(2.62f) * 735f, Peak + Bearing(4.45f) * 680f, Peak + Bearing(3.4f) * 725f,      // the mountain's far sides
+            };
+            bool StationAllowed(Vector2 p)
+            {
+                if ((p - Plaza).magnitude < PlazaRadius + 16f || (p - Lake).magnitude < LakeRadius + 18f || (p - GondolaBottom).magnitude < 26f || (p - Summit).magnitude < 60f) return false;
+                if (MountainHeight(p) > 4f && Piste(p) > 0.05f) return false;
+                foreach (Vector3 site in b.OtherSites) if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 18f) return false;
+                return true;
+            }
+            WinterIsleMine.PlaceStations(wanted, 13, p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : height[Cell_(p)], StationAllowed, X0, Z0, X1, Z1);
+        }
+        for (int station = 0; station < WinterIsleMine.Stations.Count; station++)
+            flats.Add((WinterIsleMine.Stations[station], station == 0 ? WinterIsleMine.TowerStationRadius : WinterIsleMine.StationRadius, 8f));
         foreach (Vector3 site in b.OtherSites)
         {
             var at = new Vector2(site.x, site.y);
@@ -652,7 +675,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         var level = new float[flats.Count];
         for (int f = 0; f < flats.Count; f++) level[f] = Mathf.Round(height[Cell_(flats[f].at)] * 2f) / 2f;
-        for (int portal = 0; portal < 3; portal++) level[mineFlat + portal] = WinterIsleMine.Floor;
         for (int k = 0; k < count; k++)
         {
             if (!(height[k] > 0f)) continue;
@@ -782,9 +804,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             foreach (Vector2 e in beachEnds) if ((e - p).magnitude < 150f) far = false;
             if (far) { pointEnds.Add(p); trailEnds.Add(k); }
         }
-        for (int portal = 0; portal < 3; portal++)
+        foreach (Vector2 station in WinterIsleMine.Stations)      // every mine station is somewhere to walk to
         {
-            int apron = Cell_(WinterIsleMine.Point(portal, WinterIsleMine.Threshold[portal] + WinterIsleMine.ApronOut + WinterIsleMine.ApronRadius - 2f, 0f));
+            int apron = Cell_(station + (Plaza - station).normalized * 6f);
             if (reachable[apron]) trailEnds.Add(apron);
         }
         foreach (int end in trailEnds) if (end >= 0 && !targets.Contains(end)) { targets.Add(end); trails++; }
@@ -831,11 +853,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // the gondola's stations, the summit, and a corridor under the cable, kept clear of trees and rocks
         structures.Add((Summit, SummitRadius + 1f));
         structures.Add((GondolaBottom, 14f));
-        for (int portal = 0; portal < 3; portal++)
-        {
-            structures.Add((WinterIsleMine.Apron(portal), WinterIsleMine.ApronRadius + 2f));
-            for (float back = 0f; back < 60f; back += 5f) structures.Add((WinterIsleMine.Point(portal, WinterIsleMine.Threshold[portal] - back, 0f), 9f));
-        }
+        for (int station = 0; station < WinterIsleMine.Stations.Count; station++)
+            structures.Add((WinterIsleMine.Stations[station], (station == 0 ? WinterIsleMine.TowerStationRadius : WinterIsleMine.StationRadius) + 1f));
         for (float t = 0f; t <= 1f; t += 0.004f) structures.Add((Vector2.Lerp(GondolaBottom, GondolaTop, t), 10f));      // a lift line cut through the forest
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
@@ -975,6 +994,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     height[k] = preDrift[k] + bump;
                 }
         }
+        // The mine's line, routed under the finished ground; nothing is planted over its sheds
+        {
+            bool MineAvoid(Vector2 p)
+            {
+                if ((p - Plaza).magnitude < PlazaRadius + 14f || (p - Lake).magnitude < LakeRadius + 14f || (p - GondolaBottom).magnitude < 22f) return true;
+                foreach (Vector3 site in b.OtherSites) if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 10f) return true;
+                foreach (var c in cabins) if ((c.at - p).magnitude < 16f) return true;
+                return false;
+            }
+            WinterIsleMine.FindRoute(p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : HeightAt(p), MineAvoid, X0, Z0, X1, Z1);
+            foreach (var kept in WinterIsleMine.KeptClear()) structures.Add(kept);
+        }
         // Woods: a few dense stands that the trails run through (alternately fir and birch), so that a walker is
         // sometimes among close trunks instead of always in the open
         var woods = new List<(Vector2 at, float radius, bool birch)>();
@@ -1101,7 +1132,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // The mesh is twice as fine as the grid (1.5 m) and follows HeightAt. It is the collider too, so players
         // walk on exactly what they see. Colours are the grid's, blended.
         const int Sub = 2;
-        WinterIsleMine.FindCuts(HeightAt);
         int fw = nx * Sub + 1;
         var fineIndex = new int[fw * (nz * Sub + 1)];
         for (int f = 0; f < fineIndex.Length; f++) fineIndex[f] = -1;
@@ -1311,7 +1341,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             tufts++;
                         }
                     }
-                    else if (roll2 < tuftChance + (wrack ? 0.4f : onSand ? 0.12f : 0.045f * byPath) && slope < 0.3f)
+                    else if (roll2 < tuftChance + (wrack ? 0.4f : onSand ? 0.12f : 0.2f * byPath) && slope < 0.3f)
                     {
                         // a fallen stick, half sunk, with a twig or two; its top takes the snow
                         // (each end lies on the ground where it is, so a stick never juts out of a slope or hovers over a dip)
@@ -1607,10 +1637,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Vector2 p = new Vector2(line[i].x, line[i].z);
                 float foot = HeightAt(p) - 0.6f, mastTop = line[i].y + 0.6f;
                 Kit.AddBox(gm, L(p, foot), new Vector3(2.6f, 0.8f, 2.6f), cream * 0.8f, yaw2);                // footing
-                Kit.AddBox(gm, L(p, foot + 0.8f), new Vector3(2.1f, mastTop - foot - 0.8f, 2.1f), red * 0.9f, yaw2);  // mast: stout and red, to read from across the valley
+                Kit.AddBox(gm, L(p, foot + 0.8f), new Vector3(1.9f, mastTop - foot - 0.8f, 1.9f), steel * 0.75f, yaw2);  // mast: stout and red, to read from across the valley
                 Kit.AddBox(gm, L(p, mastTop), new Vector3(0.5f, 0.5f, 0.5f) + new Vector3(0f, 0f, 0f), steel, yaw2);
                 Vector2 armA = p + side2 * (GondolaSide + 0.6f), armB = p - side2 * (GondolaSide + 0.6f);
-                Kit.AddBox(gm, L(Vector2.Lerp(armA, armB, 0.5f), mastTop + 0.2f), new Vector3(2f * GondolaSide + 4.4f, 0.9f, 1.1f), steel, yaw2 + 90f);
+                Kit.AddBox(gm, L(Vector2.Lerp(armA, armB, 0.5f), mastTop + 0.2f), new Vector3(2f * GondolaSide + 4.4f, 1.1f, 1.3f), red, yaw2 + 90f);
                 for (int sgn = -1; sgn <= 1; sgn += 2)
                     Kit.AddBox(gm, L(p + side2 * GondolaSide * sgn, mastTop - 0.15f), new Vector3(0.8f, 0.5f, 3.4f), red, yaw2);    // sheave trains
                 for (float y = foot + 1.5f; y < mastTop - 1f; y += 0.6f)
@@ -1715,7 +1745,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         // 14. The coal mine under the mountain (WinterIsleMine)
         WinterIsleMine.Build(b, root, HeightAt);
-        WinterIsleMine.Save();
 
         // 12. The pistes' surface: an unseen sheet a hand's breadth over the snow of the three runs and the bowl, with
         //     no friction at all, so that anyone who steps onto a piste slides down it. (A spike: whether the game's
@@ -1826,8 +1855,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     {
                         Vector2 q = runMid + runSide * (sgn * (runHalf + 4f));
                         if (!(HeightAt(q) > 3f)) continue;
-                        Kit.AddBox(furniture, Ground3(q), new Vector3(0.11f, 2.1f, 0.11f), new Color(0.95f, 0.45f, 0.08f));
-                        Kit.AddBox(furniture, Ground3(q) + Vector3.up * 2.1f, new Vector3(0.2f, 0.2f, 0.2f), new Color(0.1f, 0.1f, 0.1f));
+                        Kit.AddBox(furniture, Ground3(q), new Vector3(0.14f, 3.2f, 0.14f), new Color(0.95f, 0.45f, 0.08f));
+                        Kit.AddBox(furniture, Ground3(q) + Vector3.up * 3.2f, new Vector3(0.26f, 0.26f, 0.26f), new Color(0.1f, 0.1f, 0.1f));
                         markers++;
                     }
                     if (run == 1 && (Mathf.RoundToInt(d / 11.25f) % 6 == 0))

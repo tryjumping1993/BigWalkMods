@@ -115,7 +115,7 @@ public sealed class TheTreePuzzle : PuzzleDef
         Kit.LightString(b, "Plaza Lights", ring, 0.3f, 0.5f, true, true, 9);
     }
 
-    // The mine tower, on the apron outside the mine's east portal (WinterIsleMine.Tower): a timber headframe with a
+    // The mine tower, beside the track at the mine's first station (WinterIsleMine.Tower): a timber headframe with a
     // lantern at its top, five plinths in an arc before it and a hold button that opens them while it is held.
     // When the five hold gourds, Winter Walk opens the mine (MineDriver). Local coordinates are from the plaza.
     const int MinePlinths = 5;
@@ -124,8 +124,8 @@ public sealed class TheTreePuzzle : PuzzleDef
         var plinths = new List<UnityEngine.Object>();
         if (!WinterIsleMine.Load()) { Debug.LogWarning("[BWM] The Tree: no mine yet (build WinterIsle first); the mine tower is left out"); return plinths; }
         Vector2 c = WinterIsleMine.Tower - WinterIslePuzzle.Plaza;
-        Vector2 toTrack = WinterIsleMine.Right(0);                  // the tower stands on the track's left; this faces the loop
-        Vector2 along = WinterIsleMine.Dir(0);
+        Vector2 toTrack = WinterIsleMine.TowerFacing;               // the tower stands beside the track at the first station
+        Vector2 along = new Vector2(-toTrack.y, toTrack.x);
         float yaw = Mathf.Atan2(toTrack.x, toTrack.y) * Mathf.Rad2Deg;
         Vector3 Here(float x, float z, float up) => b.WorldPoint(c.x + x, c.y + z, up) - b.Root.transform.position;
         Vector3 At(float forward, float side, float up) { Vector2 p = toTrack * forward + along * side; return Here(p.x, p.y, up); }

@@ -1,44 +1,53 @@
-// The Winter Isle's coal mine: a hall under the great mountain's summit, three tunnels out to portals on the
-// mountain's east, north-west and south flanks, cross-cuts with coal faces off them, and a double track that
-// mantrips run round (out of one tunnel, round a loop on the portal's apron, back in, round the hall and out of
-// the next). Part of the island's pack: WinterIslePuzzle calls FindPortals, FindCuts and Build.
+// The Winter Isle's coal mine: one low single-track line that runs under the whole island and comes up into the
+// open at a dozen or so stations spread across it, and one great hall under the mountain's summit, a pillar of
+// coal left standing in its middle. Mantrips run round the line all day, stopping at every station and in the
+// hall. Part of the island's pack: WinterIslePuzzle calls PlaceStations, FindRoute and Build.
 //
-// Everything is level, at Floor metres above the sea. A portal is where a tunnel's line meets the mountainside;
-// the last stretch, where there is too little rock overhead, is an open cut under a stone shed (InCut tells the
-// island's mesh to leave the ground out there).
+// The tunnels are small: 2.9 m wide and 1.75 m to the crown, enough for the people sitting in a mantrip and
+// no more (on foot it is a crouch). Only the hall is cavernous. The line is found, not drawn: the stations are
+// put where the land allows, joined into one round by the shortest tour, and each leg is routed under ground
+// high enough to cover it. The floor follows a few metres under the surface and ramps up to it at each station
+// (at most 1 in 7). Where there is too little ground overhead the tunnel runs in a stone shed, and the island's
+// mesh leaves the ground out there (InCut).
 //
 // Nothing from the sky lights the mine. Lamps hang in some stretches and not in others, and their light is
 // worked out here and stored in the mesh's colours (shader BWM/Mine). Winter Walk's MineDriver moves the mantrips
-// along the "Mine Line" markers and opens the gates when the mine tower's five plinths hold gourds (TheTreePuzzle
-// builds that tower beside the east portal; it reads where from WinterIsle.mine, which Build writes).
+// along the line, which Build writes beside the plugin as WinterIsle.mineline, and opens the gates when the mine
+// tower's five plinths hold gourds (TheTreePuzzle builds that tower at the first station; it reads where from
+// WinterIsle.mine, which Build also writes).
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using Bwm;
 using UnityEngine;
 
 public static class WinterIsleMine
 {
-    public const float Floor = 30f;                 // the mine's level, metres above the sea
-    public const float HalfWidth = 3.4f;            // of a tunnel
-    public const float TrackSide = 1.5f;            // each track's centre, either side of the tunnel's middle
+    public const float Floor = 30f;                 // the hall's level, metres above the sea
+    public const float HalfWidth = 1.45f, WallHeight = 1.25f, Crown = 1.75f;      // a tunnel: just room for a mantrip and the people sitting in it
     public const float HallRadius = 26f, RingRadius = 12f, HallHeight = 13f, PillarRadius = 5f;
-    public const float ApronOut = 10f, ApronRadius = 14f;      // the level ground outside a portal
-    public const int Trips = 8;
-    public static readonly float[] Bearings = { 0.52f, 2.62f, 4.45f };      // east (towards the plaza), north-west, south
-    public static readonly float[] Threshold = new float[3];      // metres from the hub to where each tunnel meets daylight
-    public static readonly float[] CutStart = new float[3];       // ...and to where its open cut begins
+    public const float StationRadius = 9f, TowerStationRadius = 14f;      // the level ground at a station
+    public const float LowestFloor = 1.6f, Cover = 3.4f, Grade = 0.14f;
+    public const int Trips = 12;
 
     public static Vector2 Hub => WinterIslePuzzle.Summit;
-    public static Vector2 Dir(int i) => new Vector2(Mathf.Cos(Bearings[i]), Mathf.Sin(Bearings[i]));
-    public static Vector2 Right(int i) { Vector2 d = Dir(i); return new Vector2(d.y, -d.x); }
-    public static Vector2 Point(int i, float along, float lateral) => Hub + Dir(i) * along + Right(i) * lateral;
-    public static Vector2 Apron(int i) => Point(i, Threshold[i] + ApronOut, 0f);
-    // where the mine tower stands: on the east portal's apron, beside the track's loop
-    public static Vector2 Tower => Point(0, Threshold[0] + 9f, -10.5f);
+    public static readonly List<Vector2> Stations = new List<Vector2>();      // the first is the mine tower's
+    public static Vector2 Tower, TowerFacing = Vector2.up;                    // where the mine tower stands, and the way from it to the track
 
-    static string FilePath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Land", "WinterIsle.mine"));
+    // the line, a closed round sampled every two metres: where the floor's middle is, the level way to its right,
+    // and what is there (0 open air at a station, 1 tunnel, 2 the hall)
+    static readonly List<Vector3> line = new List<Vector3>();
+    static readonly List<Vector2> lineRight = new List<Vector2>();
+    static readonly List<int> lineKind = new List<int>();
+    static readonly List<bool> lineCut = new List<bool>();
+    static readonly List<int> stops = new List<int>();
+    static readonly HashSet<long> cutCells = new HashSet<long>();
+    const float Step = 2f;
+
+    static string LandFile => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Land", "WinterIsle.mine"));
+    static string LineFile => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.mineline"));
 
     static float Smooth(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
     static float Hash(int a, int b, int c)
@@ -50,106 +59,371 @@ public static class WinterIsleMine
             return ((h ^ (h >> 16)) & 0xFFFFFF) / 16777216f;
         }
     }
+    static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
-    // Where each tunnel comes out: the first point along its line where the ground is down to the mine's level
-    public static void FindPortals(Func<Vector2, float> gridHeight)
+    // Where the stations go. 'fixedPlaces' are the ones the island wants (the first is the mine tower's); more are
+    // added wherever the land is furthest from any station, until there are 'want'. 'ground' is the height grid
+    // (NaN off the island); 'allowed' keeps them off the plaza, the lake, the puzzle sites and the pistes.
+    public static void PlaceStations(IList<Vector2> fixedPlaces, int want, Func<Vector2, float> ground, Func<Vector2, bool> allowed, float x0, float z0, float x1, float z1)
     {
-        for (int i = 0; i < 3; i++)
+        Stations.Clear();
+        bool Good(Vector2 p)
         {
-            Threshold[i] = 1600f;
-            for (float r = 150f; r < 1600f; r += 1.5f)
+            float h = ground(p);
+            if (float.IsNaN(h) || h < 3f || !allowed(p)) return false;
+            for (int k = 0; k < 8; k++)
             {
-                float h = gridHeight(Point(i, r, 0f));
-                if (float.IsNaN(h) || h < Floor + 0.5f) { Threshold[i] = r; break; }
+                float a = k * Mathf.PI / 4f, n = ground(p + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 10f);
+                if (float.IsNaN(n) || Mathf.Abs(n - h) > 4.5f) return false;
             }
+            return true;
+        }
+        foreach (Vector2 place in fixedPlaces)
+        {
+            // the nearest good ground to where it was asked for
+            Vector2 best = place; bool found = false;
+            for (float r = 0f; r <= 60f && !found; r += 6f)
+                for (int k = 0; k < 12 && !found; k++)
+                {
+                    float a = k * Mathf.PI / 6f;
+                    Vector2 q = place + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
+                    if (Good(q)) { best = q; found = true; }
+                }
+            bool apart = true;
+            foreach (Vector2 s in Stations) if ((s - best).magnitude < 150f) apart = false;
+            if ((found || Stations.Count == 0) && apart) Stations.Add(best);
+        }
+        while (Stations.Count < want)
+        {
+            Vector2 best = Vector2.zero; float bestD = 0f;
+            for (float z = z0 + 30f; z < z1 - 30f; z += 12f)
+                for (float x = x0 + 30f; x < x1 - 30f; x += 12f)
+                {
+                    var p = new Vector2(x, z);
+                    float h = ground(p);
+                    if (float.IsNaN(h) || h < 5f || h > 90f) continue;
+                    float d = (p - Hub).magnitude * 0.7f;
+                    foreach (Vector2 s in Stations) d = Mathf.Min(d, (s - p).magnitude);
+                    if (d > bestD && Good(p)) { bestD = d; best = p; }
+                }
+            if (bestD < 170f) break;
+            Stations.Add(best);
         }
     }
 
-    // Where each open cut begins: going in from the portal, the first point with enough rock over the tunnel
-    public static void FindCuts(Func<Vector2, float> heightAt)
+    // The line: the shortest round through the hall and every station, each leg routed under ground that covers
+    // it. 'heightAt' is the finished ground; 'avoid' is ground a tunnel should not pass under near the surface.
+    public static void FindRoute(Func<Vector2, float> heightAt, Func<Vector2, bool> avoid, float x0, float z0, float x1, float z1)
     {
-        for (int i = 0; i < 3; i++)
+        // ---- the order: nearest neighbour from the hall, then uncrossed (2-opt). Node 0 is the hall ----
+        var nodes = new List<Vector2> { Hub };
+        nodes.AddRange(Stations);
+        int n = nodes.Count;
+        var order = new List<int> { 0 };
+        var used = new bool[n];
+        used[0] = true;
+        while (order.Count < n)
         {
-            CutStart[i] = Threshold[i] - 90f;
-            for (float r = Threshold[i]; r > Threshold[i] - 90f; r -= 1f)
+            int last = order[order.Count - 1], best = -1; float bestD = float.MaxValue;
+            for (int k = 0; k < n; k++)
+                if (!used[k] && (nodes[k] - nodes[last]).magnitude < bestD) { bestD = (nodes[k] - nodes[last]).magnitude; best = k; }
+            used[best] = true; order.Add(best);
+        }
+        for (bool better = true; better;)
+        {
+            better = false;
+            for (int i = 0; i < n - 1; i++)
+                for (int j = i + 2; j < n; j++)
+                {
+                    if (i == 0 && j == n - 1) continue;
+                    Vector2 a = nodes[order[i]], b2 = nodes[order[i + 1]], c = nodes[order[j]], d = nodes[order[(j + 1) % n]];
+                    if ((a - c).magnitude + (b2 - d).magnitude < (a - b2).magnitude + (c - d).magnitude - 0.01f) { order.Reverse(i + 1, j - i); better = true; }
+                }
+        }
+
+        // ---- each leg, by the cheapest way over a 6 m grid: low ground costs dear, the sea is shut ----
+        const float G = 6f;
+        int gx = Mathf.CeilToInt((x1 - x0) / G) + 1, gz = Mathf.CeilToInt((z1 - z0) / G) + 1;
+        var gh = new float[gx * gz];
+        var bad = new bool[gx * gz];
+        for (int k = 0; k < gh.Length; k++)
+        {
+            var p = new Vector2(x0 + (k % gx) * G, z0 + (k / gx) * G);
+            gh[k] = heightAt(p);
+            bad[k] = !float.IsNaN(gh[k]) && avoid(p);
+        }
+        int CellOf(Vector2 p) => Mathf.Clamp(Mathf.RoundToInt((p.y - z0) / G), 0, gz - 1) * gx + Mathf.Clamp(Mathf.RoundToInt((p.x - x0) / G), 0, gx - 1);
+        Vector2 PlaceOf(int k) => new Vector2(x0 + (k % gx) * G, z0 + (k / gx) * G);
+        var cost = new float[gx * gz];
+        var from = new int[gx * gz];
+        int[] di = { 1, -1, 0, 0, 1, 1, -1, -1 }, dj = { 0, 0, 1, -1, 1, -1, 1, -1 };
+        List<Vector2> Leg(Vector2 start, Vector2 end)
+        {
+            int s = CellOf(start), e = CellOf(end);
+            for (int k = 0; k < cost.Length; k++) { cost[k] = float.MaxValue; from[k] = -1; }
+            var open = new SortedSet<(float cost, int cell)> { (0f, s) };
+            cost[s] = 0f;
+            while (open.Count > 0)
             {
-                float cover = Mathf.Min(heightAt(Point(i, r, -5.2f)), Mathf.Min(heightAt(Point(i, r, 0f)), heightAt(Point(i, r, 5.2f))));
-                if (cover >= Floor + 5.3f) { CutStart[i] = r; break; }
+                var top = open.Min; open.Remove(top);
+                if (top.cell == e) break;
+                if (top.cost > cost[top.cell]) continue;
+                int ci = top.cell % gx, cj = top.cell / gx;
+                for (int k = 0; k < 8; k++)
+                {
+                    int ni = ci + di[k], nj = cj + dj[k];
+                    if (ni < 0 || nj < 0 || ni >= gx || nj >= gz) continue;
+                    int nk = nj * gx + ni;
+                    float h = gh[nk];
+                    if (float.IsNaN(h) || h < 2.6f) continue;
+                    Vector2 q = PlaceOf(nk);
+                    bool nearEnd = (q - start).magnitude < 40f || (q - end).magnitude < 40f;
+                    float weight = 1f + (nearEnd ? 0f : (h < LowestFloor + Cover + Crown ? 14f : 0f) + (bad[nk] ? 40f : 0f));
+                    float c2 = top.cost + (k < 4 ? 1f : 1.41421f) * weight;
+                    if (c2 < cost[nk]) { cost[nk] = c2; from[nk] = top.cell; open.Add((c2, nk)); }
+                }
             }
+            var cells = new List<Vector2>();
+            if (from[e] < 0 && e != s) return new List<Vector2> { start, end };      // no way found: a straight line, and the build will say so
+            for (int k = e; k >= 0; k = from[k]) cells.Add(PlaceOf(k));
+            cells.Reverse();
+            var path = new List<Vector2> { start };
+            for (int k = 4; k < cells.Count - 4; k += 4) path.Add(cells[k]);      // every 24 m, so the smoothing has room
+            path.Add(end);
+            return path;
         }
+
+        // ---- the round as points: station, leg, station ... with the hall's ring where node 0 comes ----
+        var round = new List<Vector2>();
+        var stopPlaces = new List<Vector2>();
+        Vector2 MouthOf(Vector2 towards) => Hub + (towards - Hub).normalized * (HallRadius + 8f);
+        for (int i = 0; i < n; i++)
+        {
+            int here = order[i], next = order[(i + 1) % n], prev = order[(i + n - 1) % n];
+            if (here == 0)
+            {
+                // in by the mouth facing the last station, anticlockwise round the pillar, out by the mouth facing the next
+                float aIn = Mathf.Atan2(nodes[prev].y - Hub.y, nodes[prev].x - Hub.x), aOut = Mathf.Atan2(nodes[next].y - Hub.y, nodes[next].x - Hub.x);
+                while (aOut < aIn + 1.2f) aOut += 2f * Mathf.PI;
+                round.Add(Hub + new Vector2(Mathf.Cos(aIn), Mathf.Sin(aIn)) * 19f);
+                int steps = Mathf.CeilToInt((aOut - aIn - 0.9f) / 0.2f);
+                for (int k = 0; k <= steps; k++)
+                {
+                    float a = Mathf.Lerp(aIn + 0.45f, aOut - 0.45f, (float)k / steps);
+                    round.Add(Hub + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * RingRadius);
+                }
+                float aMid = (aIn + aOut) / 2f;
+                stopPlaces.Add(Hub + new Vector2(Mathf.Cos(aMid), Mathf.Sin(aMid)) * RingRadius);
+                round.Add(Hub + new Vector2(Mathf.Cos(aOut), Mathf.Sin(aOut)) * 19f);
+            }
+            else
+            {
+                // straight through the station: a point either side of it on the line from the last node to the next
+                Vector2 through = (nodes[next] - nodes[prev]).normalized;
+                round.Add(nodes[here] - through * 11f);
+                round.Add(nodes[here]);
+                round.Add(nodes[here] + through * 11f);
+                stopPlaces.Add(nodes[here]);
+            }
+            Vector2 legStart = here == 0 ? MouthOf(nodes[next]) : nodes[here] + (nodes[next] - nodes[prev]).normalized * 11f;
+            int after = order[(i + 2) % n];
+            Vector2 legEnd = next == 0 ? MouthOf(nodes[here]) : nodes[next] - (nodes[after] - nodes[here]).normalized * 11f;
+            List<Vector2> leg = Leg(legStart, legEnd);
+            if (here == 0) round.Add(legStart);
+            for (int k = 1; k + 1 < leg.Count; k++) round.Add(leg[k]);
+            if (next == 0) round.Add(legEnd);
+        }
+        for (int pass = 0; pass < 3; pass++)
+        {
+            var smooth = new List<Vector2>();
+            for (int k = 0; k < round.Count; k++)
+            {
+                Vector2 p = round[k], q = round[(k + 1) % round.Count];
+                smooth.Add(Vector2.Lerp(p, q, 0.25f));
+                smooth.Add(Vector2.Lerp(p, q, 0.75f));
+            }
+            round = smooth;
+        }
+        // ...every two metres
+        var flat = new List<Vector2>();
+        float carry = 0f;
+        for (int k = 0; k < round.Count; k++)
+        {
+            Vector2 p = round[k], q = round[(k + 1) % round.Count];
+            float length = (q - p).magnitude;
+            for (; carry < length; carry += Step) flat.Add(Vector2.Lerp(p, q, carry / Mathf.Max(length, 0.001f)));
+            carry -= length;
+        }
+        int count = flat.Count;
+        stops.Clear();
+        foreach (Vector2 place in stopPlaces)
+        {
+            int best = 0; float bestD = float.MaxValue;
+            for (int k = 0; k < count; k++) { float d = (flat[k] - place).sqrMagnitude; if (d < bestD) { bestD = d; best = k; } }
+            stops.Add(best);
+        }
+
+        // ---- what each point is, and the floor's height: the hall's level in the hall, the ground at a station,
+        //      otherwise as far under the ground as covers the tunnel, never steeper than Grade ----
+        var kind = new int[count];
+        var right = new Vector2[count];
+        var surface = new float[count];      // the lowest ground over the tunnel's width
+        var floor = new float[count];
+        var held = new bool[count];
+        for (int k = 0; k < count; k++)
+        {
+            Vector2 t = (flat[(k + 1) % count] - flat[(k + count - 1) % count]).normalized;
+            right[k] = new Vector2(t.y, -t.x);
+            kind[k] = (flat[k] - Hub).magnitude < HallRadius - 0.6f ? 2 : 1;
+            float low = float.MaxValue;
+            for (int side = -1; side <= 1; side++)
+            {
+                float h = heightAt(flat[k] + right[k] * (side * 2.2f));
+                low = Mathf.Min(low, float.IsNaN(h) ? 0f : h);
+            }
+            surface[k] = low;
+        }
+        for (int s = 0; s < stops.Count; s++)
+        {
+            if (kind[stops[s]] == 2) continue;
+            for (int o = -4; o <= 4; o++) kind[(stops[s] + o + count) % count] = 0;
+        }
+        for (int k = 0; k < count; k++)
+        {
+            held[k] = kind[k] != 1;
+            float centre = heightAt(flat[k]);
+            floor[k] = kind[k] == 2 ? Floor : kind[k] == 0 ? (float.IsNaN(centre) ? surface[k] : centre) + 0.02f : Mathf.Max(LowestFloor, surface[k] - Cover);
+        }
+        float rise = Grade * Step;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            for (int k = 0; k < count * 2; k++) { int i = k % count, before = (i + count - 1) % count; if (!held[i]) floor[i] = Mathf.Min(floor[i], floor[before] + rise); }
+            for (int k = count * 2 - 1; k >= 0; k--) { int i = k % count, behind = (i + 1) % count; if (!held[i]) floor[i] = Mathf.Min(floor[i], floor[behind] + rise); }
+        }
+        for (int pass = 0; pass < 2; pass++)      // ...and up to meet a station or the hall
+        {
+            for (int k = 0; k < count * 2; k++) { int i = k % count, before = (i + count - 1) % count; if (!held[i]) floor[i] = Mathf.Max(floor[i], floor[before] - rise); }
+            for (int k = count * 2 - 1; k >= 0; k--) { int i = k % count, behind = (i + 1) % count; if (!held[i]) floor[i] = Mathf.Max(floor[i], floor[behind] - rise); }
+        }
+        for (int pass = 0; pass < 3; pass++)      // round the corners of the ramps
+        {
+            var eased = (float[])floor.Clone();
+            for (int k = 0; k < count; k++)
+                if (!held[k]) eased[k] = (floor[(k + count - 1) % count] + floor[k] * 2f + floor[(k + 1) % count]) / 4f;
+            floor = eased;
+        }
+
+        line.Clear(); lineRight.Clear(); lineKind.Clear(); lineCut.Clear(); cutCells.Clear();
+        for (int k = 0; k < count; k++)
+        {
+            line.Add(new Vector3(flat[k].x, floor[k], flat[k].y));
+            lineRight.Add(right[k]);
+            lineKind.Add(kind[k]);
+            bool cut = kind[k] == 1 && surface[k] < floor[k] + Crown + 1.1f;
+            lineCut.Add(cut);
+        }
+        // the ground is left out over the cuts, and a little way past each end of one
+        for (int k = 0; k < count; k++)
+        {
+            bool near = false;
+            for (int o = -1; o <= 1; o++) if (lineCut[(k + o + count) % count]) near = true;
+            if (!near) continue;
+            Vector2 t = new Vector2(-right[k].y, right[k].x);
+            for (float along = -1f; along <= 1.01f; along += 0.5f)
+                for (float lateral = -2.4f; lateral <= 2.41f; lateral += 0.4f)
+                    cutCells.Add(CutKey(flat[k] + t * along + right[k] * lateral));
+        }
+        // the tower: beside the first station's track, on the side with the more level ground
+        {
+            int at = stops[StopOfStation(0, stopPlaces)];
+            Vector2 here = new Vector2(line[at].x, line[at].z);
+            float onRight = heightAt(here + lineRight[at] * 8f), onLeft = heightAt(here - lineRight[at] * 8f);
+            float sign = Mathf.Abs(onRight - line[at].y) <= Mathf.Abs(onLeft - line[at].y) ? 1f : -1f;
+            Tower = here + lineRight[at] * (sign * 8f);
+            TowerFacing = -lineRight[at] * sign;
+        }
+    }
+    static int StopOfStation(int station, List<Vector2> stopPlaces)
+    {
+        int best = 0; float bestD = float.MaxValue;
+        for (int k = 0; k < stopPlaces.Count; k++) { float d = (stopPlaces[k] - Stations[station]).sqrMagnitude; if (d < bestD) { bestD = d; best = k; } }
+        return best;
     }
 
-    // Whether the island's ground is left out at p (the open cuts)
-    public static bool InCut(Vector2 p)
+    // Ground the island keeps clear of trees and rocks: over the sheds and at the stations (place, radius)
+    public static IEnumerable<(Vector2 at, float radius)> KeptClear()
     {
-        Vector2 q = p - Hub;
-        for (int i = 0; i < 3; i++)
-        {
-            float along = Vector2.Dot(q, Dir(i)), lateral = Vector2.Dot(q, Right(i));
-            if (along > CutStart[i] - 1f && along < Threshold[i] + 0.6f && Mathf.Abs(lateral) < 4.6f) return true;
-        }
-        return false;
+        for (int k = 0; k < line.Count; k += 2)
+            if (lineCut[k] || lineKind[k] == 0) yield return (new Vector2(line[k].x, line[k].z), 5.5f);
     }
+
+    static long CutKey(Vector2 p) => ((long)Mathf.FloorToInt(p.x / 1.5f) << 32) ^ (uint)Mathf.FloorToInt(p.y / 1.5f);
+    // Whether the island's ground is left out at p (over the tunnel where it runs in a shed)
+    public static bool InCut(Vector2 p) => cutCells.Contains(CutKey(p));
 
     public static void Save()
     {
-        var lines = new List<string>();
-        for (int i = 0; i < 3; i++) lines.Add(Threshold[i].ToString("R", CultureInfo.InvariantCulture) + " " + CutStart[i].ToString("R", CultureInfo.InvariantCulture));
-        File.WriteAllLines(FilePath, lines);
+        File.WriteAllLines(LandFile, new[] { F(Tower.x) + " " + F(Tower.y) + " " + F(TowerFacing.x) + " " + F(TowerFacing.y) });
+        var text = new StringBuilder("# x y z kind(0 open, 1 tunnel, 2 hall) stop\n");
+        for (int k = 0; k < line.Count; k++)
+            text.Append(F(line[k].x)).Append(' ').Append(F(line[k].y + 0.17f)).Append(' ').Append(F(line[k].z)).Append(' ').Append(lineKind[k]).Append(' ').Append(stops.Contains(k) ? 1 : 0).Append('\n');
+        Directory.CreateDirectory(Path.GetDirectoryName(LineFile));
+        File.WriteAllText(LineFile, text.ToString());
     }
 
-    // For the other packs' builds (The Tree): where the island's last build put the portals
+    // For the other packs' builds (The Tree): where the island's last build put the mine tower
     public static bool Load()
     {
-        if (!File.Exists(FilePath)) return false;
-        string[] lines = File.ReadAllLines(FilePath);
-        for (int i = 0; i < 3 && i < lines.Length; i++)
-        {
-            string[] parts = lines[i].Split(' ');
-            Threshold[i] = float.Parse(parts[0], CultureInfo.InvariantCulture);
-            CutStart[i] = float.Parse(parts[1], CultureInfo.InvariantCulture);
-        }
-        return lines.Length >= 3;
+        if (!File.Exists(LandFile)) return false;
+        string[] parts = File.ReadAllLines(LandFile)[0].Split(' ');
+        if (parts.Length < 4) return false;
+        Tower = new Vector2(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
+        TowerFacing = new Vector2(float.Parse(parts[2], CultureInfo.InvariantCulture), float.Parse(parts[3], CultureInfo.InvariantCulture));
+        return true;
     }
 
     static readonly Color Rock = new Color(0.46f, 0.42f, 0.38f), Coal = new Color(0.075f, 0.075f, 0.09f), Ballast = new Color(0.34f, 0.31f, 0.28f);
     static readonly Color Timber = new Color(0.55f, 0.39f, 0.22f), Steel = new Color(0.5f, 0.5f, 0.54f), Tie = new Color(0.26f, 0.19f, 0.13f);
     static readonly Color LampGlass = new Color(1f, 0.74f, 0.4f), Stone = new Color(0.56f, 0.56f, 0.58f);
 
-    static Vector2[] Profile(float w, float wall, float crown)
+    static Vector2[] Profile(float w, float wall, float crown) => new[]
     {
-        float third = wall / 2.6f;
-        return new[]
-        {
-            new Vector2(-w, 0f), new Vector2(-w, 1f * third), new Vector2(-w, 1.8f * third), new Vector2(-w, wall), new Vector2(-w * 0.55f, wall + (crown - wall) * 0.8f),
-            new Vector2(0f, crown),
-            new Vector2(w * 0.55f, wall + (crown - wall) * 0.8f), new Vector2(w, wall), new Vector2(w, 1.8f * third), new Vector2(w, 1f * third), new Vector2(w, 0f),
-        };
-    }
+        new Vector2(-w, 0f), new Vector2(-w, wall * 0.52f), new Vector2(-w, wall), new Vector2(-w * 0.55f, wall + (crown - wall) * 0.8f),
+        new Vector2(0f, crown),
+        new Vector2(w * 0.55f, wall + (crown - wall) * 0.8f), new Vector2(w, wall), new Vector2(w, wall * 0.52f), new Vector2(w, 0f),
+    };
 
     public static void Build(PuzzleBuilder b, Vector3 root, Func<Vector2, float> heightAt)
     {
+        int count = line.Count;
         var lamps = new List<Vector3>();
         var solid = new MeshBuilder();
-        Vector3 W3(Vector2 p, float up) => new Vector3(p.x, Floor + up, p.y);
+        Vector3 W3(Vector2 p, float up) => new Vector3(p.x, Floor + up, p.y);      // in the hall
         Vector3 Loc(Vector3 w) => w - root;
+        Vector3 Side(int i) => new Vector3(lineRight[i].x, 0f, lineRight[i].y);
+        Vector2 Flat(int i) => new Vector2(line[i].x, line[i].z);
+        int Wrap(int i) => ((i % count) + count) % count;
 
-        // ---- where the lamps hang: near the hall and the portals, and in a stretch now and then between ----
-        bool LitStretch(int i, float s) => s < HallRadius + 70f || s > Threshold[i] - 80f || Mathf.Repeat(s, 150f) < 55f;
-        const float SetSpacing = 6f;
-        for (int i = 0; i < 3; i++)
+        // how far along the line each point is from the open air (a station), for daylight in the tunnel mouths
+        var toOpen = new float[count];
+        for (int k = 0; k < count; k++) toOpen[k] = lineKind[k] == 0 ? 0f : 1e6f;
+        for (int pass = 0; pass < 2; pass++)
         {
-            int n = 0;
-            for (float s = HallRadius + 5f; s < Threshold[i] - 3f; s += SetSpacing, n++)
-                if (n % 2 == 0 && LitStretch(i, s)) lamps.Add(W3(Point(i, s, 0f), 2.45f));
+            for (int k = 0; k < count * 2; k++) { int i = k % count; toOpen[i] = Mathf.Min(toOpen[i], toOpen[Wrap(i - 1)] + Step); }
+            for (int k = count * 2 - 1; k >= 0; k--) { int i = k % count; toOpen[i] = Mathf.Min(toOpen[i], toOpen[Wrap(i + 1)] + Step); }
         }
+        float Day(int i) { float d = Smooth(1f - toOpen[Wrap(i)] / 26f); return d * d; }
+
+        // ---- lamps: by the stations and the hall, and in a stretch now and then between; dark otherwise ----
+        bool LitStretch(int i) => toOpen[i] < 70f || Mathf.Repeat(i * Step, 190f) < 70f;
+        var lampAt = new List<int>();
+        for (int k = 0; k < count; k += 7)
+            if (lineKind[k] == 1 && LitStretch(k)) { lampAt.Add(k); lamps.Add(line[k] + Side(k) * (HalfWidth - 0.35f) + Vector3.up * 1.2f); }
         var hallLamps = new List<Vector3>();
         for (int k = 0; k < 18; k++)
         {
             float a = 2f * Mathf.PI * k / 18f;
-            bool nearTunnel = false;
-            for (int i = 0; i < 3; i++) if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, Bearings[i] * Mathf.Rad2Deg)) * Mathf.Deg2Rad * HallRadius < 6f) nearTunnel = true;
-            if (!nearTunnel) hallLamps.Add(W3(Hub + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (HallRadius - 0.9f), 3.7f));
+            hallLamps.Add(W3(Hub + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (HallRadius - 0.9f), 3.7f));
         }
         for (int k = 0; k < 6; k++)
         {
@@ -157,35 +431,41 @@ public static class WinterIsleMine
             hallLamps.Add(W3(Hub + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (PillarRadius + 0.35f), 3.6f));
         }
         lamps.AddRange(hallLamps);
-
-        Color Lit(Vector3 w, Color albedo)
+        // the lamps in 24 m squares, so a point only looks at the ones near it
+        var lampGrid = new Dictionary<long, List<Vector3>>();
+        long LampKey(float x, float z) => ((long)Mathf.FloorToInt(x / 24f) << 32) ^ (uint)Mathf.FloorToInt(z / 24f);
+        void GridLamp(Vector3 lamp)
+        {
+            long key = LampKey(lamp.x, lamp.z);
+            if (!lampGrid.TryGetValue(key, out List<Vector3> list)) lampGrid[key] = list = new List<Vector3>();
+            list.Add(lamp);
+        }
+        foreach (Vector3 lamp in lamps) GridLamp(lamp);
+        Color Lit(Vector3 w, Color albedo, float day = 0f)
         {
             float r = 0.03f, g = 0.035f, bl = 0.05f;
-            foreach (Vector3 lamp in lamps)
-            {
-                float dx = lamp.x - w.x, dy = lamp.y - w.y, dz = lamp.z - w.z;
-                float d2 = dx * dx + dy * dy + dz * dz;
-                if (d2 > 576f) continue;
-                float fade = 1f - Mathf.Sqrt(d2) / 24f;
-                float light = 2.6f * fade * fade / (1f + d2 / 6f);
-                r += light; g += light * 0.74f; bl += light * 0.42f;
-            }
-            var q = new Vector2(w.x, w.z) - Hub;
-            for (int i = 0; i < 3; i++)
-            {
-                float along = Vector2.Dot(q, Dir(i)), lateral = Vector2.Dot(q, Right(i));
-                if (Mathf.Abs(lateral) > 18f || along < Threshold[i] - 40f) continue;
-                float day = Smooth((along - (Threshold[i] - 40f)) / 40f);
-                day *= day;
-                r += 0.82f * day; g += 0.87f * day; bl += 0.97f * day;
-            }
+            for (int ox = -1; ox <= 1; ox++)
+                for (int oz = -1; oz <= 1; oz++)
+                {
+                    if (!lampGrid.TryGetValue(LampKey(w.x + ox * 24f, w.z + oz * 24f), out List<Vector3> list)) continue;
+                    foreach (Vector3 lamp in list)
+                    {
+                        float dx = lamp.x - w.x, dy = lamp.y - w.y, dz = lamp.z - w.z;
+                        float d2 = dx * dx + dy * dy + dz * dz;
+                        if (d2 > 576f) continue;
+                        float fade = 1f - Mathf.Sqrt(d2) / 24f;
+                        float light = 2.2f * fade * fade / (1f + d2 / 5f);
+                        r += light; g += light * 0.74f; bl += light * 0.42f;
+                    }
+                }
+            r += 0.82f * day; g += 0.87f * day; bl += 0.97f * day;
             return new Color(albedo.r * r, albedo.g * g, albedo.b * bl, 1f);
         }
-        void Q(MeshBuilder mb, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Color albedo, float glow = 0f, float phase = 0f)
+        void Q(MeshBuilder mb, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Color albedo, float day = 0f, float glow = 0f, float phase = 0f)
         {
             var uv = new Vector2(glow, phase);
             if (glow > 0.5f) mb.QuadUV(Loc(p0), Loc(p1), Loc(p2), Loc(p3), uv, uv, uv, uv, albedo, albedo, albedo, albedo);
-            else mb.QuadUV(Loc(p0), Loc(p1), Loc(p2), Loc(p3), uv, uv, uv, uv, Lit(p0, albedo), Lit(p1, albedo), Lit(p2, albedo), Lit(p3, albedo));
+            else mb.QuadUV(Loc(p0), Loc(p1), Loc(p2), Loc(p3), uv, uv, uv, uv, Lit(p0, albedo, day), Lit(p1, albedo, day), Lit(p2, albedo, day), Lit(p3, albedo, day));
         }
         void Solid(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
         {
@@ -193,57 +473,54 @@ public static class WinterIsleMine
             solid.Quad(Loc(p3), Loc(p2), Loc(p1), Loc(p0), Color.white);
         }
         // a box standing on 'foot' (world), its z along 'forward'
-        void Box(MeshBuilder mb, Vector3 foot, Vector3 size, Vector2 forward, Color albedo, float glow = 0f, float phase = 0f)
+        void Box(MeshBuilder mb, Vector3 foot, Vector3 size, Vector2 forward, Color albedo, float day = 0f, float glow = 0f, float phase = 0f)
         {
             var f = new Vector3(forward.x, 0f, forward.y) * (size.z / 2f);
             var s = new Vector3(forward.y, 0f, -forward.x) * (size.x / 2f);
             Vector3 up = Vector3.up * size.y;
             Vector3[] low = { foot - s - f, foot + s - f, foot + s + f, foot - s + f };
-            for (int k = 0; k < 4; k++) Q(mb, low[k], low[(k + 1) % 4], low[(k + 1) % 4] + up, low[k] + up, albedo, glow, phase);
-            Q(mb, low[0] + up, low[1] + up, low[2] + up, low[3] + up, albedo, glow, phase);
-            Q(mb, low[0], low[3], low[2], low[1], albedo, glow, phase);
+            for (int k = 0; k < 4; k++) Q(mb, low[k], low[(k + 1) % 4], low[(k + 1) % 4] + up, low[k] + up, albedo, day, glow, phase);
+            Q(mb, low[0] + up, low[1] + up, low[2] + up, low[3] + up, albedo, day, glow, phase);
+            Q(mb, low[0], low[3], low[2], low[1], albedo, day, glow, phase);
         }
         void Lamp(MeshBuilder mb, Vector3 at, int seed)
         {
-            Box(mb, at + Vector3.up * 0.1f, new Vector3(0.05f, 0.5f, 0.05f), Vector2.up, Tie);
-            Box(mb, at - Vector3.up * 0.2f, new Vector3(0.24f, 0.3f, 0.24f), Vector2.up, LampGlass, 1f, Hash(5, seed, 3));
+            Box(mb, at + Vector3.up * 0.1f, new Vector3(0.04f, 0.3f, 0.04f), Vector2.up, Tie);
+            Box(mb, at - Vector3.up * 0.14f, new Vector3(0.2f, 0.24f, 0.2f), Vector2.up, LampGlass, 0f, 1f, Hash(5, seed, 3));
         }
-        // a heap of coal: a lumpy cone
-        void Heap(MeshBuilder mb, Vector2 at, float radius, float height, int seed)
+        // a heap of coal: a lumpy cone on 'foot'
+        void Heap(MeshBuilder mb, Vector3 foot, float radius, float height, int seed)
         {
-            Vector3 top = W3(at, height);
+            Vector3 top = foot + Vector3.up * height;
             for (int k = 0; k < 9; k++)
             {
                 float a0 = 2f * Mathf.PI * k / 9f, a1 = 2f * Mathf.PI * (k + 1) / 9f;
                 float r0 = radius * (0.75f + 0.5f * Hash(seed, k, 1)), r1 = radius * (0.75f + 0.5f * Hash(seed, (k + 1) % 9, 1));
-                Vector3 p0 = W3(at + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * r0, 0f), p1 = W3(at + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * r1, 0f);
-                Vector3 m0 = Vector3.Lerp(p0, top, 0.55f) + Vector3.up * 0.15f * Hash(seed, k, 2), m1 = Vector3.Lerp(p1, top, 0.55f) + Vector3.up * 0.15f * Hash(seed, (k + 1) % 9, 2);
+                Vector3 p0 = foot + new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)) * r0, p1 = foot + new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1)) * r1;
+                Vector3 m0 = Vector3.Lerp(p0, top, 0.55f) + Vector3.up * 0.12f * Hash(seed, k, 2), m1 = Vector3.Lerp(p1, top, 0.55f) + Vector3.up * 0.12f * Hash(seed, (k + 1) % 9, 2);
                 Q(mb, p0, p1, m1, m0, Coal * (0.8f + 0.5f * Hash(seed, k, 4)));
                 Q(mb, m0, m1, top, top, Coal * (0.9f + 0.5f * Hash(seed, k, 5)));
             }
         }
-        // the wall across a tube's end, between its profile and a rectangle (wide half-width, top)
-        void Bulkhead(MeshBuilder mb, Vector2 origin, Vector2 dir, float s, Vector2[] prof, float wide, float top, Color albedo)
+        // the wall across a tube's end, between its profile and a rectangle (half-width 'wide', height 'top')
+        void Bulkhead(MeshBuilder mb, Vector3 centre, Vector3 rightways, Vector2[] prof, float wide, float top, Color albedo, float day)
         {
-            var right = new Vector2(dir.y, -dir.x);
-            Vector3 V(float lateral, float y) => W3(origin + dir * s + right * lateral, y);
+            Vector3 V(float lateral, float y) => centre + rightways * lateral + Vector3.up * y;
             Vector3 tl = V(-wide, top), tr = V(wide, top);
             int apex = 0;
             for (int k = 1; k < prof.Length; k++) if (prof[k].y > prof[apex].y) apex = k;
-            void T(Vector3 p0, Vector3 p1, Vector3 p2) { Q(mb, p0, p1, p2, p2, albedo); Solid(p0, p1, p2, p2); }
+            void T(Vector3 p0, Vector3 p1, Vector3 p2) { Q(mb, p0, p1, p2, p2, albedo, day); Solid(p0, p1, p2, p2); }
             for (int k = 0; k < apex; k++) T(tl, V(prof[k].x, prof[k].y), V(prof[k + 1].x, prof[k + 1].y));
             T(tl, V(prof[apex].x, prof[apex].y), tr);
             for (int k = apex; k + 1 < prof.Length; k++) T(tr, V(prof[k].x, prof[k].y), V(prof[k + 1].x, prof[k + 1].y));
             T(V(-wide, 0f), V(prof[0].x, 0f), tl);
             T(V(wide, 0f), tr, V(prof[prof.Length - 1].x, 0f));
         }
-        // a rock tube along 'dir' from s0 to s1; 'open' leaves wall panels out (ring's middle s, panel)
-        void Tube(MeshBuilder mb, Vector2 origin, Vector2 dir, float s0, float s1, Vector2[] prof, int seed, Func<float, int, bool> open, bool capEnd)
+        // a rock tube through 'centres' (the floor's middle at each ring), 'rights' the level way to the right at
+        // each; 'open' leaves wall panels out (ring, panel); 'day' is the daylight at each ring
+        void Tube(MeshBuilder mb, IList<Vector3> centres, IList<Vector3> rights, Vector2[] prof, int seed, Func<int, int, bool> open, Func<int, float> day, bool capEnd)
         {
-            var right = new Vector2(dir.y, -dir.x);
-            int n = Mathf.Max(1, Mathf.RoundToInt((s1 - s0) / 2f));
-            float step = (s1 - s0) / n;
-            int last = prof.Length - 1;
+            int n = centres.Count - 1, last = prof.Length - 1;
             bool OpenNear(int ring, int k)
             {
                 if (open == null) return false;
@@ -252,45 +529,42 @@ public static class WinterIsleMine
                     {
                         int rr = ring + dr, kk = k + dk;
                         if (rr < 0 || rr >= n || kk < 0 || kk >= last) continue;
-                        if (open(s0 + (rr + 0.5f) * step, kk)) return true;
+                        if (open(rr, kk)) return true;
                     }
                 return false;
             }
             Vector3 P(int ring, int k)
             {
-                float s = s0 + ring * step;
                 Vector2 pr = prof[k];
                 bool plain = ring == 0 || ring == n || OpenNear(ring, k);
-                float rough = plain ? 0f : (Hash(seed, ring, k) - 0.5f) * 0.55f;
+                float rough = plain ? 0f : (Hash(seed, ring, k) - 0.5f) * 0.34f;
                 if (k == 0 || k == last) rough = Mathf.Abs(rough) * 0.5f;
-                Vector2 outward = (pr - new Vector2(0f, 1.4f)).normalized * rough;
+                Vector2 outward = (pr - new Vector2(0f, 0.7f)).normalized * rough;
                 if (k == 0 || k == last) outward.y = 0f;
-                float slip = plain ? 0f : (Hash(seed + 7, ring, k) - 0.5f) * 0.6f;
-                return W3(origin + dir * (s + slip) + right * (pr.x + outward.x), pr.y + outward.y);
+                Vector3 along = ring < n ? centres[ring + 1] - centres[ring] : centres[ring] - centres[ring - 1];
+                float slip = plain ? 0f : (Hash(seed + 7, ring, k) - 0.5f) * 0.5f;
+                return centres[ring] + rights[ring] * (pr.x + outward.x) + Vector3.up * (pr.y + outward.y) + along.normalized * slip;
             }
             for (int ring = 0; ring < n; ring++)
             {
-                float mid = s0 + (ring + 0.5f) * step;
+                float light = (day(ring) + day(ring + 1)) * 0.5f;
                 for (int k = 0; k < last; k++)
                 {
-                    if (open != null && open(mid, k)) continue;
+                    if (open != null && open(ring, k)) continue;
                     bool upright = Mathf.Abs(prof[k].x - prof[k + 1].x) < 0.01f;
                     bool seam = upright && (k == 1 || k == last - 2);
                     Color albedo = seam ? Coal * (0.8f + 0.6f * Hash(seed + 3, ring, k)) : Rock * (0.82f + 0.36f * Hash(seed + 3, ring, k));
                     Vector3 p0 = P(ring, k), p1 = P(ring + 1, k), p2 = P(ring + 1, k + 1), p3 = P(ring, k + 1);
-                    Q(mb, p0, p1, p2, p3, albedo);
-                    if (upright) Solid(p0, p1, p2, p3);
+                    Q(mb, p0, p1, p2, p3, albedo, light);
+                    Solid(p0, p1, p2, p3);      // the roof too: it is low enough to bump a head on
                 }
                 Vector3 fl = P(ring, 0), fr = P(ring, last), fl2 = P(ring + 1, 0), fr2 = P(ring + 1, last);
-                Vector3 fm = (fl + fr) * 0.5f, fm2 = (fl2 + fr2) * 0.5f;
-                Color floorColor = Ballast * (0.85f + 0.3f * Hash(seed + 5, ring, 0));
-                Q(mb, fl, fm, fm2, fl2, floorColor);
-                Q(mb, fm, fr, fr2, fm2, floorColor);
+                Q(mb, fl, fr, fr2, fl2, Ballast * (0.85f + 0.3f * Hash(seed + 5, ring, 0)), light);
                 Solid(fl, fr, fr2, fl2);
             }
             if (capEnd)
             {
-                Vector3 centre = W3(origin + dir * (s1 + 0.4f), 1.2f);
+                Vector3 centre = centres[n] + (centres[n] - centres[n - 1]).normalized * 0.3f + Vector3.up * 0.7f;
                 for (int k = 0; k < last; k++)
                 {
                     Q(mb, P(n, k), P(n, k + 1), centre, centre, Coal * (0.8f + 0.8f * Hash(seed + 9, k, 0)));
@@ -300,58 +574,129 @@ public static class WinterIsleMine
         }
 
         Material mineMaterial = b.ShaderMaterial("BWM/Mine", "Mine");
-        Vector2[] main = Profile(HalfWidth, 2.6f, 3.95f), small = Profile(2f, 1.9f, 2.6f);
-        int crossCuts = 0, sets = 0;
-        float leastCover = float.MaxValue;
+        Vector2[] main = Profile(HalfWidth, WallHeight, Crown), small = Profile(1.1f, 1.0f, 1.4f);
+        int crossCuts = 0, sets = 0, runs = 0, sheds = 0;
+        float leastCover = float.MaxValue, lowest = float.MaxValue, tunnelLength = 0f;
+        var shed = new MeshBuilder();
+        var mouths = new MeshBuilder();
+        var gatePlaces = new List<(Vector3 at, float yaw)>();
+        var hallMouths = new List<float>();      // bearings from the hub where the line comes through the hall's wall
 
-        // ---- the three tunnels ----
-        for (int i = 0; i < 3; i++)
+        // ---- the tunnels: every unbroken run of tunnel points, a point of overlap into what lies at each end ----
+        int start0 = 0;
+        while (start0 < count && lineKind[start0] == 1) start0++;      // begin at something that is not tunnel
+        if (start0 == count) start0 = 0;
+        var pieces = new List<MeshBuilder>();
+        for (int walked = 0; walked < count;)
         {
-            var mb = new MeshBuilder();
-            Vector2 dir = Dir(i), right = Right(i);
-            float s0 = HallRadius - 0.6f, s1 = Threshold[i] + 1f;
-            int rings = Mathf.Max(1, Mathf.RoundToInt((s1 - s0) / 2f));
-            float step = (s1 - s0) / rings;
-            // cross-cuts: short dead ends to a coal face, alternately left and right, in the lit stretches
-            var cuts = new List<(float s, int side)>();
-            for (float s = HallRadius + 42f; s < Threshold[i] - 70f; s += 96f)
+            int first = Wrap(start0 + walked);
+            if (lineKind[first] != 1) { walked++; continue; }
+            int length = 0;
+            while (length < count && lineKind[Wrap(first + length)] == 1) length++;
+            walked += length;
+            // from the last point before the run to the first after it, so the tube meets the station or the hall
+            int from = first - 1, to = first + length;
+            int ringCount = to - from;
+            var centres = new List<Vector3>();
+            var rights = new List<Vector3>();
+            for (int k = from; k <= to; k++) { centres.Add(line[Wrap(k)]); rights.Add(Side(Wrap(k))); }
+            // cross-cuts: a short dead end to a coal face, alternately left and right, where there is deep rock and light
+            var cuts = new List<(int ring, int side)>();
+            for (int ring = 30; ring < ringCount - 30; ring += 56)
             {
-                float snapped = s0 + Mathf.Round((s - s0) / step) * step;
-                if (LitStretch(i, snapped)) cuts.Add((snapped, cuts.Count % 2 == 0 ? -1 : 1));
+                int i = Wrap(from + ring);
+                float over = heightAt(Flat(i)) - line[i].y;
+                bool straight = Vector2.Dot(lineRight[Wrap(i - 4)], lineRight[Wrap(i + 4)]) > 0.995f;
+                if (LitStretch(i) && over > 9f && straight && !lineCut[i]) cuts.Add((ring, cuts.Count % 2 == 0 ? -1 : 1));
             }
-            bool Open(float mid, int k)
+            bool Open(int ring, int k)
             {
                 foreach (var cut in cuts)
-                    if (Mathf.Abs(mid - cut.s) < step && (cut.side < 0 ? k <= 2 : k >= main.Length - 4)) return true;
+                    if ((ring == cut.ring || ring == cut.ring - 1) && (cut.side < 0 ? k <= 1 : k >= main.Length - 3)) return true;
                 return false;
             }
-            Tube(mb, Hub, dir, s0, s1, main, 100 + i, Open, false);
-            Bulkhead(mb, Hub, dir, s0, main, 7f, 6f, Rock);
+            var mb = new MeshBuilder();
+            Tube(mb, centres, rights, main, 100 + runs, Open, ring => Day(from + ring), false);
             foreach (var cut in cuts)
             {
-                Vector2 mouth = Point(i, cut.s, cut.side * (HalfWidth - 0.05f));
-                Vector2 into = right * cut.side;
-                Bulkhead(mb, mouth, into, 0f, small, 2.5f, 3f, Rock * 0.9f);
-                Tube(mb, mouth, into, 0f, 14f, small, 200 + i * 20 + crossCuts, null, true);
-                Heap(mb, mouth + into * 11.5f + new Vector2(into.y, -into.x) * 0.5f, 1.5f, 1.1f, 300 + crossCuts);
-                Heap(mb, mouth + into * 8.5f - new Vector2(into.y, -into.x) * 1.1f, 0.8f, 0.6f, 340 + crossCuts);
-                lamps.Add(W3(mouth + into * 7f, 2.1f));
-                Lamp(mb, W3(mouth + into * 7f, 2.3f), 60 + crossCuts);
+                int i = Wrap(from + cut.ring);
+                Vector3 into = Side(i) * cut.side, mouth = line[i] + into * (HalfWidth - 0.05f);
+                Vector3 across = new Vector3(into.z, 0f, -into.x);
+                Bulkhead(mb, mouth, across, small, 2.3f, WallHeight + 0.4f, Rock * 0.9f, 0f);
+                var cc = new List<Vector3>(); var cr = new List<Vector3>();
+                for (int k = 0; k <= 5; k++) { cc.Add(mouth + into * (k * 2f)); cr.Add(across); }
+                lamps.Add(mouth + into * 5f + Vector3.up * 1.1f);
+                GridLamp(mouth + into * 5f + Vector3.up * 1.1f);
+                Tube(mb, cc, cr, small, 200 + crossCuts, null, ring => 0f, true);
+                Heap(mb, mouth + into * 8f + across * 0.2f, 0.9f, 0.7f, 300 + crossCuts);
+                Heap(mb, mouth + into * 6f - across * 0.5f, 0.5f, 0.4f, 340 + crossCuts);
+                Lamp(mb, mouth + into * 5f + Vector3.up * 1.2f, 60 + crossCuts);
                 crossCuts++;
             }
-            // timber sets, and a lamp under every other one in the lit stretches
-            int n = 0;
-            for (float s = HallRadius + 5f; s < Threshold[i] - 3f; s += SetSpacing, n++)
+            // each end: a wall round the mouth, and a gate just inside a mouth that opens to the air
+            foreach (bool atStart in new[] { true, false })
             {
+                int end = Wrap(atStart ? from : to), inner = Wrap(atStart ? from + 1 : to - 1);
+                Vector3 outwards = (line[end] - line[inner]).normalized;
+                if (lineKind[end] == 2)
+                {
+                    Bulkhead(mb, line[end] + outwards * 0.02f, Side(end), main, 4.4f, 2.5f, Rock, 0f);
+                    hallMouths.Add(Mathf.Atan2(line[end].z - Hub.y, line[end].x - Hub.x));
+                }
+                else
+                {
+                    float top = Mathf.Max(Crown + 0.6f, heightAt(Flat(inner)) + 0.4f - line[end].y);
+                    Bulkhead(mouths, line[end] + outwards * 0.03f, Side(end), main, 3.3f, top, Stone * 1.05f, 1f);
+                    foreach (int side in new[] { -1, 1 })
+                        Box(mouths, line[end] + outwards * 0.25f + Side(end) * (side * (HalfWidth + 0.12f)), new Vector3(0.3f, WallHeight + 0.35f, 0.3f), new Vector2(outwards.x, outwards.z), Timber, 1f);
+                    Box(mouths, line[end] + outwards * 0.25f + Vector3.up * (WallHeight + 0.35f), new Vector3(HalfWidth * 2f + 0.9f, 0.32f, 0.34f), new Vector2(outwards.x, outwards.z), Timber * 0.9f, 1f);
+                    int gateAt = Wrap(atStart ? from + 2 : to - 2);
+                    gatePlaces.Add((line[gateAt], Mathf.Atan2(outwards.x, outwards.z) * Mathf.Rad2Deg));
+                }
+            }
+            // timber sets every six metres, a lamp on the wall under some of them
+            for (int ring = 2; ring < ringCount - 1; ring += 3)
+            {
+                int i = Wrap(from + ring);
+                Vector2 forward = new Vector2(-lineRight[i].y, lineRight[i].x);
+                float light = Day(i);
                 foreach (int side in new[] { -1, 1 })
-                    Box(mb, W3(Point(i, s, side * (HalfWidth - 0.32f)), 0f), new Vector3(0.26f, 2.75f, 0.26f), dir, Timber * (0.8f + 0.3f * Hash(40 + i, n, side + 1)));
-                Box(mb, W3(Point(i, s, 0f), 2.75f), new Vector3(HalfWidth * 2f - 0.2f, 0.28f, 0.3f), dir, Timber * (0.8f + 0.3f * Hash(41 + i, n, 0)));
-                if (n % 2 == 0 && LitStretch(i, s)) Lamp(mb, W3(Point(i, s, 0f), 2.65f), i * 1000 + n);
+                    Box(mb, line[i] + Side(i) * (side * (HalfWidth - 0.2f)), new Vector3(0.2f, WallHeight + 0.12f, 0.2f), forward, Timber * (0.8f + 0.3f * Hash(40, i, side + 1)), light);
+                Box(mb, line[i] + Vector3.up * (WallHeight + 0.12f), new Vector3(HalfWidth * 2f - 0.1f, 0.2f, 0.22f), forward, Timber * (0.8f + 0.3f * Hash(41, i, 0)), light);
                 sets++;
             }
-            for (float s = HallRadius + 10f; s < CutStart[i] - 2f; s += 10f) leastCover = Mathf.Min(leastCover, heightAt(Point(i, s, 0f)) - Floor - 3.95f);
-            b.MeshPiece("Mine Tunnel " + (i + 1), mb.ToMesh(), mineMaterial, false);
+            foreach (int i in lampAt)
+            {
+                int ring = Wrap(i - from);
+                if (ring > 0 && ring < ringCount) Lamp(mb, line[i] + Side(i) * (HalfWidth - 0.35f) + Vector3.up * 1.2f, i);
+            }
+            // where there is too little ground overhead: a stone shed, its walls down into the ground either side
+            for (int ring = 0; ring < ringCount; ring++)
+            {
+                int i = Wrap(from + ring), j = Wrap(i + 1);
+                float over = heightAt(Flat(i)) - line[i].y - Crown;
+                if (!float.IsNaN(over) && !lineCut[i]) leastCover = Mathf.Min(leastCover, over);
+                lowest = Mathf.Min(lowest, line[i].y);
+                tunnelLength += Step;
+                if (!lineCut[i] && !lineCut[j]) continue;
+                Vector3 mid = (line[i] + line[j]) * 0.5f;
+                Vector3 along = line[j] - line[i];
+                float yaw = Mathf.Atan2(along.x, along.z) * Mathf.Rad2Deg, top = mid.y + Crown + 0.55f;
+                for (float lateral = -3.2f; lateral <= 3.21f; lateral += 1.6f)
+                {
+                    float h = heightAt(new Vector2(mid.x, mid.z) + lineRight[i] * lateral);
+                    if (!float.IsNaN(h)) top = Mathf.Max(top, Mathf.Min(h + 0.3f, mid.y + Crown + 3f));
+                }
+                float stretch = along.magnitude + 0.06f;
+                foreach (int side in new[] { -1, 1 })
+                    Kit.AddBox(shed, mid + Side(i) * (side * 2.62f) + Vector3.down * 3f - root, new Vector3(1.5f, top - mid.y + 3f, stretch), Stone * (0.9f + 0.15f * Hash(70, i, side + 1)), yaw);
+                Kit.AddBox(shed, mid + Vector3.up * (Crown + 0.3f) - root, new Vector3(6.6f, top - mid.y - Crown - 0.3f, stretch), Stone * (0.92f + 0.12f * Hash(71, i, 0)), yaw);
+                sheds++;
+            }
+            pieces.Add(mb);
+            runs++;
         }
+        for (int k = 0; k < pieces.Count; k++) b.MeshPiece("Mine Tunnel " + (k + 1), pieces[k].ToMesh(), mineMaterial, false);
 
         // ---- the hall: a round room under the summit, a pillar of coal left standing in the middle ----
         {
@@ -370,15 +715,14 @@ public static class WinterIsleMine
             {
                 float a = 2f * Mathf.PI * (seg + 0.5f) / N;
                 bool mouth = false;
-                for (int i = 0; i < 3; i++) if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, Bearings[i] * Mathf.Rad2Deg)) * Mathf.Deg2Rad * HallRadius < 4.5f) mouth = true;
+                foreach (float bearing in hallMouths) if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, bearing * Mathf.Rad2Deg)) * Mathf.Deg2Rad * HallRadius < 2.6f) mouth = true;
                 for (int ring = 0; ring < 6; ring++)
                 {
-                    if (ring < 2 && mouth) continue;
+                    if (ring < 1 && mouth) continue;
                     Color albedo = ring == 0 ? Coal * (0.8f + 0.6f * Hash(92, seg, ring)) : Rock * (0.8f + 0.4f * Hash(92, seg, ring));
                     Q(mb, HP(seg, ring), HP(seg + 1, ring), HP(seg + 1, ring + 1), HP(seg, ring + 1), albedo);
                     if (ring < 2) Solid(HP(seg, ring), HP(seg + 1, ring), HP(seg + 1, ring + 1), HP(seg, ring + 1));
                 }
-                // floor, in rings out from the pillar
                 float[] floorR = { PillarRadius - 0.5f, 9f, 13f, 17f, 21f, HallRadius + 0.5f };
                 float a0 = 2f * Mathf.PI * seg / N, a1 = 2f * Mathf.PI * (seg + 1) / N;
                 Vector2 d0 = new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)), d1 = new Vector2(Mathf.Cos(a1), Mathf.Sin(a1));
@@ -401,144 +745,68 @@ public static class WinterIsleMine
                 }
             }
             for (int k = 0; k < hallLamps.Count; k++) Lamp(mb, hallLamps[k] + Vector3.up * 0.2f, 500 + k);
-            // coal heaps and crates against the wall between the tunnels
-            for (int k = 0; k < 9; k++)
+            // coal heaps and crates against the wall, clear of the mouths
+            for (int k = 0; k < 12; k++)
             {
-                float a = Bearings[k % 3] + 0.5f + 0.42f * (k / 3) + 0.3f;
+                float a = 2f * Mathf.PI * (k + 0.3f) / 12f;
+                bool mouth = false;
+                foreach (float bearing in hallMouths) if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, bearing * Mathf.Rad2Deg)) * Mathf.Deg2Rad * HallRadius < 7f) mouth = true;
+                if (mouth) continue;
                 Vector2 at = Hub + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (HallRadius - 3.2f);
                 if (k % 3 == 1) Box(mb, W3(at, 0f), new Vector3(1.1f, 0.9f, 1.1f), new Vector2(Mathf.Cos(a + 0.4f), Mathf.Sin(a + 0.4f)), Timber * 0.9f);
-                else Heap(mb, at, 1.9f + 0.6f * Hash(96, k, 0), 1.3f + 0.5f * Hash(96, k, 1), 400 + k);
+                else Heap(mb, W3(at, 0f), 1.9f + 0.6f * Hash(96, k, 0), 1.3f + 0.5f * Hash(96, k, 1), 400 + k);
             }
             b.MeshPiece("Mine Hall", mb.ToMesh(), mineMaterial, false);
         }
 
-        // ---- the track: one closed line. Out of each tunnel on its right-hand track, round the apron's loop, back
-        //      in on the other, round the hall anticlockwise to the next tunnel ----
-        var route = new List<Vector2>();
-        var stops = new List<Vector2>();
-        for (int i = 0; i < 3; i++)
-        {
-            float thr = Threshold[i];
-            route.Add(Point(i, 19f, TrackSide));
-            route.Add(Point(i, thr, TrackSide));
-            for (float a = 2f; a <= 11f; a += 1.5f) route.Add(Point(i, thr + a, Mathf.Lerp(TrackSide, 5f, Smooth(a / 11f))));
-            for (int k = 1; k <= 12; k++) { float phi = Mathf.PI * k / 12f; route.Add(Point(i, thr + 11f + 5f * Mathf.Sin(phi), 5f * Mathf.Cos(phi))); }
-            stops.Add(Point(i, thr + 16f, 0f));
-            for (float a = 9.5f; a >= 2f; a -= 1.5f) route.Add(Point(i, thr + a, -Mathf.Lerp(TrackSide, 5f, Smooth(a / 11f))));
-            route.Add(Point(i, thr, -TrackSide));
-            route.Add(Point(i, 19f, -TrackSide));
-            float a0 = Bearings[i] + 0.55f, a1 = Bearings[(i + 1) % 3] - 0.55f;
-            if (a1 < a0) a1 += 2f * Mathf.PI;
-            int steps = Mathf.CeilToInt((a1 - a0) / 0.14f);
-            for (int k = 0; k <= steps; k++) { float a = Mathf.Lerp(a0, a1, (float)k / steps); route.Add(Hub + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * RingRadius); }
-            float am = (a0 + a1) / 2f;
-            stops.Add(Hub + new Vector2(Mathf.Cos(am), Mathf.Sin(am)) * RingRadius);
-        }
-        for (int pass = 0; pass < 2; pass++)
-        {
-            var smooth = new List<Vector2>();
-            for (int k = 0; k < route.Count; k++)
-            {
-                Vector2 p = route[k], q = route[(k + 1) % route.Count];
-                smooth.Add(Vector2.Lerp(p, q, 0.25f));
-                smooth.Add(Vector2.Lerp(p, q, 0.75f));
-            }
-            route = smooth;
-        }
+        // ---- the track: two rails and sleepers all the way round ----
         float trackLength = 0f;
         {
             var mb = new MeshBuilder();
-            float sleeperAt = 0f;
-            for (int k = 0; k < route.Count; k++)
+            for (int k = 0; k < count; k++)
             {
-                Vector2 from = route[k], to = route[(k + 1) % route.Count];
-                float length = (to - from).magnitude;
-                if (length < 0.01f) continue;
-                Vector2 t = (to - from) / length, nrm = new Vector2(t.y, -t.x);
-                int pieces = Mathf.Max(1, Mathf.CeilToInt(length / 2.5f));
-                for (int piece = 0; piece < pieces; piece++)
+                int j = Wrap(k + 1);
+                Vector3 p = line[k], q = line[j];
+                float day = lineKind[k] == 0 ? 1f : lineKind[k] == 2 ? 0f : Day(k);
+                foreach (float side in new[] { -0.45f, 0.45f })
                 {
-                    Vector2 p = Vector2.Lerp(from, to, (float)piece / pieces), q = Vector2.Lerp(from, to, (float)(piece + 1) / pieces);
-                    foreach (float side in new[] { -0.45f, 0.45f })
-                    {
-                        Vector2 pi = p + nrm * (side - 0.04f), po = p + nrm * (side + 0.04f), qi = q + nrm * (side - 0.04f), qo = q + nrm * (side + 0.04f);
-                        Q(mb, W3(pi, 0.17f), W3(po, 0.17f), W3(qo, 0.17f), W3(qi, 0.17f), Steel);
-                        Q(mb, W3(pi, 0.05f), W3(pi, 0.17f), W3(qi, 0.17f), W3(qi, 0.05f), Steel * 0.6f);
-                        Q(mb, W3(po, 0.05f), W3(po, 0.17f), W3(qo, 0.17f), W3(qo, 0.05f), Steel * 0.6f);
-                    }
+                    Vector3 pi = p + Side(k) * (side - 0.04f), po = p + Side(k) * (side + 0.04f), qi = q + Side(j) * (side - 0.04f), qo = q + Side(j) * (side + 0.04f);
+                    Vector3 up = Vector3.up * 0.17f, lowUp = Vector3.up * 0.05f;
+                    Q(mb, pi + up, po + up, qo + up, qi + up, Steel, day);
+                    Q(mb, pi + lowUp, pi + up, qi + up, qi + lowUp, Steel * 0.6f, day);
+                    Q(mb, po + lowUp, po + up, qo + up, qo + lowUp, Steel * 0.6f, day);
                 }
-                for (; sleeperAt < length; sleeperAt += 1.1f)
+                Vector3 t = (q - p).normalized * 0.11f, w = Side(k) * 0.75f, lift = Vector3.up * 0.08f;
+                foreach (float along in new[] { 0f, 0.5f })
                 {
-                    Vector2 c = from + t * sleeperAt;
-                    Q(mb, W3(c - nrm * 0.75f - t * 0.11f, 0.08f), W3(c + nrm * 0.75f - t * 0.11f, 0.08f), W3(c + nrm * 0.75f + t * 0.11f, 0.08f), W3(c - nrm * 0.75f + t * 0.11f, 0.08f), Tie);
+                    Vector3 c = Vector3.Lerp(p, q, along) + lift;
+                    Q(mb, c - w - t, c + w - t, c + w + t, c - w + t, Tie, day);
                 }
-                sleeperAt -= length;
-                trackLength += length;
+                trackLength += (q - p).magnitude;
             }
             b.MeshPiece("Mine Track", mb.ToMesh(), mineMaterial, false);
         }
-        var lineRoot = new GameObject("Mine Line");
-        lineRoot.transform.SetParent(b.Root.transform, false);
-        for (int k = 0; k < route.Count; k++)
-        {
-            var marker = new GameObject("P" + k);
-            marker.transform.SetParent(lineRoot.transform, false);
-            marker.transform.position = W3(route[k], 0.17f);
-        }
-        for (int k = 0; k < stops.Count; k++)
-        {
-            var marker = new GameObject("Stop" + k);
-            marker.transform.SetParent(lineRoot.transform, false);
-            marker.transform.position = W3(stops[k], 0.17f);
-        }
 
-        // ---- the portals: a stone shed over each open cut, and a barred gate until the mine is open ----
-        {
-            var shed = new MeshBuilder();
-            var face = new MeshBuilder();
-            for (int i = 0; i < 3; i++)
-            {
-                Vector2 dir = Dir(i);
-                float yaw = Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg;
-                float frontTop = 0f;
-                for (float s = CutStart[i] - 3f; s < Threshold[i] + 1f; s += 2f)
-                {
-                    float to = Mathf.Min(s + 2f, Threshold[i] + 1f), mid = (s + to) / 2f;
-                    float top = Floor + 4.7f;
-                    for (float lateral = -5.6f; lateral <= 5.61f; lateral += 1.4f) top = Mathf.Max(top, heightAt(Point(i, Mathf.Min(mid, Threshold[i] - 0.5f), lateral)) + 0.5f);
-                    frontTop = top;
-                    foreach (int side in new[] { -1, 1 })
-                    {
-                        Vector2 at = Point(i, mid, side * 4.35f);
-                        Kit.AddBox(shed, new Vector3(at.x, Floor - 1.5f, at.y) - root, new Vector3(1.7f, top - Floor + 1.5f, to - s), Stone * (0.9f + 0.15f * Hash(70 + i, (int)s, side + 1)), yaw);
-                    }
-                    Vector2 over = Point(i, mid, 0f);
-                    Kit.AddBox(shed, new Vector3(over.x, Floor + 4.15f, over.y) - root, new Vector3(10.4f, top - Floor - 4.15f, to - s), Stone * (0.92f + 0.12f * Hash(71 + i, (int)s, 0)), yaw);
-                }
-                Bulkhead(face, Hub, dir, Threshold[i] + 1.02f, main, 5.2f, frontTop - Floor, Stone * 1.05f);
-                // a timber lintel and posts round the mouth
-                foreach (int side in new[] { -1, 1 })
-                    Box(face, W3(Point(i, Threshold[i] + 1.2f, side * (HalfWidth + 0.1f)), 0f), new Vector3(0.4f, 3.3f, 0.4f), dir, Timber);
-                Box(face, W3(Point(i, Threshold[i] + 1.2f, 0f), 3.3f), new Vector3(HalfWidth * 2f + 1.2f, 0.45f, 0.45f), dir, Timber * 0.9f);
-            }
-            b.MeshPiece("Mine Sheds", shed.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"));
-            b.MeshPiece("Mine Mouths", face.ToMesh(), mineMaterial, false);
+        b.MeshPiece("Mine Sheds", shed.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"));
+        b.MeshPiece("Mine Mouths", mouths.ToMesh(), mineMaterial, false);
 
+        // ---- the gates: bars across every mouth that opens to the air, until the mine is open ----
+        {
             var gate = new MeshBuilder();
             foreach (int side in new[] { -1, 1 })
-                Kit.AddBox(gate, new Vector3(side * (HalfWidth - 0.25f), 0f, 0f), new Vector3(0.3f, 2.9f, 0.3f), Timber);
-            for (int k = 0; k < 5; k++) Kit.AddBox(gate, new Vector3(0f, 0.25f + k * 0.55f, 0f), new Vector3(HalfWidth * 2f - 0.2f, 0.34f, 0.12f), Timber * (0.8f + 0.25f * Hash(80, k, 0)));
-            Kit.AddBox(gate, new Vector3(0f, 1.2f, -0.1f), new Vector3(1.5f, 0.75f, 0.06f), new Color(0.85f, 0.2f, 0.15f));
+                Kit.AddBox(gate, new Vector3(side * (HalfWidth - 0.2f), 0f, 0f), new Vector3(0.22f, Crown - 0.1f, 0.22f), Timber);
+            for (int k = 0; k < 4; k++) Kit.AddBox(gate, new Vector3(0f, 0.15f + k * 0.4f, 0f), new Vector3(HalfWidth * 2f - 0.2f, 0.26f, 0.1f), Timber * (0.8f + 0.25f * Hash(80, k, 0)));
+            Kit.AddBox(gate, new Vector3(0f, 0.6f, -0.08f), new Vector3(1f, 0.5f, 0.05f), new Color(0.85f, 0.2f, 0.15f));
             Mesh gateMesh = b.SaveMesh("Mine Gate", gate.ToMesh());
             Material gateMaterial = b.ShaderMaterial("BWM/Snowy", "Mine Timber", m => m.SetFloat("_SnowLine", 2f));
             var gates = new GameObject("Mine Gates");
             gates.transform.SetParent(b.Root.transform, false);
-            for (int i = 0; i < 3; i++)
+            for (int k = 0; k < gatePlaces.Count; k++)
             {
-                var go = new GameObject("Mine Gate " + (i + 1));
+                var go = new GameObject("Mine Gate " + (k + 1));
                 go.transform.SetParent(gates.transform, false);
-                go.transform.position = W3(Point(i, Threshold[i] - 2.5f, 0f), 0f);
-                go.transform.rotation = Quaternion.Euler(0f, Mathf.Atan2(Dir(i).x, Dir(i).y) * Mathf.Rad2Deg, 0f);
+                go.transform.position = gatePlaces[k].at;
+                go.transform.rotation = Quaternion.Euler(0f, gatePlaces[k].yaw, 0f);
                 go.AddComponent<MeshFilter>().sharedMesh = gateMesh;
                 go.AddComponent<MeshRenderer>().sharedMaterial = gateMaterial;
                 go.AddComponent<MeshCollider>().sharedMesh = gateMesh;
@@ -631,7 +899,13 @@ public static class WinterIsleMine
                 body.transform.SetParent(trip.transform, false);
                 body.AddComponent<MeshFilter>().sharedMesh = carMesh;
                 body.AddComponent<MeshRenderer>().sharedMaterial = carMaterial;
-                body.AddComponent<MeshCollider>().sharedMesh = carMesh;
+                // boxes to stand on and bump into, not the mesh: twelve moving mesh colliders would cost every frame
+                foreach (var box in new[] { (new Vector3(0f, 0.04f, -0.2f), new Vector3(1.9f, 0.14f, 2.8f)), (new Vector3(0f, 0.3f, 1.95f), new Vector3(1.96f, 0.5f, 1.6f)), (new Vector3(0f, 0.3f, -2.05f), new Vector3(1.96f, 0.5f, 0.95f)),
+                    (new Vector3(-0.93f, 0.25f, -0.2f), new Vector3(0.1f, 0.5f, 2.8f)), (new Vector3(0.93f, 0.25f, -0.2f), new Vector3(0.1f, 0.5f, 2.8f)) })
+                {
+                    BoxCollider collider = body.AddComponent<BoxCollider>();
+                    collider.center = box.Item1; collider.size = box.Item2;
+                }
                 var lampsGo = new GameObject("Lamps");
                 lampsGo.transform.SetParent(trip.transform, false);
                 lampsGo.AddComponent<MeshFilter>().sharedMesh = glowMesh;
@@ -650,9 +924,9 @@ public static class WinterIsleMine
             }
         }
 
-        Debug.Log("[BWM] Winter Isle mine: tunnels " + Sdk.F(Threshold[0]) + ", " + Sdk.F(Threshold[1]) + ", " + Sdk.F(Threshold[2]) + " m, open cuts " + Sdk.F(Threshold[0] - CutStart[0]) + ", "
-            + Sdk.F(Threshold[1] - CutStart[1]) + ", " + Sdk.F(Threshold[2] - CutStart[2]) + " m, least rock overhead " + Sdk.F(leastCover) + " m; " + crossCuts + " cross-cuts, " + sets + " timber sets, "
-            + lamps.Count + " lamps, track " + Sdk.F(trackLength) + " m, " + Trips + " mantrips");
-        if (leastCover < 1.5f) Debug.LogWarning("[BWM] Winter Isle mine: a tunnel comes within " + Sdk.F(leastCover) + " m of the surface");
+        Save();
+        Debug.Log("[BWM] Winter Isle mine: " + Stations.Count + " stations and the hall on a round of " + Sdk.F(trackLength) + " m (" + Sdk.F(tunnelLength) + " m of it in " + runs + " tunnels, "
+            + (sheds * Step).ToString("0") + " m under sheds), floor from " + Sdk.F(lowest) + " m to " + Sdk.F(Floor) + " m, least rock overhead " + Sdk.F(leastCover) + " m; " + crossCuts + " cross-cuts, "
+            + sets + " timber sets, " + lamps.Count + " lamps, " + gatePlaces.Count + " gates, " + Trips + " mantrips");
     }
 }
