@@ -66,9 +66,29 @@ function Update-BwmTreeMaps {
     if ($p.ExitCode -ne 0) { Write-Warning 'tools\treetex.py failed; the trees will be drawn without their textures.' }
 }
 
+# The pizzeria's atlas, normal map and logo decal (tools/pizzeria_art.py, tools/pizzeria_logo.py) are generated too:
+# about 30 MB of PNG for each regeneration, so they are not committed
+function Update-BwmPizzeriaArt {
+    $dir = Join-Path $Repo 'unity\Assets\Textures\Pizzeria'
+    foreach ($job in @(@('pizzeria_art.py', @('CastIronAtlas.png', 'CastIronNormals.png', 'CastIronAtlas.json')), @('pizzeria_logo.py', @('CastIronLogoInk.png')))) {
+        $script = Join-Path (Join-Path $Repo 'tools') $job[0]
+        $stale = $false
+        foreach ($f in $job[1]) {
+            $file = Join-Path $dir $f
+            if (-not (Test-Path $file) -or (Get-Item $file).LastWriteTimeUtc -lt (Get-Item $script).LastWriteTimeUtc) { $stale = $true }
+        }
+        if (-not $stale) { continue }
+        $p = Start-Process -FilePath python -ArgumentList ('"' + $script + '"') -PassThru -NoNewWindow
+        $null = $p.Handle
+        Set-BwmAffinity $p
+        $p.WaitForExit()
+        if ($p.ExitCode -ne 0) { Write-Warning ($job[0] + ' failed; the pizzeria cannot be built without it.') }
+    }
+}
+
 function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     if (-not (Test-Path $Unity)) { Write-Output "Unity editor not found at $Unity"; return 2 }
-    if ($Method -like 'Build*') { Update-BwmSnowMaps; Update-BwmTreeMaps }
+    if ($Method -like 'Build*') { Update-BwmSnowMaps; Update-BwmTreeMaps; Update-BwmPizzeriaArt }
     if (Get-Process Unity -ErrorAction SilentlyContinue) { Write-Output 'A Unity editor is already running; close it first (two editors cannot open one project).'; return 2 }
     # The editor only finds its licence through Unity Hub's licensing service, so the Hub must be running and signed in.
     if (-not (Get-Process 'Unity.Licensing.Client' -ErrorAction SilentlyContinue)) {

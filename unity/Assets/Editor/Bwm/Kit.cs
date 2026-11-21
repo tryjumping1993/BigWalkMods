@@ -918,9 +918,10 @@ namespace Bwm
         // the wire sags between them with a bulb about every 'spacing' metres. With 'onGround' the heights are above
         // the terrain at each post (use false on a pad). Decoration only: no collisions, except the posts.
         public static Piece LightString(PuzzleBuilder b, string name, IList<Vector3> posts, float sag = 0.4f, float spacing = 0.5f,
-            bool onGround = true, bool addPosts = true, int seed = 1)
+            bool onGround = true, bool addPosts = true, int seed = 1, Color[] bulbs = null)
         {
             if (posts.Count < 2) throw new Exception("A light string needs at least two posts");
+            Color[] palette = bulbs ?? BulbColors;      // 'bulbs': one colour (warm white festoons) or a set, instead of the Christmas colours
             Transform root = b.Root.transform;
             var tops = new List<Vector3>();      // in the root's local space
             for (int i = 0; i < posts.Count; i++)
@@ -968,7 +969,7 @@ namespace Bwm
                 for (int n = 0; n < count; n++)
                 {
                     Vector3 p = Point((n + 0.5f) / count) + Vector3.down * 0.06f;
-                    Color color = BulbColors[bulb++ % BulbColors.Length];
+                    Color color = palette[bulb++ % palette.Length];
                     float phase = (float)random.NextDouble();
                     int v = verts.Count;
                     const float r = 0.04f, h = 0.065f;

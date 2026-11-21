@@ -383,3 +383,12 @@ and finished assets for the puzzles.
   ovens over pizza boxes, the sink, the pot shelf with copper pans) and the brick back hall. Two carryable disc golf
   baskets and six frisbees on the terrace. Seen in the game: the front, the dining room, the kitchen and the stilts;
   no snow falls inside. Not tried: sitting in the seats or throwing the frisbees with a controller.
+- **A railway round the island, the pizzeria rebuilt, a trailer (user, 2026-11-21):** the railway became a loop round
+  the whole island, run clockwise, with nine stations by the puzzles (Plaza, East Lowland, Airport, South Shore, Seal
+  Point, West Cliffs, Cirque Gate, North Shore, Northwest), plus the old line's climb from Cirque Gate to the summit as
+  a double-track spur. Only the host runs the timetable and shares it through the pack's `RailControl` script; a train
+  stops 70 m behind where the one ahead will stop, and sets off at once when a player pushes the throttle lever in any
+  of its cars. Cast Iron Pizza was rebuilt from a written critique (scored 3.4/10): the real proportions and layout of
+  the shop, a new atlas with normal and gloss maps, real glass, the logo centred on its lettering, three lit zones with
+  baked shading and lamps, and much more furniture and detail inside and out. A 75-second fly-over trailer, shot in the
+  game with the HUD hidden and no sound or text added (`tools/trailer`).

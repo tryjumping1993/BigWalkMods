@@ -62,13 +62,20 @@ namespace Bwm
             foreach (PuzzleDef d in Defs()) Debug.Log("[BWM] Puzzle: " + d.Name + " (" + d.GetType().Name + ", " + d.Footprint.x + " x " + d.Footprint.y + " m)");
         });
 
-        // -bwmPuzzle <Name> [-bwmResite] [-bwmNoPreview] [-bwmNoExport] [-bwmAllowIssues]
+        // -bwmPuzzle <Name>[,<Name>...] [-bwmResite] [-bwmNoPreview] [-bwmNoExport] [-bwmAllowIssues]: several names, comma
+        // separated, are built one after another in one editor session, in the order given
         public static void Build() => Run(() =>
         {
-            string name = Arg("-bwmPuzzle") ?? throw new Exception("Pass -bwmPuzzle <Name>");
-            PuzzleDef def = Defs().FirstOrDefault(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))
-                ?? throw new Exception("No puzzle named '" + name + "'. Known: " + string.Join(", ", Defs().Select(d => d.Name)));
-            BuildOne(def);
+            string names = Arg("-bwmPuzzle") ?? throw new Exception("Pass -bwmPuzzle <Name>");
+            var defs = new List<PuzzleDef>();
+            foreach (string raw in names.Split(','))
+            {
+                string name = raw.Trim();
+                if (name.Length == 0) continue;
+                defs.Add(Defs().FirstOrDefault(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new Exception("No puzzle named '" + name + "'. Known: " + string.Join(", ", Defs().Select(d => d.Name))));
+            }
+            foreach (PuzzleDef def in defs) BuildOne(def);
         });
 
         public static void BuildAll() => Run(() => { foreach (PuzzleDef d in Defs()) BuildOne(d); });

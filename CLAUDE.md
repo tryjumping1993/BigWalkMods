@@ -21,6 +21,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
+| (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods	railer\`. `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
 | `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
 
 Build output is only the framework's `[BWM]` lines; the full Unity log is `logs\unity-<command>.log`. Exit
@@ -140,18 +141,26 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   fifteen, the railway at twenty. A save stores how many gourds, and fills the list from the first. The SDK's
   plinths take only modded gourds, which is how "island gourds only" holds. An idle player falls asleep (red, then
   dark screen): keep that in mind when a test sits still.
-- **The railway** (`WinterIsleRail.cs`, built by the island's pack): `tools\railroute.py` finds the line (a dynamic
-  programme over the angle round the peak: two laps clockwise, climbing with the angle, then a rack spiral inside
-  the summit) and writes `unity\Land\WinterIsle.rail`; run it again only to change the route, then rebuild
-  WinterIsle. The build sorts the line into ground (benched: island step 3c), tunnel (stone portals with hoods over
-  the cut in the hillside, `InCut`) and trestle, lays double track (single at the termini), seven stations, and
-  eight trains of a locomotive and two coaches (eight `PuzzleSeat`s each), and writes `WinterIsle.railline` beside
-  the Winter Walk plugin. `winterwalk\TrainDriver.cs` shuttles them on the network clock at 9 m/s (the game's train
-  runs at 3), five minutes at every station, the locomotive always downhill (a rack railway's), once "Train Plinth
-  1".."5" hold gourds; `game 'set?path=WinterWalk.TrainDriver.ForceOpen&value=true'` runs them now and `TimeScale`
-  speeds the timetable. The tower (a water tower) stands beside the Plaza Halt (`WinterIsleRail.TowerSpot`). The
-  line ends 60 m below the crest; the summit lift (a second `Chairlift` in the island's step 11b, a third
-  `GondolaDriver` in Winter Walk) climbs from beyond its buffers to the summit.
+- **The railway** (`WinterIsleRail.cs`, built by the island's pack) is a network in `unity\Land\WinterIsle.railnet`
+  (`LINE name closed|open`, `P x y z` every 4 m in running order, `S index name`): a single-track **loop** round the
+  island, run clockwise, with nine stations by the puzzles (Plaza, East Lowland, Airport, South Shore, Seal Point, West
+  Cliffs, Cirque Gate, North Shore, Northwest), and the double-track **summit spur** from Cirque Gate up to the summit
+  (High Shelf, Summit). `tools\railnet\graph\route.py` designed the loop (`tools\railnet\spline\route.py` is an
+  alternative design); without the network file the old single line (`unity\Land\WinterIsle.rail`, from `tools\railroute.py`)
+  is built. The build sorts each line into ground (benched: island step 3c), tunnel (stone portals with hoods over the
+  cut, `InCut`) and trestle, lays the stations, about six trains on the loop and two on the spur (a locomotive and two
+  coaches with eight `PuzzleSeat`s each, a throttle lever in every car), and writes `WinterIsle.railline` beside the
+  Winter Walk plugin (`LINE`, `P`, `S`, `TRAIN`, `L` lamp lines). `winterwalk\TrainDriver.cs` runs them at 9 m/s (the
+  game's train runs at 3), five minutes at each station, once "Train Plinth 1".."5" hold gourds. **Only the host
+  decides:** it plans each train's moves (accelerate, run, brake to a stop) and publishes them through the pack's
+  `RailControl` script (`unity\Assets\PuzzleScripts\RailControl.cs`, an SDK `SyncedString`); every PC places the cars
+  from those plans and the network clock. A train never plans to stop closer than 70 m behind where the train ahead
+  will stop (moving block), creeps up when held, and sets off at once when a player pushes a throttle lever (a
+  `Button Sim` alone in its group, whose success calls `RailControl.Throttle`, which runs on the host). On the spur the
+  locomotive is always downhill. For tests: `TrainDriver.ForceOpen`, `TestThrottle` (a train's number: as if its lever
+  were pushed), `State`. The tower (a water tower) stands beside the Plaza station
+  (`WinterIsleRail.TowerSpot`). The summit lift (a second `Chairlift` in the island's step 11b, a third
+  `GondolaDriver` in Winter Walk) climbs from beyond the spur's buffers to the summit.
 - **The airport** (`WinterIsleAirport.cs`, the island's pack): a runway on the south-east shelf, a hangar with three
   biplanes behind doors ("Airport Gates"), a fourth on the apron, the control tower (The Tree's, with "Airport
   Plinth 1".."5"), and the summit's airstrip, a deck on stilts out north-west from the crest with two more.
@@ -159,14 +168,23 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   turns and climbs towards where the camera looks, and jump climbs out once stopped on the ground. For tests:
   `PlaneDriver.ForceOpen`, `TestBoard`, `TestThrottle`, `TestYaw`, `TestPitch`, `TestLeave`. Other players see the
   pilot fly but not the plane. `game actions` lists the game's input actions (Rewired) with their live values.
-- **Cast Iron Pizza** (`CastIronPizzaPuzzle.cs`, a scenery pack): the user's own restaurant, from their photos, on a
-  terrace built out level from the summit over the south-west face (stone near the summit, timber stilts below).
-  Its pictures (the user's logo `tools\art\cast-iron-logo.png`, signs, cat paintings, chalkboards, brick, planks)
-  are drawn by `tools\pizzeria_art.py` into one atlas, used through `BWM/Picture` (`_Indoor` 1: lit by a warm room
-  light instead of the sky). Seats at the bar and booths; three skillet pizzas to carry. "Indoors Pizzeria" (an
-  empty object sized to the room) stops the snowfall inside (MineDriver). Vertex colours are read as linear: for a
-  colour to look as written, use `new Color(...).linear` (the pizzeria does; the older packs were tuned by eye).
-  **Summit Disc Golf** (`SummitDiscGolfPuzzle.cs`) puts two carryable baskets and six frisbees on its terrace.
+- **Cast Iron Pizza** (`CastIronPizzaPuzzle.cs`, a scenery pack): the user's own restaurant, from their photos and
+  logo, on a terrace built out level from the summit over the south-west face (a stone bastion near the summit, a
+  braced trestle further out), at about the real shop's proportions (9 x 14 m, one door, two windows). Coordinates in
+  the code are the shop's own (x right looking out of the door, z out towards the summit). It is drawn in three room
+  zones (dining warm, kitchen and hall cool), each with its own `BWM/Picture` material and renderer, a low room light
+  and shading baked into vertex colours (`Occlusion`), plus real lamps: empty objects named
+  `Room Light <n> <hex colour> <range> <intensity>` that `winterwalk\RoomLights.cs` turns into point lights within
+  70 m of the camera. Pictures and surfaces (brick, oak, beadboard, steel, the signs, cats, chalkboards, ovens...) are
+  one 4096 atlas with a normal map and gloss in alpha, `tools\pizzeria_art.py` (layout and each surface's real repeat
+  size in `CastIronAtlas.json`); the user's logo (`toolsrt\cast-iron-logo.png`) is also a decal centred on its
+  lettering, `tools\pizzeria_logo.py`. Those PNGs are not committed: `bwm.ps1 build` regenerates them when a script is
+  newer. Glass and the window's logo use `BWM/Picture` with `_AlphaMode` 1 (alpha is opacity, transparent queue).
+  The outer walls stop 2 cm short of the rooms' wall planes: coplanar faces z-fight in the game. Seats at the bar,
+  booths, tables and on the terrace; three skillet pizzas to carry. "Indoors Pizzeria" (an empty object sized to the
+  shop) stops the snowfall inside (MineDriver). Vertex colours are read as linear: for a colour to look as written,
+  use `new Color(...).linear` (the pizzeria's `B(r, g, b)` does). **Summit Disc Golf** (`SummitDiscGolfPuzzle.cs`)
+  puts two carryable baskets and six frisbees on its terrace.
 - **Puzzles' far parts:** a `PuzzleDef` can list `ExtraSites` (world x, z, radius) that the island levels and keeps
   clear like its site (`LookoutsPuzzle.cs`, whose four lookouts are kilometres apart). No paths are drawn to sites
   west of x = -2300; the train, the mine and the planes reach them.

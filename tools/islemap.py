@@ -53,16 +53,23 @@ dr.line([P(*plaza), P(*summit)], fill=(200, 30, 30, 255), width=4)
 line_file = os.path.join(REPO, "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.railline")
 rail_stations = []
 if os.path.exists(line_file):
-    pts, kinds = [], []
+    nets = []      # each line: its points (track middles), kinds, station indices
     for l in open(line_file):
         q = l.split()
-        if q and q[0] == "P": pts.append(((float(q[1]) + float(q[4])) / 2, (float(q[3]) + float(q[6])) / 2)); kinds.append(int(q[7]))
-        elif q and q[0] == "S": rail_stations.append(int(q[1]))
-    for i in range(len(pts) - 1):
-        if kinds[i] == 1 and (i // 3) % 2: continue
-        dr.line([P(*pts[i]), P(*pts[i + 1])], fill=(120, 20, 30, 255) if kinds[i] != 1 else (120, 20, 30, 170), width=5 if kinds[i] != 1 else 3)
-    for i in rail_stations:
-        px, pz = P(*pts[i]); dr.rectangle([px - 8, pz - 8, px + 8, pz + 8], fill=(255, 255, 255, 255), outline=(120, 20, 30, 255), width=3)
+        if not q: continue
+        if q[0] == "LINE": nets.append(([], [], [], len(q) > 2 and q[2] == "closed"))
+        elif q[0] == "P":
+            if not nets: nets.append(([], [], [], False))
+            if len(q) >= 8: nets[-1][0].append(((float(q[1]) + float(q[4])) / 2, (float(q[3]) + float(q[6])) / 2)); nets[-1][1].append(int(q[7]))
+            elif len(q) >= 5: nets[-1][0].append((float(q[1]), float(q[3]))); nets[-1][1].append(int(q[4]))
+        elif q[0] == "S" and nets: nets[-1][2].append(int(q[1]))
+    for pts, kinds, stops, closed in nets:
+        if closed and pts: pts.append(pts[0]); kinds.append(kinds[-1])      # a loop joins its last point to its first
+        for i in range(len(pts) - 1):
+            if kinds[i] == 1 and (i // 3) % 2: continue
+            dr.line([P(*pts[i]), P(*pts[i + 1])], fill=(120, 20, 30, 255) if kinds[i] != 1 else (120, 20, 30, 170), width=5 if kinds[i] != 1 else 3)
+        for i in stops:
+            px, pz = P(*pts[i]); dr.rectangle([px - 8, pz - 8, px + 8, pz + 8], fill=(255, 255, 255, 255), outline=(120, 20, 30, 255), width=3)
 # the airport's runway and the summit's airstrip (WinterIsleAirport.cs)
 def strip(cx, cz, bearing, u0, u1, half, colour):
     a = math.radians(bearing); fx, fz = math.sin(a), math.cos(a); rx, rz = fz, -fx
