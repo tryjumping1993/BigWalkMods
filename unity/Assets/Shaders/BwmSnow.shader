@@ -295,6 +295,7 @@ Shader "BWM/Snow"
                     + 0.6 * smoothstep(0.92, 0.99, 1.0 - abs(ValueNoise(float2(faceZ.x * 0.03, faceZ.y * 0.14) + 1.0) * 2.0 - 1.0));
                 float cracks = saturate((jointX * tw.x + jointZ * tw.z) / max(tw.x + tw.z, 0.001)) * saturate(1.0 - tw.y * 1.5);
                 float3 rockColor = _RockColor.rgb * lerp(0.82, 1.1, strata) * rockTex * 1.6 * lerp(0.72, 1.18, mottle) * (1.0 - cracks * 0.14);
+                rockColor = lerp(rockColor, dot(rockColor, float3(0.34, 0.33, 0.33)) * float3(0.93, 0.98, 1.07), 0.7);      // cold grey on the cliffs too, not mud brown
                 float3 bareRock = lerp(rockColor, dot(rockColor, float3(0.34, 0.33, 0.33)) * float3(0.93, 0.98, 1.07), 0.8);      // alpine rock is cold grey, not sandstone
                 // snow caught on the rock's flatter parts, in patches with an edge (a soft dusting reads as a smear)
                 float caught = Crisp(strata * 0.6 + Noise3(positionWS * 1.3 + 3.0) * 0.25 + Noise3(positionWS * 4.1) * 0.15, grainN.x * 0.08, 0.54);

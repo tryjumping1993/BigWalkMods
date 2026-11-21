@@ -9,7 +9,7 @@ ground(){ c "ground?x=$1&z=$2" | sed -n 's/^ground: \(-\{0,1\}[0-9.]*\).*/\1/p';
 py(){ python -c "import math; print(round($1, 2))"; }
 PX=-2250; PZ=-1900; B=0.32
 sm(){ echo "(lambda t: t*t*(3-2*t))(min(1,max(0,$1)))"; }
-swing(){ python -c "import math; print(round(0.065*math.sin($1/235.0+2.1)*$(sm "($1-300)/200.0"), 4))"; }
+swing(){ python -c "import math; print(round(0.1*math.sin($1/150.0+2.1)*$(sm "($1-300)/200.0"), 4))"; }      # as RunCentre(1, d) in WinterIslePuzzle.cs: keep in step
 mkdir -p shots/mountain
 c "set?path=WinterWalk.GondolaDriver.ForceOpen&value=true" >/dev/null      # the cabins out on the line
 c "time?hour=13" >/dev/null
@@ -20,7 +20,7 @@ air-east      0.00 2500 a520   0.00  300 a260
 air-south    -1.35 1700 a430   0.00  100 a240
 air-north     1.50 1600 a380   0.00  100 a240
 air-west      3.14 1500 a420   0.00    0 a300
-foot          0.00 1420 g2.2   0.00  600 a330
+foot          0.06 1440 g2.2   0.00  600 a330
 lower-run     0.00 1150 g2.0   0.00  800 g2
 mid-run-down  0.00  700 g2.2   0.00 1300 g2
 mid-run-up    0.00  800 g2.0   0.00  400 g2

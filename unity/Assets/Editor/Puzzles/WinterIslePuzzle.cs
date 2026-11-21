@@ -219,9 +219,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         if (ski > 0f)
         {
             float alongSpur = (p - Peak).magnitude;
-            h += ski * 9f * (1f - Smooth(Piste(p) / 0.9f)) * Smooth((alongSpur - 520f) / 140f) * (1f - Smooth((alongSpur - 1180f) / 140f)) * (0.55f + 0.9f * Mathf.PerlinNoise(p.x * 0.006f + 3.1f, p.y * 0.006f + 7.9f));
+            h += ski * 3.5f * (1f - Smooth(Piste(p) / 0.9f)) * Smooth((alongSpur - 520f) / 140f) * (1f - Smooth((alongSpur - 1180f) / 140f)) * (0.55f + 0.9f * Mathf.PerlinNoise(p.x * 0.006f + 3.1f, p.y * 0.006f + 7.9f));
         }
-        float berm = ski > 0f ? ski * 0.7f * Mathf.Clamp01(1f - Mathf.Abs(Piste(p) - 0.4f) / 0.25f) : 0f;      // a low bank along each piste's edge
+        float berm = 0f;      // (a bank along each piste's edge showed bare and drew a brown outline round every run)      // a low bank along each piste's edge
         return Mathf.Max(0f, h + Mathf.Lerp(rough, roll, ski * (1f - rib)) * body + rib * ski * 16f * body + berm);
     }
 
@@ -1117,6 +1117,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float beside = (1f - Smooth((PathDistance(p) - 2.5f) / 9f)) * (1f - trodden[k]) * Smooth((Mathf.PerlinNoise(p.x * 0.065f + 41.7f, p.y * 0.065f + 9.3f) - 0.48f) / 0.14f) * 0.8f;
             bare = Mathf.Max(bare, Mathf.Max(worn, beside));
             if (under[k].x < 0f) bare *= 1f + under[k].x;      // a groomed piste is snow all over
+            else if (MountainHeight(At(k)) > 4f && Piste(At(k)) > 0.001f) bare *= 0.25f;      // ...and so is its edge under the trees
             float sand = beach[k] * (1f - Smooth((height[k] - 0.4f) / 0.8f));      // a strip by the water; above it the beach lies under snow
             tint[k] = new Color(1f - trodden[k], bare, sand, Mathf.Clamp01(0.5f + convex * 0.11f));      // alpha: hollow (0) .. crest (1)
         }
