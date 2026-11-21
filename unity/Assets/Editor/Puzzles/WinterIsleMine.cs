@@ -28,7 +28,7 @@ public static class WinterIsleMine
     public const float Floor = 30f;                 // the hall's level, metres above the sea
     public const float HalfWidth = 1.45f, WallHeight = 1.25f, Crown = 1.75f;      // a tunnel: just room for a mantrip and the people sitting in it
     public const float HallRadius = 26f, RingRadius = 12f, HallHeight = 13f, PillarRadius = 5f;
-    public const float StationRadius = 9f, TowerStationRadius = 14f;      // the level ground at a station
+    public const float StationRadius = 9f, TowerStationRadius = 24f;      // the level ground at a station (the tower's holds the mining yard too)
     public const float LowestFloor = 1.6f, Cover = 3.4f, Grade = 0.14f;
     public const int Trips = 12;
 
@@ -878,6 +878,27 @@ public static class WinterIsleMine
             }
         }
 
+        // ---- the portals: a heavy timber frame round every mouth that opens to the air, a little roof over it, and a
+        //      string of Christmas lights along its lintel ----
+        {
+            var portal = new MeshBuilder();
+            for (int k = 0; k < gatePlaces.Count; k++)
+            {
+                Vector3 at = gatePlaces[k].at - root;
+                Quaternion turn = Quaternion.Euler(0f, gatePlaces[k].yaw, 0f);
+                Vector3 right = turn * Vector3.right, back = turn * Vector3.forward;
+                float postH = Crown + 0.5f;
+                foreach (int side in new[] { -1, 1 })
+                    Kit.AddBox(portal, at + right * (side * (HalfWidth + 0.3f)) - back * 0.2f, new Vector3(0.45f, postH, 0.45f), Timber * 0.85f, gatePlaces[k].yaw);
+                Kit.AddBox(portal, at + Vector3.up * postH - back * 0.2f, new Vector3(HalfWidth * 2f + 1.3f, 0.45f, 0.5f), Timber * 0.75f, gatePlaces[k].yaw);      // the lintel
+                Kit.AddBox(portal, at + Vector3.up * (postH + 0.45f) + back * 0.3f, new Vector3(HalfWidth * 2f + 1.9f, 0.14f, 1.5f), Timber * 0.6f, gatePlaces[k].yaw);      // the hood
+                Kit.AddBox(portal, at + Vector3.up * (postH + 0.05f) + back * 0.08f, new Vector3(1.4f, 0.35f, 0.04f), new Color(0.9f, 0.86f, 0.76f), gatePlaces[k].yaw);      // a name board
+                Vector3 l = gatePlaces[k].at + right * (HalfWidth + 0.55f) + back * 0.2f + Vector3.up * (postH + 0.3f), r = gatePlaces[k].at - right * (HalfWidth + 0.55f) + back * 0.2f + Vector3.up * (postH + 0.3f);
+                Kit.LightString(b, "Portal Lights " + (k + 1), new List<Vector3> { new Vector3(l.x - root.x, l.y - root.y, l.z - root.z), new Vector3(r.x - root.x, r.y - root.y, r.z - root.z) }, 0.25f, 0.3f, false, false, 400 + k);
+            }
+            b.MeshPiece("Mine Portals", portal.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true);
+        }
+
         Piece walls = b.MeshPiece("Mine Walls", solid.ToMesh(), mineMaterial);
         walls.Go.GetComponent<MeshRenderer>().enabled = false;
 
@@ -994,5 +1015,95 @@ public static class WinterIsleMine
         Debug.Log("[BWM] Winter Isle mine: " + Stations.Count + " stations and the hall on a round of " + Sdk.F(trackLength) + " m (" + Sdk.F(tunnelLength) + " m of it in " + runs + " tunnels, "
             + (sheds * Step).ToString("0") + " m under sheds), floor from " + Sdk.F(lowest) + " m to " + Sdk.F(Floor) + " m, least rock overhead " + Sdk.F(leastCover) + " m; " + crossCuts + " cross-cuts, "
             + sets + " timber sets, " + lamps.Count + " lamps, " + gatePlaces.Count + " gates, " + Trips + " mantrips");
+        Yard(b, root, heightAt);
+    }
+
+    // The mining yard round the mine tower (whose headframe The Tree builds, at Tower): a coal tipple on a trestle over a
+    // short siding with three loaded tubs on it, heaps of coal under snow, the lamp house with its lit windows, a sign
+    // with the crossed pick and hammer, barrels and a stack of pit props, and lights strung round it all
+    static void Yard(PuzzleBuilder b, Vector3 root, Func<Vector2, float> heightAt)
+    {
+        if (Stations.Count == 0) return;
+        Vector2 away = -TowerFacing, along = new Vector2(TowerFacing.y, -TowerFacing.x);
+        Vector2 Y(float out_, float side) => Tower + away * out_ + along * side;
+        Vector3 G(Vector2 q, float up = 0f) => new Vector3(q.x - root.x, heightAt(q) + up - root.y, q.y - root.z);
+        float yaw = Mathf.Atan2(along.x, along.y) * Mathf.Rad2Deg, facing = Mathf.Atan2(TowerFacing.x, TowerFacing.y) * Mathf.Rad2Deg;
+        var mb = new MeshBuilder();
+        var glow = new MeshBuilder();
+        Color timber = new Color(0.45f, 0.31f, 0.19f), iron = new Color(0.22f, 0.22f, 0.25f), rust = new Color(0.45f, 0.22f, 0.12f), coal = new Color(0.08f, 0.08f, 0.09f);
+        // the siding: two rails on sleepers, parallel to the line, with three tubs on it
+        Vector2 sidingA = Y(6f, -11f), sidingB = Y(6f, 11f);
+        for (float t = 0f; t <= 1.001f; t += 1f / 22f)
+            Kit.AddBox(mb, G(Vector2.Lerp(sidingA, sidingB, t), -0.05f), new Vector3(1.5f, 0.12f, 0.22f), timber * 0.8f, yaw + 90f);
+        foreach (int sgn in new[] { -1, 1 })
+        {
+            Vector2 ra = sidingA + away * (sgn * 0.45f), rb = sidingB + away * (sgn * 0.45f);
+            Kit.AddBox(mb, (G(ra, 0.07f) + G(rb, 0.07f)) * 0.5f, new Vector3(0.07f, 0.1f, (rb - ra).magnitude), iron, yaw);
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            Vector2 tub = Vector2.Lerp(sidingA, sidingB, 0.2f + i * 0.17f);
+            Vector3 f = G(tub, 0.12f);
+            Kit.AddBox(mb, f + Vector3.up * 0.25f, new Vector3(0.95f, 0.65f, 1.4f), rust * (0.9f + 0.1f * i), yaw);      // the tub
+            Kit.AddBox(mb, f + Vector3.up * 0.88f, new Vector3(0.85f, 0.18f, 1.25f), coal, yaw);                          // its load
+            foreach (int sx in new[] { -1, 1 })
+                foreach (int sz in new[] { -1, 1 })
+                    Kit.AddBox(mb, f + Quaternion.Euler(0f, yaw, 0f) * new Vector3(sx * 0.48f, 0f, sz * 0.45f), new Vector3(0.08f, 0.3f, 0.3f), iron, yaw);      // wheels
+        }
+        // the tipple: a timber trestle over the siding's far end with a hopper on it and a chute down to the tubs
+        Vector2 tip = Y(6f, 8f);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(mb, G(tip + away * (sx * 1.4f) + along * (sz * 1.6f)), new Vector3(0.3f, 4.2f, 0.3f), timber, yaw);
+        Kit.AddBox(mb, G(tip, 4.2f), new Vector3(3.4f, 0.25f, 3.8f), timber * 0.85f, yaw);
+        Kit.AddBox(mb, G(tip, 4.45f), new Vector3(2.4f, 1.6f, 2.4f), timber * 0.75f, yaw);                       // the hopper
+        Kit.AddBox(mb, G(tip, 6.05f), new Vector3(2.9f, 0.2f, 2.9f), new Color(0.55f, 0.16f, 0.13f), yaw);      // its roof
+        Kit.AddBox(mb, G(tip - along * 1.6f, 2.4f), new Vector3(0.7f, 0.25f, 2.2f), iron, yaw + 25f);           // the chute
+        // coal heaps, black under a cap of snow
+        Material coalMaterial = b.ShaderMaterial("BWM/Snowy", "Coal", m => m.SetColor("_Tint", new Color(0.12f, 0.12f, 0.13f)));
+        foreach (var (o, sd, r, h) in new[] { (11f, 6f, 3.2f, 1.8f), (12.5f, 10f, 2.4f, 1.3f), (13f, 2f, 2.0f, 1.0f) })
+        {
+            Vector2 at = Y(o, sd);
+            Piece heap = b.MeshPiece("Coal Heap", Kit.Mound(r, h, (int)(o * 7 + sd), 8, 18), coalMaterial, true);
+            heap.Transform.position = b.Root.transform.position + G(at, -0.1f);
+        }
+        // the lamp house: a cabin facing the line, its windows lit
+        Kit.AddCabin(mb, glow, G(Y(11f, -7f), -0.05f), new Vector2(5f, 6.5f), facing, 6061);
+        // the sign: a red board on two posts by the siding, a pick and a hammer crossed on it
+        Vector2 sign = Y(2.5f, -12f);
+        Vector3 sf = G(sign);
+        Quaternion st = Quaternion.Euler(0f, facing, 0f);
+        Kit.AddBox(mb, sf + st * new Vector3(-1.1f, 0f, 0f), new Vector3(0.16f, 2.6f, 0.16f), timber, facing);
+        Kit.AddBox(mb, sf + st * new Vector3(1.1f, 0f, 0f), new Vector3(0.16f, 2.6f, 0.16f), timber, facing);
+        Kit.AddBox(mb, sf + st * new Vector3(0f, 1.5f, 0.1f), new Vector3(2.4f, 1.0f, 0.1f), new Color(0.6f, 0.12f, 0.1f), facing);
+        Kit.AddBox(mb, sf + st * new Vector3(0f, 1.62f, 0.17f), new Vector3(0.08f, 0.75f, 0.04f), new Color(0.9f, 0.86f, 0.76f), facing + 0f);      // the handles
+        Kit.AddBox(mb, sf + st * new Vector3(0f, 1.62f, 0.18f) + Vector3.up * 0.0f, new Vector3(0.75f, 0.08f, 0.04f), new Color(0.9f, 0.86f, 0.76f), facing);
+        Kit.AddBox(mb, sf + st * new Vector3(-0.3f, 2.25f, 0.19f), new Vector3(0.45f, 0.12f, 0.05f), new Color(0.9f, 0.86f, 0.76f), facing);      // the pick's head
+        Kit.AddBox(mb, sf + st * new Vector3(0.35f, 1.48f, 0.19f), new Vector3(0.12f, 0.3f, 0.05f), new Color(0.9f, 0.86f, 0.76f), facing);       // the hammer's
+        // barrels and a stack of pit props by the lamp house
+        for (int i = 0; i < 4; i++) Kit.AddDisc(mb, G(Y(8.5f, -10.5f + i * 0.7f)), 0.32f, 0.9f, i % 2 == 0 ? rust : iron, 12);
+        for (int i = 0; i < 9; i++)
+        {
+            int row = i < 4 ? 0 : i < 7 ? 1 : 2;
+            int inRow = row == 0 ? i : row == 1 ? i - 4 : i - 7;
+            Vector2 prop = Y(14.5f, -4f + inRow * 0.32f + row * 0.16f);
+            Kit.AddBox(mb, G(prop, 0.15f + row * 0.28f), new Vector3(0.28f, 0.28f, 3f), timber * 1.1f, facing);
+        }
+        for (int i = 0; i < 10; i++)      // the posts for the lights strung round the yard (below)
+        {
+            float a = Mathf.PI * 2f * i / 10f;
+            Kit.AddBox(mb, G(Y(8f, 0f) + away * (Mathf.Cos(a) * 9f) + along * (Mathf.Sin(a) * 14f)), new Vector3(0.12f, 2.68f, 0.12f), timber);
+        }
+        b.MeshPiece("Mining Yard", mb.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true);
+        b.MeshPiece("Mining Yard Windows", glow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+        // lights strung round the yard on posts
+        var ring = new List<Vector3>();
+        for (int i = 0; i <= 10; i++)
+        {
+            float a = Mathf.PI * 2f * i / 10f;
+            Vector2 q = Y(8f, 0f) + away * (Mathf.Cos(a) * 9f) + along * (Mathf.Sin(a) * 14f);
+            ring.Add(new Vector3(q.x - root.x, heightAt(q) + 2.6f - root.y, q.y - root.z));      // (from the island's own heights: the framework's ground is last build's)
+        }
+        Kit.LightString(b, "Yard Lights", ring, 0.35f, 0.5f, false, false, 61);
     }
 }

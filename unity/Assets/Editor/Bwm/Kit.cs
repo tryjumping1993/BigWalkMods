@@ -256,8 +256,13 @@ namespace Bwm
             AddGlow(glow, P(w * 0.22f, 1.55f, d / 2f + 0.03f), new Vector3(1.0f, 0.85f, 0.06f), yaw, warm, R(0f, 1f));
             AddGlow(glow, P(w / 2f + 0.03f, 1.55f, 0f), new Vector3(0.06f, 0.85f, 1.1f), yaw, warm, R(0f, 1f));
             AddGlow(glow, P(-w / 2f - 0.03f, 1.55f, d * 0.15f), new Vector3(0.06f, 0.85f, 1.1f), yaw, warm, R(0f, 1f));
-            // a wreath on the door
-            AddGlow(glow, P(-w * 0.18f, 1.75f, d / 2f + 0.1f), new Vector3(0.45f, 0.45f, 0.05f), yaw, new Color(0.15f, 0.5f, 0.2f), 0.5f);
+            // a wreath on the door: a ring of greenery with a red bow at its foot
+            for (int k = 0; k < 12; k++)
+            {
+                float a = 2f * Mathf.PI * k / 12f;
+                AddBall(mb, P(-w * 0.18f + Mathf.Cos(a) * 0.2f, 1.75f + Mathf.Sin(a) * 0.2f, d / 2f + 0.1f), 0.075f, new Color(0.1f, 0.34f, 0.16f));
+            }
+            AddBall(mb, P(-w * 0.18f, 1.55f, d / 2f + 0.14f), 0.06f, new Color(0.8f, 0.1f, 0.1f));
         }
 
         // A lantern on a post beside a trail: a dark iron post with a warm glowing lamp under a little snow-capped hood
@@ -516,7 +521,8 @@ namespace Bwm
                     float a = offset + 2f * Mathf.PI * k / count + R(-0.25f, 0.25f);
                     float len = reach * R(0.82f, 1.12f);
                     // radians below horizontal at the base; the youngest shoots, at the top, point upwards
-                    float droop = Mathf.Lerp(0.38f, 0.12f, t) * (clear > 0f ? 0.25f : 1f) + (1f - girth) * 0.55f - Mathf.Clamp01((t - 0.72f) / 0.28f) * 0.8f + R(-0.06f, 0.06f);
+                    // (only a little upward at the top: boughs sweeping up there made the crown a feather duster)
+                    float droop = Mathf.Lerp(0.38f, 0.12f, t) * (clear > 0f ? 0.25f : 1f) + (1f - girth) * 0.55f - Mathf.Clamp01((t - 0.72f) / 0.28f) * 0.25f + R(-0.06f, 0.06f);
                     var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                     Vector3 root = foot + Vector3.up * y + dir * trunkR * 0.8f;
                     var inner = new Color(tint.r, tint.g, tint.b, 0.25f);
@@ -543,17 +549,32 @@ namespace Bwm
                     }
                 }
             }
-            // the top: a narrow cone of short sprays hugging the axis, shorter towards the tip, so the crown draws in to a
-            // soft point (spreading upward sprays made a palm-tree tuft, upright cards a glassy spike)
+            // the top: a slim leader up the middle (the core's dark green, not a card) with small whorls of short,
+            // nearly level sprays up it, each smaller than the one below, so the crown ends in a narrow spire
+            // (a tuft of sprays pointing up read as a feather duster or a palm crown)
             {
                 var top = new Color(tint.r, tint.g, tint.b, 1f);
-                int tuft = detail >= 0.7f ? 9 : 5;
-                for (int k = 0; k < tuft; k++)
+                var leaderColour = new Color(tint.r, tint.g, tint.b, 0.6f);
+                float leaderBase = height * 0.86f, leaderR = Mathf.Max(0.025f, trunkR * 0.22f);
+                for (int s = 0; s < 6; s++)
                 {
-                    float f = (float)k / Mathf.Max(1, tuft - 1);
-                    float a = spin + k * 2.39996f;
-                    var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                    Bough(foot + Vector3.up * height * Mathf.Lerp(0.84f, 0.99f, f), d, height * Mathf.Lerp(0.075f, 0.022f, f), -Mathf.Lerp(0.95f, 1.35f, f), 0.5f, top, top, top, false);
+                    float a0 = 2f * Mathf.PI * s / 6 + spin, a1 = 2f * Mathf.PI * (s + 1) / 6 + spin;
+                    Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
+                    Vector3 apex = foot + Vector3.up * height * 1.01f;
+                    mb.QuadUV(foot + Vector3.up * leaderBase + d0 * leaderR, foot + Vector3.up * leaderBase + d1 * leaderR, apex, apex,
+                        new Vector2(-2f, 0f), new Vector2(-2f, 0f), new Vector2(-2f, 1f), new Vector2(-2f, 1f), leaderColour, leaderColour, leaderColour, leaderColour);
+                }
+                int whorls = detail >= 0.7f ? 3 : 2;
+                for (int w = 0; w < whorls; w++)
+                {
+                    float f = (float)w / Mathf.Max(1, whorls - 1);
+                    int sprays = detail >= 0.7f ? 4 : 3;
+                    for (int k = 0; k < sprays; k++)
+                    {
+                        float a = spin + w * 2.39996f + 2f * Mathf.PI * k / sprays;
+                        var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                        Bough(foot + Vector3.up * height * Mathf.Lerp(0.895f, 0.965f, f), d, height * Mathf.Lerp(0.05f, 0.02f, f), Mathf.Lerp(0.15f, -0.08f, f), 0.5f, top, top, top, false);
+                    }
                 }
             }
 

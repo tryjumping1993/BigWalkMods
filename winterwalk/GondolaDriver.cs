@@ -10,6 +10,10 @@
 // The gondola opens when The Tree's five plinths ("Tree Plinth 1".."5") all hold a gourd. Until then the
 // cabins wait in a row in the bottom station. The plinths are read every second, never counted from events: a
 // save puts gourds back without firing them.
+//
+// The same driver runs the ski lift (a second component, set up by Configure): the chairlift from the lodge at the
+// pistes' foot up to the bench at the tree line, its line "Ski Lift Line", its chairs "Ski Lift Chair 0".. under
+// "Ski Lift Chairs". It opens with the gondola (the pistes are only reached by the gondola anyway).
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -20,15 +24,25 @@ namespace WinterWalk
     {
         public GondolaDriver(IntPtr ptr) : base(ptr) { }
 
-        const float LineSpeed = 28f;         // metres a second on the cable (100 km/h): the line climbs 590 m over 1.9 km, about 70 s
-        const float StationSpeed = 0.7f;     // metres a second through a station
+        float LineSpeed = 28f;               // metres a second on the cable (100 km/h): the line climbs 590 m over 1.9 km, about 70 s
+        float StationSpeed = 0.7f;           // metres a second through a station
         const float StationLength = 12f;     // the slow stretch at each end
         const float Ease = 45f;              // metres over which a cabin speeds up or slows down
-        const float Side = 2f;               // each line runs this far either side of the centre (WinterIslePuzzle.GondolaSide)
+        float Side = 2f;                     // each line runs this far either side of the centre (WinterIslePuzzle.GondolaSide)
+        string lineName = "Gondola Line", cabinsName = "Gondola Cabins", cabinPrefix = "Gondola Cabin ";
+        bool isLift;
 
         public static bool ForceOpen;        // for testing (the companion: set?path=WinterWalk.GondolaDriver.ForceOpen&value=true)
         public static bool Open;             // read-only: whether the gondola is running
         public static string State = "not loaded";
+        public static string LiftState = "not loaded";      // the ski lift's
+
+        // Makes this one the ski lift: its own line and chairs, a slower cable, open whenever the gondola is
+        public void ConfigureLift(string line, string cabins, string prefix, float side, float lineSpeed)
+        {
+            lineName = line; cabinsName = cabins; cabinPrefix = prefix; Side = side; LineSpeed = lineSpeed; StationSpeed = 0.9f; isLift = true;
+        }
+        void Say(string state) { if (isLift) LiftState = state; else State = state; }
 
         readonly List<Transform> cabins = new List<Transform>();
         readonly List<Vector3> loop = new List<Vector3>();      // grip positions round the loop, closed
@@ -43,8 +57,8 @@ namespace WinterWalk
 
         bool Find()
         {
-            lineRoot = GameObject.Find("Gondola Line");
-            GameObject cabinRoot = GameObject.Find("Gondola Cabins");
+            lineRoot = GameObject.Find(lineName);
+            GameObject cabinRoot = GameObject.Find(cabinsName);
             if (lineRoot == null || cabinRoot == null) return false;
             var points = new List<Vector3>();
             for (int i = 0; ; i++)
@@ -57,13 +71,13 @@ namespace WinterWalk
             cabins.Clear();
             for (int i = 0; ; i++)
             {
-                Transform c = cabinRoot.transform.Find("Gondola Cabin " + i);
+                Transform c = cabinRoot.transform.Find(cabinPrefix + i);
                 if (c == null) break;
                 cabins.Add(c);
             }
             if (cabins.Count == 0) return false;
             BuildLoop(points);
-            Plugin.L.LogInfo("Winter Walk: gondola found: " + points.Count + " cable points, " + cabins.Count + " cabins, a round trip of " + period.ToString("0") + " s");
+            Plugin.L.LogInfo("Winter Walk: " + (isLift ? "ski lift" : "gondola") + " found: " + points.Count + " cable points, " + cabins.Count + " cabins, a round trip of " + period.ToString("0") + " s");
             return true;
         }
 
@@ -162,9 +176,14 @@ namespace WinterWalk
                     treePlinths.Clear();
                     if (!Find()) return;
                 }
-                Open = ForceOpen || TreeComplete();
-                if (ForceOpen) State = "running (forced open for testing)";
-                if (!Open)
+                bool open;
+                if (isLift) { open = Open; Say(open ? "running" : "waiting for the gondola"); }
+                else
+                {
+                    Open = open = ForceOpen || TreeComplete();
+                    if (ForceOpen) State = "running (forced open for testing)";
+                }
+                if (!open)
                 {
                     // waiting in a row along the bottom station's return line
                     var side = new Vector3(dirFlat.z, 0f, -dirFlat.x) * Side;
@@ -189,8 +208,8 @@ namespace WinterWalk
             }
             catch (Exception e)
             {
-                State = "stopped: " + e.GetType().Name + ": " + e.Message;
-                Plugin.L.LogWarning("Winter Walk: gondola stopped: " + e.GetType().Name + ": " + e.Message);
+                Say("stopped: " + e.GetType().Name + ": " + e.Message);
+                Plugin.L.LogWarning("Winter Walk: " + (isLift ? "ski lift" : "gondola") + " stopped: " + e.GetType().Name + ": " + e.Message);
                 lineRoot = null;
                 nextLook = Time.unscaledTime + 30f;
             }

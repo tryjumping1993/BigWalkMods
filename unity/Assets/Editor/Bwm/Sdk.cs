@@ -84,6 +84,30 @@ namespace Bwm
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        // Sets a [Flags] enum field to a combination of its values (Set takes an enum's index, which a flags value is not)
+        public static void SetFlags(Component c, string field, int value)
+        {
+            var so = new SerializedObject(c);
+            SerializedProperty p = so.FindProperty(field);
+            if (p == null) throw new Exception(c.GetType().Name + " has no field '" + field + "'");
+            p.intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Appends numbers to a serialized list of ints (e.g. PuzzlePegBoard.answerFromFlap)
+        public static void AddInts(Component c, string field, params int[] values)
+        {
+            var so = new SerializedObject(c);
+            SerializedProperty p = so.FindProperty(field);
+            if (p == null || !p.isArray) throw new Exception(c.GetType().Name + " has no list '" + field + "'");
+            foreach (int v in values)
+            {
+                p.InsertArrayElementAtIndex(p.arraySize);
+                p.GetArrayElementAtIndex(p.arraySize - 1).intValue = v;
+            }
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         // Makes source.<eventField> (a UnityEvent) call target.<method>() with no argument, as the Inspector's + button would
         // The target can be an SDK component, one of our own scripts, a built-in component or a GameObject. With
         // 'arg' the method takes that one argument (bool, int, float or string), e.g. GameObject.SetActive(true).

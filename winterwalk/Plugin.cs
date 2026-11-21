@@ -45,6 +45,7 @@ namespace WinterWalk
             go.AddComponent<SnowTrails>();
             go.AddComponent<SkiDriver>();
             go.AddComponent<GondolaDriver>();
+            go.AddComponent<GondolaDriver>().ConfigureLift("Ski Lift Line", "Ski Lift Chairs", "Ski Lift Chair ", 1.6f, 9f);      // the chairlift from the lodge
             go.AddComponent<MineDriver>();
             L.LogInfo("Winter Walk loaded");
         }

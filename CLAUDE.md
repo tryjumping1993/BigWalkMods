@@ -67,9 +67,15 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **The Winter Isle** (`WinterIslePuzzle.cs`) is the island the winter edition is built on. Its build writes
   `unity\Land\WinterIsle.land`, a height grid the framework reads as ground, so puzzles can be sited on it and
   snap to it. Rebuild every island puzzle after changing the island's shape. To put a puzzle on the island,
-  override `Near` (a point on it), `MinDistance => 0` and `MaxDistance`; `GlassBoothPuzzle.cs` does this.
-  The editor previews do not show the island (puzzles there look as if they float over the sea); use game
-  screenshots.
+  give it a `FixedSite` on the lowland, 70 m or more from the others (the island now marks its woods, rocks and
+  paths as taken, so the site search finds nothing there, or a spot on the sea floor); the island's build levels
+  and clears it, so build the puzzle, then `WinterIsle`, then the puzzle again. The editor previews do not show
+  the island (puzzles there look as if they float over the sea); use game screenshots.
+- **Island puzzles share `IsleKit.cs`:** the colours, `StartCorner` (start switch, live lamp, gourd vice, pillow,
+  confetti), `BoardOnPosts`, `Lobby` (a Hider group), `Sensor` (a sized presence sensor), `BlindfoldHook` and
+  `BlindGate`. `Sdk.SetFlags` sets a flags enum (a hook's `acceptedVanilla`), `Sdk.AddInts` an int list (a peg
+  board's `answerFromFlap`, needed when its answers are Sound Peg Answers). Part sizes that caught me out: a Peg
+  Board's pivot is at one end (it runs 2 m to its left), the Door is 1.24 m wide, a turnstile 2.12 m.
 - The island's terrain is low shelves in the east and middle, a 73 m mountain in the west with two lower
   peaks, a ravine and a frozen lake (`Peaks`, `Lake` and the ravine constants in `WinterIslePuzzle.cs`). Its
   build levels every island puzzle's site, so a puzzle can be sited on a slope, and prints how much level
@@ -105,6 +111,13 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   fallback. `game 'set?path=WinterWalk.MineDriver.ForceOpen&value=true'` opens it for testing, as
   `GondolaDriver.ForceOpen` does the gondola; `game 'mat?x&y&z&r&name=Text'` lists what the game draws near a
   point (materials, textures, lights), which is how the game's tunnels were matched.
+- **Skiing** (`winterwalk\SkiDriver.cs`): walking up to a rack (any object named "Ski Rack..." or "Board Rack..."
+  beside the first) puts gear on; on anything whose collider is named "Piste Sheet" the player glides, steering by
+  where they look; past a kicker's lip they fly (gravity, until the sheet comes back up). The island's sheet, its
+  terrain park's kickers and Big Air's kicker all carry that name (give the mesh asset another name: `MeshPiece`
+  saves meshes by piece name, and a second "Piste Sheet" asset replaces the first). The ski lift (lodge to the bench
+  at the tree line) is a second `GondolaDriver`, set up by `ConfigureLift`, and opens with the gondola; its state is
+  `GondolaDriver.LiftState`. Other players' gear is not shown.
 - **Towers:** the SDK supports one tower button list, and shows one plinth per puzzle loaded, first in the list
   first. The Tree's list is its own five plinths (the gondola), then the mine tower's five (the mine), then the
   summit's twenty; the mine tower and the summit have their own hold buttons wired to `HoldToOpen`. So the mine

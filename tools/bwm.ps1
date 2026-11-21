@@ -44,6 +44,7 @@ function Update-BwmSnowMaps {
     }
     if (-not $stale) { return }
     $p = Start-Process -FilePath python -ArgumentList ('"' + $script + '"') -PassThru -NoNewWindow
+    $null = $p.Handle      # (without the handle held, ExitCode reads empty and a good run is reported as failed)
     Set-BwmAffinity $p
     $p.WaitForExit()
     if ($p.ExitCode -ne 0) { Write-Warning 'tools\snowtex.py failed; the snow will be drawn without its surface maps.' }
@@ -59,6 +60,7 @@ function Update-BwmTreeMaps {
     }
     if (-not $stale) { return }
     $p = Start-Process -FilePath python -ArgumentList ('"' + $script + '"') -PassThru -NoNewWindow
+    $null = $p.Handle      # (without the handle held, ExitCode reads empty and a good run is reported as failed)
     Set-BwmAffinity $p
     $p.WaitForExit()
     if ($p.ExitCode -ne 0) { Write-Warning 'tools\treetex.py failed; the trees will be drawn without their textures.' }

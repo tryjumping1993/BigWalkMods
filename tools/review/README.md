@@ -76,6 +76,7 @@ ski slope". The terrain reviewer's brief is `brief.md`.
 | 9 | 5 | 4 | 5 | 5 | 2 | 6 | 5 | NO |
 | 10 | 5 | 4 | 6 | 6 | 3 | 5 | 6 | NO |
 | 11 | 4 | 4 | 6 | 6 | 3 | 6 | 6 | NO |
+| 12 | 5 | 5 | 6 | 6 | 3 | 6 | 5 | NO |
 
 Rounds 10 and 11 pulled opposite ways on the lesser peaks: round 10 asked for them lower, and round 11, with them
 lowered, called the mountain a symmetrical pyramid and asked for a distinct second summit at three quarters to four

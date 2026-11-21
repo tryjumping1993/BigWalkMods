@@ -421,8 +421,9 @@ def birch_twigs(out, n=2048, preview=None):
     u runs along the spray from where it joins the limb (0) to its tips (1), v across it."""
     rng = np.random.default_rng(77)
     cv = Canvas(n)
-    bark = (0.17, 0.12, 0.13)      # purple-brown, as a birch crown is in winter (redder read as olive leaves from afar)
-    tip = (0.27, 0.19, 0.21)
+    bark = (0.24, 0.18, 0.19)      # purple-brown, as a birch crown is in winter (redder read as olive leaves from afar)
+    tip = (0.36, 0.29, 0.30)
+    frost = (0.72, 0.72, 0.76)     # the finest twigs rimed with frost, so the crown reads as a pale haze and not black scribble
     segments = []
 
     def branch(p, ang, length, width, depth):
@@ -435,12 +436,15 @@ def birch_twigs(out, n=2048, preview=None):
         for k in range(steps):
             w0 = width * (1.0 - 0.6 * k / steps)
             w1 = width * (1.0 - 0.6 * (k + 1) / steps)
-            cv.capsule(pts[k], pts[k + 1], max(w0, 0.7), max(w1, 0.6), bark, tip, 6.0 - depth * 0.6)
+            fine = min(1.0, depth / 6.0) ** 1.5 * 0.65
+            c0 = tuple(b * (1 - fine) + f * fine for b, f in zip(bark, frost))
+            c1 = tuple(t * (1 - fine) + f * fine for t, f in zip(tip, frost))
+            cv.capsule(pts[k], pts[k + 1], max(w0, 0.6), max(w1, 0.5), c0, c1, 6.0 - depth * 0.6)
             if width > 2.0:
                 segments.append((pts[k], pts[k + 1], width))
-        if depth >= 6 or length < n * 0.02:
+        if depth >= 7 or length < n * 0.014:
             return
-        kids = rng.integers(2, 4)
+        kids = rng.integers(2, 5) if depth >= 3 else rng.integers(2, 4)
         for c in range(kids):
             t = rng.uniform(0.3, 0.95)
             j = min(int(t * steps), steps - 1)
@@ -456,9 +460,9 @@ def birch_twigs(out, n=2048, preview=None):
     for a, b, w in segments:
         if rng.random() < 0.55:
             continue
-        r = w * rng.uniform(0.9, 1.5)
+        r = w * rng.uniform(0.75, 1.15)
         t0, t1 = sorted(rng.uniform(0.0, 1.0, 2))
-        for t in np.linspace(t0, t1, 6):
+        for t in np.linspace(t0, t1, max(4, int(np.linalg.norm(b - a) * (t1 - t0) / max(r * 0.5, 1.0)))):      # (close enough to join: six lumps read as a string of beads)
             m = a + (b - a) * t
             x0, x1 = int(max(0, m[0] - r * 3)), int(min(n, m[0] + r * 3))
             y0, y1 = int(max(0, m[1] - r * 3)), int(min(n, m[1] + r * 3))

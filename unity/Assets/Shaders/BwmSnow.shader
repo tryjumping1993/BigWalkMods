@@ -340,6 +340,7 @@ Shader "BWM/Snow"
                 // ...and in the gullies and couloirs, where it slides and collects: long tongues of snow down the rock
                 // with ragged edges (the mesh's vertex alpha is low in a hollow, at a larger scale on steep ground)
                 float gully = Crisp(saturate((0.47 - i.form) * 5.0) + (Noise3(positionWS * 0.35 + 5.0) - 0.5) * 0.35 + (Noise3(positionWS * 1.7) - 0.5) * 0.12, grainN.x * 0.05, 0.5);
+                // (no drawn ledge streaks: they read as paths painted across the rock; the ledges are the cliff bands' own)
                 rockColor = lerp(rockColor, _Color.rgb * 0.92, max(max(lying * 0.95, gully * 0.92), saturate((ground.y - 0.45) * 2.5) * caught * 0.1));
 
                 // bare ground and sand where the snow is thin
@@ -351,11 +352,18 @@ Shader "BWM/Snow"
                 float sand = smoothstep(0.3, 0.6, i.ground.y + (patchy - 0.5) * 0.25);
                 // No snow at the waterline or under it: the sea keeps a ragged band of rock wet and bare (sand, in the
                 // bays), and the seabed below is rock, darker the deeper it lies
-                float tide = 1.0 - Crisp(positionWS.y + (patchy - 0.5) * 0.7, grainN.x * 0.05, 0.62);
+                // (on gentle shores, in stretches, the band is shingle: the game's own gravel, wet and dark by the water,
+                // and wider)
+                float shingle = (_GameGround > 0.5 ? 1.0 : 0.0) * smoothstep(0.8, 0.93, ground.y)
+                    * Crisp(Noise3(positionWS * 0.035 + 17.0) + (patchy - 0.5) * 0.3, 0.0, 0.44) * (1.0 - sand);
+                float tide = 1.0 - Crisp(positionWS.y + (patchy - 0.5) * 0.7, grainN.x * 0.05, lerp(0.62, 1.35, shingle));
                 rock = max(rock, tide * (1.0 - sand));
                 // wet rock above the water; under it the shallows are pale (the sea shows turquoise over them) and the
                 // deep is dark
-                rockColor = lerp(rockColor, bareRock * (positionWS.y > 0.0 ? 0.62 : lerp(0.95, 0.3, smoothstep(-0.3, -5.0, positionWS.y))), tide);
+                float3 shingleColor = SAMPLE_TEXTURE2D(_GravelTex, sampler_BareTex, positionWS.xz * _GravelTiling * 1.7).rgb
+                    * lerp(0.5, 0.85, smoothstep(0.0, 1.2, positionWS.y)) * float3(0.93, 0.96, 1.0);
+                float3 aboveWater = lerp(bareRock * 0.62, shingleColor, shingle);
+                rockColor = lerp(rockColor, positionWS.y > 0.0 ? aboveWater : bareRock * lerp(0.95, 0.3, smoothstep(-0.3, -5.0, positionWS.y)), tide);
                 // an ice rim: a ragged white line of ice where the water meets the land
                 float iceRim = Crisp(0.14 - abs(positionWS.y - 0.04) + (ValueNoise(positionWS.xz * 0.8) - 0.5) * 0.12, 0.0, 0.0);
                 rockColor = lerp(rockColor, float3(0.84, 0.93, 0.98), iceRim * 0.9);
@@ -411,7 +419,7 @@ Shader "BWM/Snow"
                 float relief = (1.0 - path * 0.85) * (1.0 - pressed * 0.8) * (1.0 - icy * 0.92) * snowy;
                 // groomed piste (a negative 'under.x'): the wind's relief rolled flat, and corduroy running down the fall line
                 float groomed = saturate(-i.under.x) * snowy;
-                relief *= 1.0 - groomed * 0.75;
+                relief *= 1.0 - groomed * 0.92;      // (rolled smooth: wind ripples inside the poles contradicted the grooming)
                 // (the lines run down the mountain from its top; they go once a pixel cannot hold them, or they ring)
                 float2 fall = positionWS.xz - _PisteCentre.xz;
                 float3 acrossFall = float3(-fall.y, 0, fall.x) / max(length(fall), 1.0);
@@ -423,7 +431,7 @@ Shader "BWM/Snow"
                     + _GrainStrength * grainN.xy * grainFade;
                 tilt += grainN.xy * bank * 1.5;      // the heaped banks are loose and lumpy
                 float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + sideTilt * (_WindStrength * calm * relief) + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * (sand * 0.45)
-                    + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.3));
+                    + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.4));
                 // the bare ground's own relief (the game's normal maps, laid from above: x along the world's x, y along z)
                 if (_GameGround > 0.5 && earthy > 0.01)
                 {

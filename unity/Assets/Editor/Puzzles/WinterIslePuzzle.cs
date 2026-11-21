@@ -48,6 +48,28 @@ public sealed class WinterIslePuzzle : PuzzleDef
     static Vector2 GondolaDir => (Summit - Plaza).normalized;
     public static Vector2 GondolaBottom => Plaza + GondolaDir * 55f;
     public static Vector2 GondolaTop => Summit - GondolaDir * 12f;
+    // The ski lift: a chairlift from beside the lodge at the pistes' foot up to the bench at the tree line, between the
+    // middle and right-hand runs, so a skier rides back up instead of walking to the plaza. Winter Walk runs it
+    // (GondolaDriver.ConfigureLift) and opens it with the gondola.
+    public const int SkiLiftChairs = 26;
+    public const float SkiLiftSide = 1.6f;
+    public static Vector2 SkiLiftBottom
+    {
+        get
+        {
+            Vector2 finish = PisteFinish(out Vector2 down, out float half);
+            return finish + new Vector2(down.y, -down.x) * (Mathf.Min(half, 24f) + 44f) - down * 30f;
+        }
+    }
+    public static Vector2 SkiLiftTop
+    {
+        get
+        {
+            const float along = 478f;
+            float angle = SkiBearing - (RunOffset(1, along) + RunOffset(2, along)) * 0.5f;
+            return Peak + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * along;
+        }
+    }
     public const float GondolaSide = 2f;          // each line runs this far either side of the centre
     public const int GondolaCabins = 16;
 
@@ -157,6 +179,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // middle pitch eases into the lower one (1 on it). It runs along a contour, so it is level, and cuts through the
     // spurs between the runs in a notch.
     public const float CatTrackAlong = 925f;
+    public const float HalfPipeAlong = 1170f;      // where the terrain park's half-pipe begins, on the right-hand run
     static float CatTrack(float along, float off)
     {
         float lane = 1f - Smooth((Mathf.Abs(along - CatTrackAlong) - 3.5f) / 2.5f);
@@ -293,7 +316,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             // the bowl's arms: a rocky ridge on each side, running out from under the summit and dying away into the
             // forest's spurs, so the bowl is a basin held between walls (the northern arm the higher, 110 m over the
             // bowl's floor at its highest, the southern 80), with notches along their crests
-            float armRise = Smooth((alongFace - 50f) / 110f) * (1f - Smooth((alongFace - 560f) / 280f));
+            // (they run on down beside the outer runs as forested ridges, lower as they go, so from the runs there is
+            // always a ridge standing over the trees on either side)
+            float armRise = Smooth((alongFace - 50f) / 110f) * (1f - Smooth((alongFace - 950f) / 320f)) * (1f - 0.55f * Smooth((alongFace - 450f) / 450f));
             skiH += 110f * Mathf.Exp(-Mathf.Pow((skiOff + 0.55f) / 0.11f, 2f)) * armRise * (0.72f + 0.5f * Mathf.PerlinNoise(alongFace * 0.011f, 4.2f));
             skiH += 80f * Mathf.Exp(-Mathf.Pow((skiOff - 0.57f) / 0.1f, 2f)) * armRise * (0.72f + 0.5f * Mathf.PerlinNoise(alongFace * 0.011f, 9.6f));
             h = Mathf.Lerp(h, skiH, ski);
@@ -938,19 +963,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (float.IsNaN(a0) || float.IsNaN(a1) || float.IsNaN(a2) || float.IsNaN(a3)) return preFacet[Cell_(q)];
                 return Mathf.Lerp(Mathf.Lerp(a0, a1, tx), Mathf.Lerp(a2, a3, tx), tz);
             }
-            const float FacetCell = 30f;
+            const float FacetCell = 36f;
             var planes = new Dictionary<long, (Vector2 at, float h, Vector2 grad)>();
             (Vector2 at, float h, Vector2 grad) Plane(int ci, int cj)
             {
                 long key = ((long)ci << 32) ^ (uint)cj;
                 if (planes.TryGetValue(key, out var pl)) return pl;
                 float jx = Mathf.PerlinNoise(ci * 0.71f + 3.3f, cj * 0.71f + 9.1f), jz = Mathf.PerlinNoise(ci * 0.71f + 17.7f, cj * 0.71f + 1.9f);
-                var facetAt = new Vector2((ci + 0.08f + 0.84f * jx) * FacetCell, (cj + 0.08f + 0.84f * jz) * FacetCell);
+                var facetAt = new Vector2((ci + 0.05f + 0.9f * jx) * FacetCell, (cj + 0.05f + 0.9f * jz) * FacetCell);
                 float hc = SampleH(facetAt);
                 var grad = new Vector2(SampleH(facetAt + Vector2.right * 9f) - SampleH(facetAt - Vector2.right * 9f), SampleH(facetAt + Vector2.up * 9f) - SampleH(facetAt - Vector2.up * 9f)) / 18f;
-                // ledges in broken bands at the same height across a face (one face in four laid back at random read as
-                // stamped scallops)
-                if (Mathf.PerlinNoise(hc * 0.045f + 5.5f, (ci + cj) * 0.11f + 2.4f) > 0.64f) grad *= 0.25f;
+                // (no faces laid back into ledges: every ledge's snow cap read as the same scallop stamped across the face;
+                // the snow shader draws broken ledges of snow instead)
                 pl = (facetAt, hc, grad);
                 planes[key] = pl;
                 return pl;
@@ -982,11 +1006,33 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (float.IsNaN(otherH)) otherH = planeH;
                 float edge = Smooth((Mathf.Sqrt(secondD) - Mathf.Sqrt(nearestD)) / 7f);
                 planeH = Mathf.Lerp((planeH + otherH) * 0.5f, planeH, edge);
-                planeH = Mathf.Clamp(planeH, height[k] - 6f, height[k] + 6f);      // creases and ledges, never a wall tens of metres high
+                planeH = Mathf.Clamp(planeH, height[k] - 7f, height[k] + 7f);      // creases and steps, never a wall tens of metres high
                 height[k] = Mathf.Lerp(height[k], planeH, craggy[k] * 0.9f * byShore);
                 faceted++;
             }
             Debug.Log("[BWM] Winter Isle crags: " + faceted + " points of steep ground faceted into " + planes.Count + " faces");
+            // cliff bands: on the mountain's upper steep sides the ground steps down in bands of rock 15 to 25 m tall and
+            // steeper than 60 degrees, with snowy ledges between. The steps wander across the contours and break off
+            // in places, so they are bands of cliff and not terraces
+            int banded = 0;
+            for (int k = 0; k < count; k++)
+            {
+                if (craggy[k] <= 0f || height[k] < 60f) continue;
+                Vector2 p = At(k);
+                float fromPeak = (p - Peak).magnitude;
+                if (fromPeak > 1150f || fromPeak < SummitRadius + 40f || Piste(p) > 0.2f) continue;
+                // (in patches a few hundred metres across, on about a third of the steep ground: bands everywhere at
+                // one spacing read from the air as a terraced hillside)
+                float patch = Smooth((Mathf.PerlinNoise(p.x * 0.0045f + 3.3f, p.y * 0.0045f + 8.1f) - 0.55f) / 0.1f);
+                float band = craggy[k] * Smooth((height[k] - 110f) / 90f) * patch * Smooth((inside[k] - 40f) / 60f);
+                if (band <= 0f) continue;
+                float warp = (Mathf.PerlinNoise(p.x * 0.006f + 1.7f, p.y * 0.006f + 5.2f) - 0.5f) * 90f + (Mathf.PerlinNoise(p.x * 0.03f + 9.9f, p.y * 0.03f + 2.6f) - 0.5f) * 14f;
+                float stepH = 45f + 25f * Mathf.PerlinNoise(p.x * 0.004f + 9.1f, p.y * 0.004f + 0.7f);      // two or three bands down a face, not ten
+                float stepped = Terrace(height[k] + warp, stepH, 0.3f) - warp;
+                height[k] = Mathf.Lerp(height[k], stepped, 0.62f * band);
+                banded++;
+            }
+            Debug.Log("[BWM] Winter Isle cliff bands: " + banded + " points");
         }
 
         // 4. Where the causeway lands; then paths from the plaza to the landing and to every site, by the easiest
@@ -1136,6 +1182,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         for (int station = 0; station < WinterIsleMine.Stations.Count; station++)
             structures.Add((WinterIsleMine.Stations[station], (station == 0 ? WinterIsleMine.TowerStationRadius : WinterIsleMine.StationRadius) + 1f));
         for (float t = 0f; t <= 1f; t += 0.004f) structures.Add((Vector2.Lerp(GondolaBottom, GondolaTop, t), 10f));      // a lift line cut through the forest
+        structures.Add((SkiLiftBottom, 16f));
+        structures.Add((SkiLiftTop, 13f));
+        for (float t = 0f; t <= 1f; t += 0.006f) structures.Add((Vector2.Lerp(SkiLiftBottom, SkiLiftTop, t), 8f));      // ...and the ski lift's
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
             if (PathDistance(p) < 3.5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;
@@ -1815,6 +1864,35 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             Debug.Log("[BWM] Winter Isle: " + coveList.Count + " coves, " + barList.Count + " sand bar, " + islets.Count + " islets, " + floes + " ice floes");
         }
+        // shore ice: a ledge of ice frozen onto the shore all along the water's edge, broken into plates a few metres
+        // across (snow ending straight in open water read as a hard edge)
+        {
+            var shoreRandom = new System.Random(4471);
+            float Rs(float lo, float hi) => lo + (hi - lo) * (float)shoreRandom.NextDouble();
+            var shoreSnow = new Color(0.96f, 0.97f, 1f);
+            int shoreIce = 0;
+            for (int sk = 0; sk < count && shoreIce < 12000; sk++)
+            {
+                float hk = height[sk];
+                if (float.IsNaN(hk) || hk > 0.1f || hk < -0.9f) continue;
+                int si = sk % row, sj = sk / row;
+                bool byLand = false;
+                for (int odj = -1; odj <= 1 && !byLand; odj++)
+                    for (int odi = -1; odi <= 1; odi++)
+                    {
+                        int ni = si + odi, nj = sj + odj;
+                        if (ni < 0 || nj < 0 || ni > nx || nj > nz) continue;
+                        float hn = height[nj * row + ni];
+                        if (!float.IsNaN(hn) && hn > 0.35f) { byLand = true; break; }
+                    }
+                if (!byLand || Rs(0f, 1f) > 0.72f) continue;
+                Vector2 sp = At(sk) + new Vector2(Rs(-1.2f, 1.2f), Rs(-1.2f, 1.2f));
+                if ((sp - Lake).magnitude < LakeRadius + 12f) continue;
+                Kit.AddFloe(ice, new Vector3(sp.x - root.x, 0.02f - root.y, sp.y - root.z), Rs(1.3f, 3.2f), Rs(0.05f, 0.12f), new Vector2(Rs(-1.5f, 1.5f), Rs(-1.5f, 1.5f)), sk, iceColor, shoreSnow);
+                shoreIce++;
+            }
+            Debug.Log("[BWM] Winter Isle: " + shoreIce + " plates of shore ice");
+        }
         b.MeshPiece("Ice", ice.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Ice", m => { m.SetFloat("_SnowLine", 1.02f); m.SetFloat("_SnowNoise", 0.9f); m.SetFloat("_SnowEdge", 0.05f); }), false);
 
         // 9. Our own trees: firs, slim spruces and bare birches (WinterIsleDressing.TreeModels), each model with a
@@ -2034,6 +2112,15 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 for (float y = foot + 1.5f; y < mastTop - 1f; y += 0.6f)
                     Kit.AddBox(gm, L(p + dir2 * 0.4f, y), new Vector3(0.45f, 0.05f, 0.05f), steel * 1.2f, yaw2 + 90f);       // rungs
                 Kit.AddBall(gm, L(p, mastTop + 0.75f), 0.22f, gold);
+                // a wreath on the mast, facing down the line
+                Vector3 wreathAt = L(p - dir2 * 1.15f, split + 1.2f);
+                for (int k = 0; k < 12; k++)
+                {
+                    float wa = 2f * Mathf.PI * k / 12f;
+                    Vector3 off = new Vector3(side2.x, 0f, side2.y) * (Mathf.Cos(wa) * 0.55f) + Vector3.up * (Mathf.Sin(wa) * 0.55f);
+                    Kit.AddBall(gm, wreathAt + off, 0.16f, green);
+                }
+                Kit.AddBall(gm, wreathAt + Vector3.down * 0.55f, 0.13f, red);
             }
             // stations: a timber platform under a pitched roof, open at the ends, the bullwheel overhead, garlands
             void Station(Vector2 at, float deck, bool bottom)
@@ -2065,6 +2152,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             Station(GondolaBottom, bottomDeck, true);
             Station(GondolaTop, topDeck, false);
+            // lights round both stations' eaves
+            foreach (var (at, deck, label) in new[] { (GondolaBottom, bottomDeck, "Bottom"), (GondolaTop, topDeck, "Top") })
+            {
+                float w = 2f * GondolaSide + 4.2f, d = 13f, eave = deck + CableOverDeck + 1.2f + 0.45f;
+                var ring = new List<Vector3>();
+                foreach (var (cx, cz) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f), (-1f, -1f) })
+                {
+                    Vector2 q = at + side2 * ((w * 0.6f + 0.2f) * cx) + dir2 * ((d * 0.5f + 0.8f) * cz);
+                    ring.Add(new Vector3(q.x - root.x, eave - root.y, q.y - root.z));
+                }
+                Kit.LightString(b, "Gondola " + label + " Station Lights", ring, 0.25f, 0.4f, false, false, label.Length);
+            }
             // the cables: thin dark boxes run each line (and round the bullwheels)
             for (int sgn = -1; sgn <= 1; sgn += 2)
                 for (int i = 0; i < spans; i++)
@@ -2129,6 +2228,229 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 }
             }
             Debug.Log("[BWM] Winter Isle gondola: " + Sdk.F(length) + " m, " + (spans - 1) + " pylons, cable from " + Sdk.F(line[0].y) + " to " + Sdk.F(line[spans].y) + " m, " + GondolaCabins + " cabins");
+        }
+
+        // 11b. The ski lift: a chairlift from beside the lodge up to the bench at the tree line. Built as the gondola
+        //      is (a line of markers "Ski Lift Line" P0.., pylons, two stations, the cable, and chairs that Winter Walk
+        //      moves round the loop), but plainer and lower: single steel towers, open two-seat chairs on a hanger.
+        {
+            Vector2 liftFrom = SkiLiftBottom, liftTo = SkiLiftTop;
+            Vector2 dir3 = (liftTo - liftFrom).normalized, side3 = new Vector2(dir3.y, -dir3.x);
+            float bottomDeck = HeightAt(liftFrom) + 0.5f, topDeck = HeightAt(liftTo) + 0.5f;
+            const float CableOver = 4.6f, Clear = 5.5f;
+            float length = (liftTo - liftFrom).magnitude;
+            int spans = Mathf.Max(2, Mathf.CeilToInt(length / 55f));
+            var line = new List<Vector3>();
+            for (int i = 0; i <= spans; i++)
+            {
+                Vector2 p = Vector2.Lerp(liftFrom, liftTo, (float)i / spans);
+                float y = i == 0 ? bottomDeck + CableOver : i == spans ? topDeck + CableOver : HeightAt(p) + 11f;
+                line.Add(new Vector3(p.x, y, p.y));
+            }
+            for (int pass = 0; pass < 20; pass++)
+            {
+                bool raised = false;
+                for (int i = 0; i < spans; i++)
+                    for (float t = 0.05f; t < 1f; t += 0.05f)
+                    {
+                        Vector3 c = Vector3.Lerp(line[i], line[i + 1], t);
+                        float need = HeightAt(new Vector2(c.x, c.z)) + Clear - c.y;
+                        if (need <= 0f) continue;
+                        if (i > 0) line[i] += Vector3.up * (need + 0.4f);
+                        if (i + 1 < spans) line[i + 1] += Vector3.up * (need + 0.4f);
+                        raised = true;
+                    }
+                if (!raised) break;
+            }
+            var markers = new GameObject("Ski Lift Line");
+            markers.transform.SetParent(b.Root.transform, false);
+            for (int i = 0; i < line.Count; i++)
+            {
+                var m = new GameObject("P" + i);
+                m.transform.SetParent(markers.transform, false);
+                m.transform.position = line[i];
+            }
+            var lm = new MeshBuilder();
+            var steel = new Color(0.32f, 0.33f, 0.36f); var yellow = new Color(0.95f, 0.75f, 0.12f); var timber = new Color(0.42f, 0.29f, 0.18f);
+            var red = new Color(0.72f, 0.09f, 0.08f); var green = new Color(0.1f, 0.33f, 0.18f); var cream = new Color(0.9f, 0.86f, 0.76f);
+            Vector3 L(Vector2 p, float y) => new Vector3(p.x - root.x, y - root.y, p.y - root.z);
+            float yaw3 = Mathf.Atan2(dir3.x, dir3.y) * Mathf.Rad2Deg;
+            // towers: one round steel post (eight-sided), a yellow crossarm with the sheave trains at both ends
+            for (int i = 1; i < spans; i++)
+            {
+                Vector2 p = new Vector2(line[i].x, line[i].z);
+                float foot = HeightAt(p) - 0.4f, towerTop = line[i].y + 0.5f;
+                Kit.AddBox(lm, L(p, foot), new Vector3(1.6f, 0.6f, 1.6f), cream * 0.8f, yaw3);
+                Kit.AddBox(lm, L(p, foot + 0.6f), new Vector3(0.75f, towerTop - foot - 0.6f, 0.75f), steel, yaw3 + 22.5f);
+                Kit.AddBox(lm, L(p, foot + 0.6f), new Vector3(0.75f, towerTop - foot - 0.6f, 0.75f), steel, yaw3 + 67.5f);
+                Kit.AddBox(lm, L(p, towerTop), new Vector3(2f * SkiLiftSide + 1.6f, 0.45f, 0.5f), yellow, yaw3 + 90f);
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                    Kit.AddBox(lm, L(p + side3 * SkiLiftSide * sgn, towerTop - 0.35f), new Vector3(0.35f, 0.3f, 2.4f), yellow * 0.85f, yaw3);
+            }
+            // stations: a deck with a ramp down at the boarding end, posts and a flat roof over the bullwheel
+            void Station(Vector2 at, float deck, bool bottom)
+            {
+                float w = 2f * SkiLiftSide + 3.4f, d = 9f, roofY = deck + CableOver + 1f;
+                Kit.AddBox(lm, L(at, deck - 1.6f), new Vector3(w + 0.6f, 1.6f, d + 0.6f), cream * 0.75f, yaw3);
+                Kit.AddBox(lm, L(at, deck), new Vector3(w, 0.2f, d), timber, yaw3);
+                Vector2 rampAt = at - dir3 * (d * 0.5f + 1.6f) * (bottom ? 1f : -1f);
+                Kit.AddBox(lm, L(rampAt, deck - 0.9f), new Vector3(w - 1f, 0.9f, 3.2f), cream * 0.7f, yaw3);      // a ramp of snow up to the deck
+                for (int cx = -1; cx <= 1; cx += 2)
+                    for (int cz = -1; cz <= 1; cz += 2)
+                        Kit.AddBox(lm, L(at + side3 * (w * 0.5f - 0.25f) * cx + dir3 * (d * 0.5f - 0.3f) * cz, deck + 0.2f), new Vector3(0.35f, roofY - deck - 0.2f, 0.35f), steel, yaw3);
+                Kit.AddBox(lm, L(at, roofY), new Vector3(w + 0.8f, 0.3f, d + 0.8f), red, yaw3);
+                Kit.AddBox(lm, L(at, roofY + 0.3f), new Vector3(w + 0.2f, 0.12f, d + 0.2f), green, yaw3);
+                Vector2 wheel = at + dir3 * (d * 0.5f - 1f) * (bottom ? -1f : 1f);
+                Kit.AddDisc(lm, L(wheel, deck + CableOver - 0.1f), SkiLiftSide + 0.25f, 0.25f, steel, 18);
+                Kit.AddBox(lm, L(at - dir3 * (d * 0.5f) * (bottom ? 1f : -1f), roofY - 0.8f), new Vector3(w * 0.8f, 0.7f, 0.1f), green, yaw3);      // the lift's sign board
+            }
+            Station(liftFrom, bottomDeck, true);
+            Station(liftTo, topDeck, false);
+            foreach (var (at, deck, label) in new[] { (liftFrom, bottomDeck, "Bottom"), (liftTo, topDeck, "Top") })
+            {
+                float w = 2f * SkiLiftSide + 3.4f, d = 9f, eave = deck + CableOver + 1f + 0.2f;
+                var ring = new List<Vector3>();
+                foreach (var (cx, cz) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f), (-1f, -1f) })
+                {
+                    Vector2 q = at + side3 * ((w * 0.5f + 0.4f) * cx) + dir3 * ((d * 0.5f + 0.4f) * cz);
+                    ring.Add(new Vector3(q.x - root.x, eave - root.y, q.y - root.z));
+                }
+                Kit.LightString(b, "Ski Lift " + label + " Station Lights", ring, 0.2f, 0.4f, false, false, 7 + label.Length);
+            }
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+                for (int i = 0; i < spans; i++)
+                {
+                    Vector3 a = line[i] + new Vector3(side3.x, 0f, side3.y) * SkiLiftSide * sgn, c = line[i + 1] + new Vector3(side3.x, 0f, side3.y) * SkiLiftSide * sgn;
+                    var turn = Quaternion.LookRotation((c - a).normalized, Vector3.up);
+                    Vector3 u = turn * Vector3.right * 0.05f, v = turn * Vector3.up * 0.05f, a0 = a - root, c0 = c - root;
+                    lm.Quad(a0 - u - v, c0 - u - v, c0 - u + v, a0 - u + v, steel * 0.5f);
+                    lm.Quad(a0 + u + v, c0 + u + v, c0 + u - v, a0 + u - v, steel * 0.5f);
+                    lm.Quad(a0 - u + v, c0 - u + v, c0 + u + v, a0 + u + v, steel * 0.5f);
+                    lm.Quad(a0 + u - v, c0 + u - v, c0 - u - v, a0 - u - v, steel * 0.5f);
+                }
+            b.MeshPiece("Ski Lift", lm.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true);
+
+            // the chairs: an open bench for two with a backrest, a footrest and a safety bar, on a hanger to the grip
+            var chair = new MeshBuilder();
+            const float Drop = 2.6f;
+            Kit.AddBox(chair, new Vector3(0f, -Drop, 0f), new Vector3(1.4f, 0.1f, 0.5f), red);                        // seat
+            Kit.AddBox(chair, new Vector3(0f, -Drop + 0.1f, -0.25f), new Vector3(1.4f, 0.6f, 0.08f), red);            // back
+            Kit.AddBox(chair, new Vector3(0f, -Drop - 0.45f, 0.4f), new Vector3(1.2f, 0.05f, 0.15f), steel);          // footrest
+            Kit.AddBox(chair, new Vector3(0f, -Drop + 0.55f, 0.45f), new Vector3(1.3f, 0.05f, 0.05f), steel);         // safety bar
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+            {
+                Kit.AddBox(chair, new Vector3(0.68f * sgn, -Drop, 0f), new Vector3(0.05f, 0.35f, 0.05f), steel);      // arms
+                Kit.AddBox(chair, new Vector3(0.68f * sgn, -Drop + 0.33f, 0.1f), new Vector3(0.05f, 0.05f, 0.45f), steel);
+            }
+            Kit.AddBox(chair, new Vector3(0f, -Drop + 0.7f, -0.25f), new Vector3(0.08f, Drop - 0.7f, 0.08f), steel); // hanger
+            Kit.AddBox(chair, new Vector3(0f, -0.2f, -0.25f), new Vector3(0.22f, 0.28f, 0.4f), steel * 0.8f);       // grip
+            Mesh chairMesh = b.SaveMesh("Ski Lift Chair", chair.ToMesh());
+            Material chairMaterial = b.ShaderMaterial("BWM/Snowy", "Cabin", m => m.SetFloat("_SnowLine", 0.8f));
+            var chairsRoot = new GameObject("Ski Lift Chairs");
+            chairsRoot.transform.SetParent(b.Root.transform, false);
+            for (int i = 0; i < SkiLiftChairs; i++)
+            {
+                var liftChair = new GameObject("Ski Lift Chair " + i);
+                liftChair.transform.SetParent(chairsRoot.transform, false);
+                liftChair.transform.position = new Vector3(liftFrom.x, bottomDeck + Drop + 0.3f, liftFrom.y) + new Vector3(dir3.x, 0f, dir3.y) * ((i - SkiLiftChairs / 2f) * 0.15f) + Vector3.up * i * 0.01f;
+                liftChair.transform.rotation = Quaternion.Euler(0f, yaw3, 0f);
+                var body = new GameObject("Body");
+                body.transform.SetParent(liftChair.transform, false);
+                body.AddComponent<MeshFilter>().sharedMesh = chairMesh;
+                body.AddComponent<MeshRenderer>().sharedMaterial = chairMaterial;
+                body.AddComponent<MeshCollider>().sharedMesh = chairMesh;
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                {
+                    var seat = new Piece(new GameObject(sgn < 0 ? "Seat Left" : "Seat Right"));
+                    seat.Transform.SetParent(liftChair.transform, false);
+                    seat.Transform.localPosition = new Vector3(0.36f * sgn, -Drop + 0.08f, -0.02f);
+                    b.AddScript(seat, "PuzzleSeat");
+                    seat.Set("PuzzleSeat", "pose", sgn < 0 ? 12 : 13);      // ChairliftLeft, ChairliftRight
+                    seat.Set("PuzzleSeat", "clickSize", new Vector3(0.6f, 0.6f, 0.6f));
+                }
+            }
+            Debug.Log("[BWM] Winter Isle ski lift: " + Sdk.F(length) + " m from " + Sdk.F(bottomDeck) + " to " + Sdk.F(topDeck) + " m, " + (spans - 1) + " towers, " + SkiLiftChairs + " chairs");
+        }
+
+        // 11c. The terrain park: kickers of packed snow down the right-hand run below the cat track (the Big Air game's
+        //      big one is further down), with flags. Each kicker's collider is named as the pistes' sheet, so Winter
+        //      Walk's riding carries a skier or boarder up it and into the air off its lip.
+        {
+            var park = new MeshBuilder();
+            var flags = new MeshBuilder();
+            var white = new Color(0.94f, 0.96f, 1f);
+            int kickers = 0;
+            foreach (var (parkAlong, offset, lip, length, width) in new[] { (985f, -0.25f, 1.0f, 6f, 4f), (1035f, 0.25f, 1.4f, 7f, 4.5f), (1075f, -0.2f, 0.8f, 5f, 3.5f) })
+            {
+                Vector2 parkMid = RunCentre(2, parkAlong, out float half);
+                Vector2 down = (RunCentre(2, parkAlong + 6f, out _) - parkMid).normalized, across = new Vector2(down.y, -down.x);
+                Vector2 foot = parkMid + across * (offset * half), lipAt = foot + down * length;
+                const int Steps = 7;
+                for (int st = 0; st < Steps; st++)
+                {
+                    float t0 = (float)st / Steps, t1 = (float)(st + 1) / Steps;
+                    float h0 = lip * t0 * t0 + 0.12f, h1 = lip * t1 * t1 + 0.12f;
+                    Vector2 a0 = Vector2.Lerp(foot, lipAt, t0), a1 = Vector2.Lerp(foot, lipAt, t1);
+                    Vector3 P(Vector2 q, float y) => new Vector3(q.x - root.x, HeightAt(q) + y - root.y, q.y - root.z);
+                    Vector3 aL = P(a0 - across * width / 2f, h0), aR = P(a0 + across * width / 2f, h0), cL = P(a1 - across * width / 2f, h1), cR = P(a1 + across * width / 2f, h1);
+                    park.Quad(aL, cL, cR, aR, white); park.Quad(aL, aR, cR, cL, white);
+                    park.Quad(P(a0 - across * width / 2f, -0.3f), P(a1 - across * width / 2f, -0.3f), cL, aL, white);
+                    park.Quad(P(a0 + across * width / 2f, -0.3f), aR, cR, P(a1 + across * width / 2f, -0.3f), white);
+                    if (st == Steps - 1) park.Quad(P(a1 - across * width / 2f, -0.3f), cL, cR, P(a1 + across * width / 2f, -0.3f), white);
+                }
+                // a flag either side of the lip, red on the left, blue on the right
+                for (int sgn = -1; sgn <= 1; sgn += 2)
+                {
+                    Vector2 f = lipAt + across * (sgn * (width / 2f + 1.2f));
+                    var fp = new Vector3(f.x - root.x, HeightAt(f) - root.y, f.y - root.z);
+                    Kit.AddBox(flags, fp, new Vector3(0.08f, 2.4f, 0.08f), new Color(0.3f, 0.3f, 0.32f));
+                    Kit.AddBox(flags, fp + Vector3.up * 1.8f + new Vector3(down.x, 0f, down.y) * 0.35f, new Vector3(0.04f, 0.5f, 0.7f), sgn < 0 ? new Color(0.85f, 0.12f, 0.1f) : new Color(0.12f, 0.35f, 0.85f), Mathf.Atan2(down.x, down.y) * Mathf.Rad2Deg);
+                }
+                kickers++;
+            }
+            // (its object is named as the pistes' sheet, which is what Winter Walk rides on; its mesh keeps its own name, or
+            // the sheet's own mesh, saved under that name later, would replace it)
+            b.MeshPiece("Terrain Park", park.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true).Named("Piste Sheet");
+            // the half-pipe, below the Big Air game's kicker: a channel of packed snow sixty metres long down the run, its
+            // floor six metres across and its walls curving up to vertical three and a half metres up, with a deck along
+            // each top. Riders swing from wall to wall (Winter Walk flies them off the lips and lands them back)
+            var pipe = new MeshBuilder();
+            const float PipeFrom = HalfPipeAlong, PipeTo = HalfPipeAlong + 60f, PipeFloor = 3f, PipeR = 3.5f, PipeDeck = 1.6f;
+            float[] pipeAcross = { -(PipeFloor + PipeR + PipeDeck), -(PipeFloor + PipeR), -(PipeFloor + PipeR * 0.95f), -(PipeFloor + PipeR * 0.8f), -(PipeFloor + PipeR * 0.55f), -(PipeFloor + PipeR * 0.25f), -PipeFloor, PipeFloor, PipeFloor + PipeR * 0.25f, PipeFloor + PipeR * 0.55f, PipeFloor + PipeR * 0.8f, PipeFloor + PipeR * 0.95f, PipeFloor + PipeR, PipeFloor + PipeR + PipeDeck };
+            float PipeUp(float x)
+            {
+                float t = Mathf.Abs(x) - PipeFloor;
+                if (t <= 0f) return 0.15f;
+                if (t >= PipeR) return PipeR + 0.15f;
+                return PipeR - Mathf.Sqrt(PipeR * PipeR - t * t) + 0.15f;      // a quarter circle up to vertical
+            }
+            Vector3 PipeAt(float pipeAlong, float x)
+            {
+                Vector2 pm = RunCentre(2, pipeAlong, out _);
+                Vector2 pd = (RunCentre(2, pipeAlong + 2f, out _) - pm).normalized, ps = new Vector2(pd.y, -pd.x);
+                Vector2 q = pm + ps * x;
+                // the floor follows the run's middle line down the slope, level across (not the ground under each point)
+                return new Vector3(q.x - root.x, HeightAt(pm) + PipeUp(x) - root.y, q.y - root.z);
+            }
+            for (float pal = PipeFrom; pal < PipeTo; pal += 2f)
+            {
+                for (int k = 0; k + 1 < pipeAcross.Length; k++)
+                {
+                    Vector3 a0 = PipeAt(pal, pipeAcross[k]), a1 = PipeAt(pal, pipeAcross[k + 1]), c0 = PipeAt(pal + 2f, pipeAcross[k]), c1 = PipeAt(pal + 2f, pipeAcross[k + 1]);
+                    pipe.Quad(a0, c0, c1, a1, white); pipe.Quad(a0, a1, c1, c0, white);
+                }
+                // the outer faces, pd to the ground
+                foreach (float edge in new[] { pipeAcross[0], pipeAcross[pipeAcross.Length - 1] })
+                {
+                    Vector3 t0 = PipeAt(pal, edge), t1 = PipeAt(pal + 2f, edge);
+                    Vector3 b0 = t0, b1 = t1;
+                    b0.y = HeightAt(new Vector2(t0.x + root.x, t0.z + root.z)) - 0.4f - root.y;
+                    b1.y = HeightAt(new Vector2(t1.x + root.x, t1.z + root.z)) - 0.4f - root.y;
+                    pipe.Quad(b0, b1, t1, t0, white); pipe.Quad(b0, t0, t1, b1, white);
+                }
+            }
+            b.MeshPiece("Half Pipe", pipe.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"), true).Named("Piste Sheet");
+            Debug.Log("[BWM] Winter Isle terrain park: " + kickers + " kickers and a half-pipe");
         }
 
         // 14. The coal mine under the mountain (WinterIsleMine)
@@ -2208,12 +2530,16 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 go.AddComponent<MeshRenderer>().sharedMaterial = gear;
                 go.SetActive(false);
             }
-            // the racks: a rail on two posts with gear leaning on it, either side of the way out of the top station
-            Vector2 outDir = (Peak + new Vector2(Mathf.Cos(SkiBearing), Mathf.Sin(SkiBearing)) * 40f - Peak).normalized, sideDir = new Vector2(outDir.y, -outDir.x);
+            // the racks: a rail on two posts with gear leaning on it, a pair either side of the way out of the gondola's
+            // top station, and a pair at each of the ski lift's stations (Winter Walk finds them all: "Ski Rack",
+            // "Ski Rack 2", ...)
             var rackMesh = new MeshBuilder();
+            void Racks(Vector2 centre, Vector2 outDir, int index)
+            {
+            Vector2 sideDir = new Vector2(outDir.y, -outDir.x);
             for (int which = 0; which < 2; which++)
             {
-                Vector2 at = Peak + outDir * 16f + sideDir * (which == 0 ? -5f : 5f);
+                Vector2 at = centre + sideDir * (which == 0 ? -5f : 5f);
                 var foot = new Vector3(at.x - root.x, HeightAt(at) - root.y, at.y - root.z);
                 float rackYaw = Mathf.Atan2(sideDir.x, sideDir.y) * Mathf.Rad2Deg;
                 var rackAlong = new Vector3(sideDir.x, 0f, sideDir.y);
@@ -2223,16 +2549,48 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 for (int n = 0; n < 4; n++)
                     Kit.AddBox(rackMesh, foot + rackAlong * (-0.8f + n * 0.5f) + new Vector3(outDir.x, 0f, outDir.y) * 0.12f, which == 0 ? new Vector3(0.09f, 1.3f, 0.03f) : new Vector3(0.28f, 1.2f, 0.03f),
                         which == 0 ? new Color(0.85f, 0.12f, 0.1f) : new Color(0.1f, 0.45f, 0.8f), rackYaw);
-                var mark = new GameObject(which == 0 ? "Ski Rack" : "Board Rack");
+                var mark = new GameObject((which == 0 ? "Ski Rack" : "Board Rack") + (index > 0 ? " " + (index + 1) : ""));
                 mark.transform.SetParent(b.Root.transform, false);
                 mark.transform.position = new Vector3(at.x, HeightAt(at) + 0.75f, at.y);
             }
+            }
+            Vector2 faceDown = new Vector2(Mathf.Cos(SkiBearing), Mathf.Sin(SkiBearing));
+            Racks(Peak + faceDown * 16f, faceDown, 0);
+            Vector2 liftDir = (SkiLiftTop - SkiLiftBottom).normalized;
+            Racks(SkiLiftBottom - liftDir * 13f, -liftDir, 1);
+            Racks(SkiLiftTop + liftDir * 12f, liftDir, 2);
             b.MeshPiece("Gear Racks", rackMesh.ToMesh(), gear, false);
 
             // piste furniture: orange marker poles down both edges of every run, slalom gates down the middle run
             // (red and blue flags alternately, set to one runSide then the other), a finish arch and a lodge at the foot
             var furniture = new MeshBuilder();
             Vector3 Ground3(Vector2 q) => new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z);
+            // A trail map: a board on two posts under a little roof, the mountain's three runs drawn on it as stripes from
+            // a white peak in their poles' colours (blue, red, black), and the ski lift's line across
+            void TrailMap(Vector2 boardAt, float boardYaw)
+            {
+                Quaternion bt = Quaternion.Euler(0f, boardYaw, 0f);
+                Vector3 boardFoot = Ground3(boardAt);
+                var post = new Color(0.36f, 0.24f, 0.15f);
+                Kit.AddBox(furniture, boardFoot + bt * new Vector3(-1.7f, 0f, 0f), new Vector3(0.18f, 3.4f, 0.18f), post, boardYaw);
+                Kit.AddBox(furniture, boardFoot + bt * new Vector3(1.7f, 0f, 0f), new Vector3(0.18f, 3.4f, 0.18f), post, boardYaw);
+                Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 1.3f, 0.12f), new Vector3(3.6f, 2.1f, 0.1f), new Color(0.93f, 0.93f, 0.9f), boardYaw);
+                Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 3.4f, 0.12f), new Vector3(4.0f, 0.3f, 0.5f), post, boardYaw);      // a little roof
+                Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 2.75f, 0.19f), new Vector3(0.5f, 0.35f, 0.04f), new Color(0.55f, 0.6f, 0.7f), boardYaw);
+                Color[] runColours = { new Color(0.12f, 0.32f, 0.85f), new Color(0.85f, 0.15f, 0.1f), new Color(0.08f, 0.08f, 0.1f) };
+                for (int rc = 0; rc < 3; rc++)
+                    for (int seg = 0; seg < 5; seg++)
+                    {
+                        float sx = (rc - 1) * (0.25f + seg * 0.18f) + Mathf.Sin(seg * 1.7f + rc) * 0.08f;
+                        Kit.AddBox(furniture, boardFoot + bt * new Vector3(sx, 2.45f - seg * 0.3f, 0.19f), new Vector3(0.09f, 0.32f, 0.04f), runColours[rc], boardYaw);
+                    }
+                Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 1.42f, 0.19f), new Vector3(3.0f, 0.1f, 0.04f), new Color(0.3f, 0.3f, 0.35f), boardYaw);      // the lift's line
+            }
+            // ...one by the gondola's top station, facing those leaving it, and one at the ski lift's top
+            Vector2 faceDownMap = new Vector2(Mathf.Cos(SkiBearing), Mathf.Sin(SkiBearing)), faceSideMap = new Vector2(faceDownMap.y, -faceDownMap.x);
+            TrailMap(Peak + faceDownMap * 21f + faceSideMap * 9f, Mathf.Atan2(-faceDownMap.x, -faceDownMap.y) * Mathf.Rad2Deg);
+            Vector2 liftDirMap = (SkiLiftTop - SkiLiftBottom).normalized;
+            TrailMap(SkiLiftTop + liftDirMap * 13f + new Vector2(liftDirMap.y, -liftDirMap.x) * 5f, Mathf.Atan2(-liftDirMap.x, -liftDirMap.y) * Mathf.Rad2Deg);
             int markers = 0, gates = 0;
             for (int run = 0; run < 3; run++)
                 for (float d = 90f; d < SkiRadius - 90f; d += d < 560f ? 22.5f : 11.25f)      // (from the top: in the bowl too, the runs need marking)      // from where the forest begins: in the open bowl they were a scatter of sticks
@@ -2244,8 +2602,12 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     {
                         Vector2 q = runMid + runSide * (sgn * (runHalf + 4f));
                         if (!(HeightAt(q) > 3f)) continue;
-                        Kit.AddBox(furniture, Ground3(q), new Vector3(0.14f, 3.2f, 0.14f), new Color(0.95f, 0.45f, 0.08f));
-                        Kit.AddBox(furniture, Ground3(q) + Vector3.up * 3.2f, new Vector3(0.26f, 0.26f, 0.26f), new Color(0.1f, 0.1f, 0.1f));
+                        if (Groomed(q) > 0.3f) continue;      // (where two runs meet, one's edge lies inside the other: no poles across a run)
+                        // coloured by the run, as a resort's are (blue, red, black), with an orange band at the top
+                        Color runColour = run == 0 ? new Color(0.12f, 0.32f, 0.85f) : run == 1 ? new Color(0.85f, 0.12f, 0.1f) : new Color(0.07f, 0.07f, 0.09f);
+                        Kit.AddBox(furniture, Ground3(q), new Vector3(0.14f, 2.7f, 0.14f), runColour);
+                        Kit.AddBox(furniture, Ground3(q) + Vector3.up * 2.7f, new Vector3(0.15f, 0.5f, 0.15f), new Color(0.95f, 0.45f, 0.08f));
+                        Kit.AddBox(furniture, Ground3(q) + Vector3.up * 3.2f, new Vector3(0.22f, 0.12f, 0.22f), new Color(0.1f, 0.1f, 0.1f));
                         markers++;
                     }
                     if (run == 1 && (Mathf.RoundToInt(d / 11.25f) % 6 == 0))
@@ -2283,29 +2645,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Kit.AddBox(furniture, archMid + Vector3.up * 4.1f, new Vector3(0.2f, 0.18f, archHalf * 2f - 6f), new Color(0.96f, 0.96f, 0.94f), archYaw);
                 // the lodge stands off the run-out's edge, a little below the arch, where the view up from the foot
                 // takes it in with the arch
-                Vector2 lodge = runMid + runSide * (runHalf + 21f) + runDir * 22f;
-                // the trail map: a board on two posts beside the deck, the three runs drawn on it in green, red and black
-                {
-                    Vector2 boardAt = runMid + runSide * (runHalf + 7f) + runDir * 8f;
-                    float boardYaw = Mathf.Atan2(-runDir.x, -runDir.y) * Mathf.Rad2Deg;      // facing up the run, to skiers arriving
-                    Quaternion bt = Quaternion.Euler(0f, boardYaw, 0f);
-                    Vector3 boardFoot = Ground3(boardAt);
-                    var post = new Color(0.36f, 0.24f, 0.15f);
-                    Kit.AddBox(furniture, boardFoot + bt * new Vector3(-1.7f, 0f, 0f), new Vector3(0.18f, 3.4f, 0.18f), post, boardYaw);
-                    Kit.AddBox(furniture, boardFoot + bt * new Vector3(1.7f, 0f, 0f), new Vector3(0.18f, 3.4f, 0.18f), post, boardYaw);
-                    Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 1.3f, 0.12f), new Vector3(3.6f, 2.1f, 0.1f), new Color(0.93f, 0.93f, 0.9f), boardYaw);
-                    Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 3.4f, 0.12f), new Vector3(4.0f, 0.3f, 0.5f), post, boardYaw);      // a little roof
-                    // the mountain's outline and the runs on it, as stripes down from a white peak
-                    Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 2.75f, 0.19f), new Vector3(0.5f, 0.35f, 0.04f), new Color(0.55f, 0.6f, 0.7f), boardYaw);
-                    Color[] runColours = { new Color(0.15f, 0.6f, 0.2f), new Color(0.85f, 0.15f, 0.1f), new Color(0.08f, 0.08f, 0.1f) };
-                    for (int rc = 0; rc < 3; rc++)
-                        for (int seg = 0; seg < 5; seg++)
-                        {
-                            float sx = (rc - 1) * (0.25f + seg * 0.18f) + Mathf.Sin(seg * 1.7f + rc) * 0.08f;
-                            Kit.AddBox(furniture, boardFoot + bt * new Vector3(sx, 2.45f - seg * 0.3f, 0.19f), new Vector3(0.09f, 0.32f, 0.04f), runColours[rc], boardYaw);
-                        }
-                    Kit.AddBox(furniture, boardFoot + bt * new Vector3(0f, 1.42f, 0.19f), new Vector3(3.0f, 0.1f, 0.04f), new Color(0.3f, 0.3f, 0.35f), boardYaw);      // the lift's line
-                }
+                Vector2 lodge = runMid + runSide * (Mathf.Min(runHalf, 24f) + 17f) + runDir * 14f;
+                // the trail map, beside the deck, facing up the run to skiers arriving
+                TrailMap(runMid + runSide * (Mathf.Min(runHalf, 24f) + 5f) + runDir * 2f, Mathf.Atan2(-runDir.x, -runDir.y) * Mathf.Rad2Deg);
                 float lodgeYaw = Mathf.Atan2(runDir.x, runDir.y) * Mathf.Rad2Deg;
                 // the lodge: a big log A-frame facing the run, a long row of lit windows, a deck with benches in front,
                 // and a smaller hut beside it
@@ -2339,11 +2681,53 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // 9. Causeway from the mainland shore to the landing
         Vector2 across_ = ShorePoint - landing, mid = (ShorePoint + landing) / 2f;
         float yaw = Mathf.Atan2(across_.x, across_.y) * Mathf.Rad2Deg;
-        b.Box("Causeway", mid.x - root.x, mid.y - root.z, new Vector3(7f, 3.2f, across_.magnitude + 24f), PackedSnow, -2.2f - root.y, yaw, false);
+        // a stone embankment: a cambered top under snow, sides of grey stone sloping into the water, and a band of
+        // boulders tipped along both sides at the waterline (a flat pale box read as an unfinished plane)
+        {
+            var cw = new MeshBuilder();
+            var cwRandom = new System.Random(6151);
+            float Rc(float lo, float hi) => lo + (hi - lo) * (float)cwRandom.NextDouble();
+            Vector2 alongC = across_.normalized, sideC = new Vector2(alongC.y, -alongC.x);
+            float length = across_.magnitude + 24f;
+            Vector3 L3(Vector2 q, float y) => new Vector3(q.x - root.x, y - root.y, q.y - root.z);
+            void Face(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Color c) { cw.Quad(p0, p1, p2, p3, c); cw.Quad(p0, p3, p2, p1, c); }
+            var snowTop = new Color(0.9f, 0.92f, 0.96f);
+            int segments = Mathf.CeilToInt(length / 5f);
+            float[] footL = new float[segments + 1], footR = new float[segments + 1];
+            for (int si = 0; si <= segments; si++) { footL[si] = Rc(5.2f, 6.2f); footR[si] = Rc(5.2f, 6.2f); }
+            for (int si = 0; si < segments; si++)
+            {
+                Vector2 c0 = mid + alongC * (-length / 2f + si * length / segments), c1 = mid + alongC * (-length / 2f + (si + 1) * length / segments);
+                var stone = new Color(0.44f, 0.45f, 0.49f) * Rc(0.88f, 1.08f);
+                // the top, in two strips meeting at a low crown
+                Face(L3(c0 - sideC * 3.5f, 0.95f), L3(c0, 1.06f), L3(c1, 1.06f), L3(c1 - sideC * 3.5f, 0.95f), snowTop);
+                Face(L3(c0, 1.06f), L3(c0 + sideC * 3.5f, 0.95f), L3(c1 + sideC * 3.5f, 0.95f), L3(c1, 1.06f), snowTop);
+                // the sides, down into the water
+                Face(L3(c0 - sideC * 3.5f, 0.95f), L3(c1 - sideC * 3.5f, 0.95f), L3(c1 - sideC * footL[si + 1], -2.4f), L3(c0 - sideC * footL[si], -2.4f), stone);
+                Face(L3(c0 + sideC * 3.5f, 0.95f), L3(c0 + sideC * footR[si], -2.4f), L3(c1 + sideC * footR[si + 1], -2.4f), L3(c1 + sideC * 3.5f, 0.95f), stone);
+            }
+            // the ends, closed
+            foreach (int end in new[] { 0, segments })
+            {
+                Vector2 c = mid + alongC * (-length / 2f + end * length / segments);
+                Face(L3(c - sideC * 3.5f, 0.95f), L3(c, 1.06f), L3(c, -2.4f), L3(c - sideC * footL[end], -2.4f), new Color(0.42f, 0.43f, 0.47f));
+                Face(L3(c, 1.06f), L3(c + sideC * 3.5f, 0.95f), L3(c + sideC * footR[end], -2.4f), L3(c, -2.4f), new Color(0.42f, 0.43f, 0.47f));
+            }
+            int riprap = 0;
+            for (int side = -1; side <= 1; side += 2)
+                for (float d = -length / 2f + 1f; d < length / 2f - 1f; d += Rc(1.2f, 2.0f))
+                {
+                    Vector2 q = mid + alongC * d + sideC * (side * Rc(4.2f, 5.2f));
+                    Kit.AddRock(cw, L3(q, Rc(-0.7f, 0.2f)), new Vector3(Rc(0.9f, 1.9f), Rc(0.7f, 1.3f), Rc(0.9f, 1.9f)), 9000 + riprap);
+                    riprap++;
+                }
+            b.MeshPiece("Causeway", cw.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"));
+        }
 
         Snowfall(b);
 
         // Christmas lights down both sides of the causeway, a post every 9 m
+        var candy = new MeshBuilder();
         Vector2 along = across_.normalized, side_ = new Vector2(along.y, -along.x);
         float span = across_.magnitude + 16f;
         for (int side = -1; side <= 1; side += 2)
@@ -2355,9 +2739,38 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 posts.Add(new Vector3(p.x - root.x, 1f + 2.4f - root.y, p.y - root.z));
             }
             Kit.LightString(b, side < 0 ? "Causeway Lights Left" : "Causeway Lights Right", posts, 0.35f, 0.5f, false, false, side + 3);
+            // the posts: candy-striped, red and white bands
             foreach (Vector3 post in posts)
-                b.Box("Light Post", post.x, post.z, new Vector3(0.12f, 2.9f, 0.12f), new Color(0.36f, 0.25f, 0.17f), 0.5f - root.y, 0f, false);
+                for (int band = 0; band < 9; band++)
+                    Kit.AddBox(candy, new Vector3(post.x, 0.95f - root.y + band * 0.27f, post.z), new Vector3(0.14f, 0.27f, 0.14f), band % 2 == 0 ? new Color(0.85f, 0.1f, 0.1f) : new Color(0.96f, 0.95f, 0.92f), band * 12f);
         }
+        // the gate at the island's end of the causeway: two candy-striped towers, a beam with a wreath and a star, and
+        // lights along it
+        {
+            Vector2 gateAt = landing + along * 3f;
+            float gateYaw = Mathf.Atan2(side_.x, side_.y) * Mathf.Rad2Deg;
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+            {
+                Vector2 towerAt = gateAt + side_ * (sgn * 3.9f);
+                for (int band = 0; band < 16; band++)
+                    Kit.AddBox(candy, new Vector3(towerAt.x - root.x, 0.95f - root.y + band * 0.3f, towerAt.y - root.z), new Vector3(0.42f, 0.3f, 0.42f), band % 2 == 0 ? new Color(0.85f, 0.1f, 0.1f) : new Color(0.96f, 0.95f, 0.92f), band * 9f);
+                Kit.AddBall(candy, new Vector3(towerAt.x - root.x, 0.95f - root.y + 4.95f, towerAt.y - root.z), 0.3f, new Color(0.95f, 0.72f, 0.2f));
+            }
+            var beam = new Vector3(gateAt.x - root.x, 0.95f - root.y + 4.5f, gateAt.y - root.z);
+            Kit.AddBox(candy, beam, new Vector3(0.35f, 0.45f, 8.4f), new Color(0.1f, 0.33f, 0.18f), gateYaw + 90f);      // the garland beam
+            Vector3 wreath = beam + Vector3.up * 1.1f - new Vector3(along.x, 0f, along.y) * 0.25f;
+            for (int k = 0; k < 14; k++)
+            {
+                float a = 2f * Mathf.PI * k / 14f;
+                Vector3 offset = new Vector3(side_.x, 0f, side_.y) * (Mathf.Cos(a) * 0.75f) + Vector3.up * (Mathf.Sin(a) * 0.75f);
+                Kit.AddBall(candy, wreath + offset, 0.2f, new Color(0.1f, 0.36f, 0.18f));
+            }
+            Kit.AddBall(candy, wreath + Vector3.down * 0.75f, 0.16f, new Color(0.85f, 0.1f, 0.1f));      // its bow
+            Kit.AddStar(candy, beam + Vector3.up * 2.4f, 0.55f, 0.1f, new Color(0.95f, 0.72f, 0.2f));
+            Vector2 gl = gateAt - side_ * 3.9f, gr = gateAt + side_ * 3.9f;
+            Kit.LightString(b, "Gate Lights", new List<Vector3> { new Vector3(gl.x - root.x, 5.3f - root.y, gl.y - root.z), new Vector3(gr.x - root.x, 5.3f - root.y, gr.y - root.z) }, 0.4f, 0.35f, false, false, 9);
+        }
+        b.MeshPiece("Candy Posts and Gate", candy.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Bare", m => m.SetFloat("_SnowLine", 2f)), true);
 
         // Materials Winter Walk uses at runtime on copies of the game's own objects. A material only reaches the
         // game inside a pack if something in the pack uses it, so a speck deep under the island carries them.

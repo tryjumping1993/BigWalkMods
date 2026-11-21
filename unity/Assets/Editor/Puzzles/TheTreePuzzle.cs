@@ -70,6 +70,34 @@ public sealed class TheTreePuzzle : PuzzleDef
         Kit.AddStar(star, Vector3.up * (0.6f + TreeHeight + 0.55f), 0.9f, 0.22f, Gold);
         b.MeshPiece("Star", star.ToMesh(), bare, false);
 
+        // ---- presents piled under the boughs, between the plinths: wrapped boxes of every size, tied with ribbon ----
+        {
+            var presents = new MeshBuilder();
+            var pr = new System.Random(1224);
+            float R(float lo, float hi) => lo + (hi - lo) * (float)pr.NextDouble();
+            Color[] paper = { new Color(0.8f, 0.1f, 0.1f), new Color(0.1f, 0.42f, 0.2f), new Color(0.15f, 0.3f, 0.75f), new Color(0.95f, 0.75f, 0.2f), new Color(0.92f, 0.92f, 0.9f), new Color(0.55f, 0.15f, 0.55f) };
+            Color[] ribbon = { new Color(0.95f, 0.8f, 0.3f), new Color(0.95f, 0.95f, 0.92f), new Color(0.8f, 0.1f, 0.1f) };
+            for (int i = 0; i < 18; i++)
+            {
+                float a = Mathf.PI * 1.5f + 2f * Mathf.PI * (i / 18f) + Mathf.PI / 5f + R(-0.12f, 0.12f), r = R(2.6f, 4.8f);
+                float sx = R(0.4f, 0.95f), sy = R(0.3f, 0.75f), sz = R(0.4f, 0.95f), yaw = R(0f, 90f);
+                var at = new Vector3(Mathf.Cos(a) * r, 0.6f, Mathf.Sin(a) * r);
+                Color c = paper[pr.Next(paper.Length)], band = ribbon[pr.Next(ribbon.Length)];
+                Kit.AddBox(presents, at, new Vector3(sx, sy, sz), c, yaw);
+                Kit.AddBox(presents, at, new Vector3(sx + 0.02f, sy + 0.01f, 0.08f), band, yaw);
+                Kit.AddBox(presents, at, new Vector3(0.08f, sy + 0.01f, sz + 0.02f), band, yaw);
+                Kit.AddBall(presents, at + Vector3.up * (sy + 0.05f), 0.08f, band);      // the bow
+                if (pr.NextDouble() < 0.4)      // a smaller one on top
+                {
+                    float tx = sx * 0.55f, ty = sy * 0.6f, tz = sz * 0.55f;
+                    Color c2 = paper[pr.Next(paper.Length)];
+                    Kit.AddBox(presents, at + Vector3.up * sy, new Vector3(tx, ty, tz), c2, yaw + 25f);
+                    Kit.AddBox(presents, at + Vector3.up * sy, new Vector3(tx + 0.02f, ty + 0.01f, 0.06f), band, yaw + 25f);
+                }
+            }
+            b.MeshPiece("Presents", presents.ToMesh(), bare, false);
+        }
+
         // ---- lights winding up the tree: five turns, hugging the boughs ----
         var spiral = new List<Vector3>();
         const int points = 60;
@@ -189,14 +217,41 @@ public sealed class TheTreePuzzle : PuzzleDef
         Kit.AddDisc(built, Here(0f, 0f, 0.15f), 3.2f, 0.35f, Stone * 0.92f, 28);
         Kit.AddDisc(built, Here(0f, 0f, 0.5f), 1.6f, 4.5f, Stone * 0.85f, 16);
         b.MeshPiece("Summit Floor", built.ToMesh(), stone);
+        // the pavilion over the middle: eight slender pillars round the column, and a tall red roof rising to a spire,
+        // the great star on top, so the summit has a tower that reads from the slopes and the plaza far below (it keeps
+        // inside the plinths' ring, clear of the gondola's top station, which reaches in to 5.5 m)
+        const int Pillars = 8;
+        const float PillarRing = 3.2f, Eave = 4.6f, Apex = 11.5f, Overhang = 1.1f;
+        var pavilion = new MeshBuilder();
+        for (int i = 0; i < Pillars; i++)
+        {
+            float a = 2f * Mathf.PI * (i + 0.5f) / Pillars;
+            Kit.AddBox(pavilion, Here(Mathf.Cos(a) * PillarRing, Mathf.Sin(a) * PillarRing, 0f), new Vector3(0.42f, Eave, 0.42f), new Color(0.9f, 0.86f, 0.76f), -a * Mathf.Rad2Deg);
+            Kit.AddBox(pavilion, Here(Mathf.Cos(a) * PillarRing, Mathf.Sin(a) * PillarRing, Eave - 0.4f), new Vector3(0.6f, 0.4f, 0.6f), Gold, -a * Mathf.Rad2Deg);      // capitals
+        }
+        const int RoofSegments = 24;
+        Vector3 apex = Here(0f, 0f, Apex);
+        for (int i = 0; i < RoofSegments; i++)
+        {
+            float a0 = 2f * Mathf.PI * i / RoofSegments, a1 = 2f * Mathf.PI * (i + 1) / RoofSegments;
+            float rr = PillarRing + Overhang;
+            Vector3 e0 = Here(Mathf.Cos(a0) * rr, Mathf.Sin(a0) * rr, Eave), e1 = Here(Mathf.Cos(a1) * rr, Mathf.Sin(a1) * rr, Eave);
+            Vector3 i0 = Here(Mathf.Cos(a0) * PillarRing, Mathf.Sin(a0) * PillarRing, Eave - 0.3f), i1 = Here(Mathf.Cos(a1) * PillarRing, Mathf.Sin(a1) * PillarRing, Eave - 0.3f);
+            Color roof = i % 2 == 0 ? new Color(0.62f, 0.1f, 0.09f) : new Color(0.55f, 0.08f, 0.08f);
+            pavilion.Tri(e0, apex, e1, roof);           // the roof, outside
+            pavilion.Tri(e0, e1, apex, roof * 0.7f);    // and its underside
+            pavilion.Quad(i0, i1, e1, e0, Gold);        // a gold band round the eave
+            pavilion.Quad(i0, e0, e1, i1, Gold);
+        }
+        b.MeshPiece("Summit Pavilion", pavilion.ToMesh(), snowy, true);
         var star = new MeshBuilder();
-        Kit.AddStar(star, Here(0f, 0f, 7.4f), 2.4f, 0.5f, Gold);
+        Kit.AddStar(star, Here(0f, 0f, Apex + 2.1f), 2.0f, 0.45f, Gold);
         b.MeshPiece("Summit Star", star.ToMesh(), bare, false);
         // a second star crossing the first, so it reads from every side
         var star2 = new MeshBuilder();
-        Kit.AddStar(star2, Vector3.zero, 2.4f, 0.5f, Gold);
+        Kit.AddStar(star2, Vector3.zero, 2.0f, 0.45f, Gold);
         Piece cross = b.MeshPiece("Summit Star Cross", star2.ToMesh(), bare, false);
-        cross.Transform.position = b.Root.transform.position + Here(0f, 0f, 7.4f);
+        cross.Transform.position = b.Root.transform.position + Here(0f, 0f, Apex + 2.1f);
         cross.Transform.rotation = Quaternion.Euler(0f, 90f, 0f);
 
         var plinths = new List<UnityEngine.Object>();

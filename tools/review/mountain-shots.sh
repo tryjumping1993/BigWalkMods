@@ -13,8 +13,12 @@ swing(){ python -c "import math; print(round(0.05*math.sin($1/115.0+2.1)*$(sm "(
 mkdir -p shots/mountain
 c "set?path=WinterWalk.GondolaDriver.ForceOpen&value=true" >/dev/null      # the cabins out on the line
 c "time?hour=13" >/dev/null
+# no snow tracks while shooting: the player is set down by each camera and slides, and its tracks from one view
+# showed in the next as long pale sheets across the runs
+c "set?path=WinterWalk.Plugin.Tracks.Value&value=false" >/dev/null
 # name, bearing offset from the ski face's (radians), distance from the peak, camera height (a: above the sea,
-# g: above the ground), then what it looks at: bearing offset, distance, height (a or g)
+# g: above the ground), then what it looks at: bearing offset, distance, height (a, g, or c: above the camera; the
+# uphill views look a little above level, as a person on the slope does: aimed along the slope it looked flat)
 views="
 air-east      0.00 2500 a520   0.00  300 a260
 air-south    -1.35 1700 a430   0.00  100 a240
@@ -23,8 +27,8 @@ air-west      3.14 1500 a420   0.00    0 a300
 foot          0.00 1420 g2.4   0.00  600 a330
 lower-run     0.00 1150 g2.0   0.00  800 g2
 mid-run-down  0.00  700 g2.2   0.00 1300 g2
-mid-run-up    0.00  800 g2.0   0.00  400 g2
-forest        0.012 950 g1.8   0.05  880 g4
+mid-run-up    0.00  800 g2.0   0.00  400 c45
+forest        0.012 950 g1.8   0.05  700 c30
 bowl          0.00  300 g2.5   0.00 1100 g2
 summit        0.00  150 g2.5   0.00  900 g2
 cliffs        2.40  760 g25    2.60  250 a330
@@ -37,7 +41,7 @@ echo "$views" | while read -r name b d h tb td th; do
   x=$(py "$PX+math.cos($B+$rb)*$d"); z=$(py "$PZ+math.sin($B+$rb)*$d")
   tx=$(py "$PX+math.cos($B+$rtb)*$td"); tz=$(py "$PZ+math.sin($B+$rtb)*$td")
   if [ "${h:0:1}" = g ]; then g=$(ground $x $z); y=$(py "${g:-0}+${h:1}"); else y=${h:1}; fi
-  if [ "${th:0:1}" = g ]; then g=$(ground $tx $tz); ty=$(py "${g:-0}+${th:1}"); else ty=${th:1}; fi
+  if [ "${th:0:1}" = g ]; then g=$(ground $tx $tz); ty=$(py "${g:-0}+${th:1}"); elif [ "${th:0:1}" = c ]; then ty=$(py "$y+${th:1}"); else ty=${th:1}; fi
   c "time?hour=13" >/dev/null
   c "teleport?x=$x&y=$(py "$y+3")&z=$z" >/dev/null; sleep 7
   c "shot?file=mountain-$name&cx=$x&cy=$y&cz=$z&tx=$tx&ty=$ty&tz=$tz" >/dev/null; sleep 3

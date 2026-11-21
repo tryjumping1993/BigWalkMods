@@ -130,7 +130,8 @@ public static class WinterIsleDressing
         if (onTerrain && diameter > 1.2f && ground > 45f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && land.Slope(p) > 0.55f) return ground;      // none stuck on the mountain's steep faces: they lie at its foot
         if (onTerrain && diameter > 1.5f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.5f && R(0f, 1f) > 0.15f) return ground;
         if (onTerrain && diameter > 1.2f && (p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.3f && ground > WinterIslePuzzle.TreeLine - 60f) return ground;
-        if (onTerrain && diameter > 2f && (p - WinterIslePuzzle.Peak).magnitude < 1100f && ground > 45f) return ground;      // the great mountain is its own rock: the game's beige boulders sat on its grey faces like stickers
+        if (onTerrain && diameter > 2f && (p - WinterIslePuzzle.Peak).magnitude < 1100f && ground > 45f) return ground;
+        if (onTerrain && (p - WinterIslePuzzle.Peak).magnitude < 1300f && ground > 90f && land.Slope(p) > 0.4f) return ground;      // (nor loose brown stones on its high steep sides)      // the great mountain is its own rock: the game's beige boulders sat on its grey faces like stickers
         if (onTerrain && diameter > 4.5f && (p - WinterIslePuzzle.Peak).magnitude < 980f && WinterIslePuzzle.SkiFace(p) < 0.5f) return ground;      // ...down to the sea: the game's big cliff rocks on its steep shores stood as walls of flutes with arches under them      // nothing along the bowl's lip: a row of brown boulders hid the run below      // on the ski face rock is a few outcrops, not a band across it      // no rock on a piste or in the open bowl, however steep      // the forest between the ski runs is trees, not a boulder field
         if (onTerrain)
         {
@@ -162,6 +163,8 @@ public static class WinterIsleDressing
         // nothing of the game's own flora up the ski mountain: above the trees it is snow and rock, and on the ski face
         // only our firs grow (grass trees in an alpine bowl read wrong)
         if ((p - WinterIslePuzzle.Peak).magnitude < 1500f && (land.Height(p) > WinterIslePuzzle.TreeLine - 40f || WinterIslePuzzle.SkiFace(p) > 0.4f) && !kind.Contains("Log") && !kind.Contains("Litter")) return;
+        // ...nor on its steep sides higher up (grass tufts and green shrubs on a high rock face read wrong)
+        if ((p - WinterIslePuzzle.Peak).magnitude < 1300f && land.Height(p) > 90f && land.Slope(p) > 0.45f) return;
         Cover.Add((p, Mathf.Max(k.size.x, k.size.z) * scale * 0.4f));
         output.Append("tree:").Append(kind).Append('\t').Append(F(p.x)).Append('\t').Append(F(y)).Append('\t').Append(F(p.y)).Append('\t')
             .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(scale)).Append('\t').Append(F(snow)).Append('\n');
@@ -342,16 +345,21 @@ public static class WinterIsleDressing
                 coast++;
             }
         }
-        for (float z = l.Z0; z < l.Z1; z += 4f)
-            for (float x = l.X0; x < l.X1; x += 4f)
+        for (float z = l.Z0; z < l.Z1; z += 3f)
+            for (float x = l.X0; x < l.X1; x += 3f)
             {
-                var p = new Vector2(x + R(-1.7f, 1.7f), z + R(-1.7f, 1.7f));
+                var p = new Vector2(x + R(-1.4f, 1.4f), z + R(-1.4f, 1.4f));
                 float h = l.Height(p);
                 if (float.IsNaN(h) || h > 2.5f || h < -2.5f || l.Beach(p) || !l.Free(p, 2f) || InsideRock(p, 0.5f)) continue;
                 float rough = Mathf.PerlinNoise(p.x * 0.03f + 5.5f, p.y * 0.03f + 91.2f);
-                if (R(0f, 1f) > 0.32f + rough * 0.55f) continue;      // (dense: a snow slope ending in bare water read as a hard edge)
-                if (rough > 0.5f && R(0f, 1f) < 0.22f)
+                if (R(0f, 1f) > 0.45f + rough * 0.5f) continue;      // (dense: a snow slope ending in bare water read as a hard edge)
+                float pick = R(0f, 1f);
+                if (rough > 0.5f && pick < 0.16f)
                     Rock("rock-cliff01", p, Mathf.Min(h, 0.3f), R(8f, 15f), R(0.5f, 0.62f), 0.5f, 5f);      // a shelf of rock running into the sea
+                else if (rough > 0.4f && pick < 0.32f)
+                    Rock("rock-knuckles", p, Mathf.Min(h, 0.2f), R(7f, 13f), R(0.55f, 0.66f), 0.5f, 6f);      // ...or a low angular shelf, mostly drowned
+                else if (pick < 0.6f && h > -0.5f && h < 1.3f)
+                    Rock(Pick(SmallRound), p, Mathf.Min(h, 0.4f), R(0.6f, 1.9f), R(0.3f, 0.5f), 0.4f, 25f, true, false);      // cobbles along the tide line
                 else
                     Rock(Pick(BigRound), p, Mathf.Min(h, 0.5f), R(3f, 11f) * (0.6f + rough), R(0.25f, 0.45f), 0.45f, 18f);
                 coast++;
@@ -484,7 +492,8 @@ public static class WinterIsleDressing
                 // direction away from the summit)
                 Vector2 fromTop = p - WinterIslePuzzle.Peak;
                 float downhill = fromTop.magnitude, round_ = Mathf.Atan2(fromTop.y, fromTop.x) * downhill;
-                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(downhill * 0.004f + 17.7f, round_ * 0.022f + 61.3f) > 0.74f) continue;
+                // (round clearings of uneven size: long strips down the fall line read from the air as firebreaks)
+                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(p.x * 0.014f + 17.7f, p.y * 0.014f + 61.3f) + 0.25f * Mathf.PerlinNoise(p.x * 0.05f, p.y * 0.05f) > 1.0f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
@@ -655,16 +664,17 @@ public static class WinterIsleDressing
                     // fallen logs and stumps, the odd dead snag (a grove with bare snow between its trunks reads as
                     // planted, not grown)
                     float grove = Mathf.Max(Mathf.Max(Smooth01((Grove(p) - 0.44f) / 0.14f), Wood(p, false, false)) * (h < 50f ? 1f : 0f), Mathf.Max(Wood(p, false, false), l.Forest(p) * 0.7f));
-                    float a = 0.07f * wood + 0.02f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.42f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
+                    float a = 0.07f * wood + 0.03f * grove, b = a + 0.16f * wood * clump + 0.03f + 0.55f * grove * clump, c = b + 0.02f + 0.05f * (1f - wood) * clump;
                     // young firs under the old ones and along the woods' floor, half a metre to two and a half tall: the
                     // layer a walker brushes past
-                    if (grove > 0.25f && roll > 0.93f - 0.12f * grove && s < 0.45f && !InsideRock(p, 0.8f) && l.ToPath(p) > 1.6f) { Tree("fir", p, h, R(0.6f, 2.5f), 1.1f, 0.25f); continue; }
+                    // (twice as many as before: the reviewers kept finding bare snow under the firs)
+                    if (grove > 0.25f && roll > 0.86f - 0.14f * grove && s < 0.45f && !InsideRock(p, 0.8f) && l.ToPath(p) > 1.6f) { Tree("fir", p, h, R(0.6f, 2.5f), 1.1f, 0.25f); continue; }
                     if (roll < 0.016f * wood + 0.004f && s < 0.4f && !InsideRock(p, 4f)) Plant(Pick(tall), p, R(0.55f, 0.95f), 0.32f);
                     else if (roll < a) Plant(Pick(woodland), p, R(0.6f, 1.0f));
                     else if (roll < b) Plant(Pick(under), p, R(0.6f, 1.1f));
                     else if (roll < c) Plant(Pick(tops), p, R(0.7f, 1.0f));
                     else if (roll < c + 0.02f + 0.04f * grove) Plant(Pick(dead), p, R(0.5f, 0.9f), 0.25f);
-                    else if (roll < c + 0.04f + 0.11f * grove && s < 0.45f) Plant(Pick(logs), p, R(0.8f, 1.1f), 0.35f);
+                    else if (roll < c + 0.05f + 0.16f * grove && s < 0.45f) Plant(Pick(logs), p, R(0.8f, 1.1f), 0.45f);      // (fallen logs, more of them, under more snow)
                 }
             }
 

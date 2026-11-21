@@ -180,6 +180,34 @@ Built so far (2026-11-20): 1, 3, 4, The Tree, and a first version of 14. "Built"
 starts, and looks right in screenshots; none has been played, and the levers, buttons and lamps have not
 been operated by a player.
 
+**All 24 written (2026-11-21).** The other twenty, and two games on the ski mountain (Slalom and Big Air), are
+built as definitions that pass the SDK's checks. None of them uses custom code: where the table says "Yes", the
+puzzle was redesigned round the SDK's parts and event wiring (a start event that sets a counter's answer, zones
+that count items and switch spans on, Press In Order in its timed mode, doors held open by buttons, a mesh made
+into soundproof glass). The changes from the table:
+
+| # | As built |
+|---|---|
+| 2 Snow Bridge | Two high banks and a pillar; three snowballs in the near hollow raise the first span, three more on the pillar the second |
+| 6 Reindeer Count | Thirteen reindeer among snow screens in a fenced field, two lookouts each seeing some; the answer is fixed |
+| 9 Blind Carols | The three carols on three walls of a soundproof hut, the partner at the window on a walkie-talkie |
+| 10 Whispering Chimney | The listener hums the cabin's tune; the others find the matching speaking tile |
+| 13 Stocking Sort | Each stocking's hook takes only its own present; the key is on a board across the frozen lake |
+| 17 Sleigh Run | The game's timer ball down a walled lane through doors held open from outside |
+| 19 Snow Globe | Press In Order: lamps inside the soundproof dome, buttons outside, so it is all gestures |
+| 20 Fairy Lights | Press In Order, timed: stand on the colour that lights, and only that one, when its time runs out |
+| 21 Thin Ice | The thin squares are simply not solid: a fall is a metre into a painted "water" floor |
+| 22 Snowball Range | Hoops with zones that notice a snowball passing; Press In Order picks the hoop |
+| 23 Advent Trail | 24 signs by the other puzzles, each with a bell, star, candle or tree; the board asks how many bells |
+| 24 Midnight Finale | Levers pulled together fire the launchers; it does not wait for the tree to be full |
+| Slalom | Gates on the left run: the start gate starts a clock, each gate fills the bar, the finish completes it |
+| Big Air | A kicker on the right run (its collider is part of the pistes' sheet) and a zone hung in the air past it |
+
+Winter Walk's skiing now lets riders fly off a kicker's lip (gravity takes over until the snow comes back). The
+island's site search no longer finds room (the island marks its woods, rocks and paths as taken), so the new
+puzzles have fixed sites on the lowland, spaced about 70 m or more apart, which the island's build levels and
+clears. Not tried in the game yet, by anyone: all of the new puzzles and both ski games.
+
 Eleven need no custom code. Blind mask: 9, 11, 15, 18, 21, 22. Snow building: 2, 14, 15, 22 (and 7 uses the
 drifts). Each blind-mask puzzle has to be safe for someone who cannot see: railings or soft resets, never a
 fall into the sea, and the mask comes off the moment the puzzle stops.
@@ -310,3 +338,18 @@ and finished assets for the puzzles.
   tower's five (the mine), the summit's twenty. The SDK shows one plinth per puzzle loaded, so the mine needs
   ten island puzzles and the summit thirty; five are built (Glass Booth, Light the Tree, Bell Ringers, Snowman,
   Downhill).
+- **Environment finished before the puzzles (user, 2026-11-21).** Built since, not yet seen in the game (Steam
+  would not start it):
+  - *Skiing and snowboarding:* a chairlift from beside the lodge up to the bench at the tree line (852 m, 15
+    towers, 26 two-seat chairs; Winter Walk runs it as a second gondola and opens it with the gondola); gear racks
+    at both its stations as well as the gondola's top; a terrain park on the right-hand run (three kickers and a
+    sixty-metre half-pipe); riders fly off a kicker's lip; trail maps at the lodge, the gondola's top and the
+    lift's top; poles coloured by run (blue, red, black).
+  - *The mine:* a timber portal with a hood and lights at every mouth; a mining yard at the mine tower (a tipple
+    over a siding with loaded tubs, coal heaps under snow, the lamp house, a sign, barrels and pit props, lights).
+  - *Towers:* a spire roof on slender pillars over the summit's column, with the great star on top; presents
+    piled under The Tree.
+  - *Gondola:* lights round both stations' eaves and a wreath on every tower; the ski lift's stations lit too.
+  - *Decorations:* a candy-striped gate with a wreath and a star at the island's end of the causeway, candy-striped
+    posts along it, real wreaths on the hamlet's doors.
+  - Still not done: other players' skis and boards are not shown (nothing tells one PC what gear another wears).

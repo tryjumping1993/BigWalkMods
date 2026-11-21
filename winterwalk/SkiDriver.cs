@@ -28,12 +28,26 @@ namespace WinterWalk
         int wornGear;
         float nextLook, offPisteSince = -1f;
         Vector3 velocity;
-        bool wasOn;
+        bool wasOn, airborne;
+        float airSince;
+
+        // every rack on the island: the first of each found by name, the rest beside it under the same parent
+        // ("Ski Rack 2", "Board Rack 3", ...: by the gondola's top station, the ski lift's two stations, the lodge)
+        readonly System.Collections.Generic.List<Vector3> skiRacks = new System.Collections.Generic.List<Vector3>(), boardRacks = new System.Collections.Generic.List<Vector3>();
 
         void Find()
         {
             rackSki = GameObject.Find("Ski Rack");
             rackBoard = GameObject.Find("Board Rack");
+            skiRacks.Clear(); boardRacks.Clear();
+            Transform parent = rackSki != null ? rackSki.transform.parent : rackBoard != null ? rackBoard.transform.parent : null;
+            if (parent != null)
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    Transform c = parent.GetChild(i);
+                    if (c.name.StartsWith("Ski Rack")) skiRacks.Add(c.position);
+                    else if (c.name.StartsWith("Board Rack")) boardRacks.Add(c.position);
+                }
             GameObject models = GameObject.Find("Gear Models");
             if (models != null)
             {
@@ -71,20 +85,34 @@ namespace WinterWalk
                 Transform t = me.transform;
                 Vector3 p = t.position;
                 // the racks
-                if (rackSki != null && (rackSki.transform.position - p).sqrMagnitude < 2.5f * 2.5f) Gear = 1;
-                if (rackBoard != null && (rackBoard.transform.position - p).sqrMagnitude < 2.5f * 2.5f) Gear = 2;
+                foreach (Vector3 r in skiRacks) if ((r - p).sqrMagnitude < 2.5f * 2.5f) Gear = 1;
+                foreach (Vector3 r in boardRacks) if ((r - p).sqrMagnitude < 2.5f * 2.5f) Gear = 2;
                 Wear(t);
                 if (Gear == 0) { State = "no gear"; wasOn = false; return; }
 
-                // on a piste?
+                // on a piste? (the nearest sheet below; far down it only counts while flying off a jump)
                 bool on = false;
                 Vector3 normal = Vector3.up;
-                float gap = 0f;
-                foreach (RaycastHit hit in Physics.RaycastAll(p + Vector3.up * 0.5f, Vector3.down, 3.2f, ~0, QueryTriggerInteraction.Ignore))
+                float gap = 0f, nearest = float.MaxValue;
+                foreach (RaycastHit hit in Physics.RaycastAll(p + Vector3.up * 0.5f, Vector3.down, 14f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    if (hit.collider == null || hit.collider.name != "Piste Sheet") continue;
-                    on = true; normal = hit.normal; gap = hit.distance - 0.5f - BodyHeight;
+                    if (hit.collider == null || hit.collider.name != "Piste Sheet" || hit.distance >= nearest) continue;
+                    nearest = hit.distance; on = true; normal = hit.normal; gap = hit.distance - 0.5f - BodyHeight;
                 }
+                if (on && gap > 2.7f && !wasOn && !airborne) on = false;      // (a sheet far below someone walking: not riding)
+                // In the air: off a kicker's lip (or a roller taken fast) the snow falls away below. Keep the speed, let
+                // gravity have it, until the snow comes back up to meet them (or four seconds pass)
+                PlayerCharacter flyer = (airborne || (wasOn && on && gap > 0.6f)) ? me.GetComponent<PlayerCharacter>() : null;
+                if (flyer != null && flyer.rb != null && (!on || gap > 0.25f) && (airborne ? Time.unscaledTime - airSince < 4f : true))
+                {
+                    if (!airborne) { airborne = true; airSince = Time.unscaledTime; }
+                    velocity += Vector3.down * (9.81f * Time.fixedDeltaTime);
+                    flyer.rb.linearVelocity = velocity;
+                    Speed = velocity.magnitude;
+                    State = (Gear == 2 ? "boarding" : "skiing") + ": in the air";
+                    return;
+                }
+                if (airborne) { airborne = false; if (on) velocity = Vector3.ProjectOnPlane(velocity, normal) * 0.9f; }      // landed
                 if (!on)
                 {
                     if (offPisteSince < 0f) offPisteSince = Time.unscaledTime;
