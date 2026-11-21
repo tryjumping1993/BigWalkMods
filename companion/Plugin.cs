@@ -193,6 +193,8 @@ namespace BwmCompanion
                 case "snow": yield return Snow(r); break;
                 case "find": yield return Find(r); break;
                 case "mat": yield return Materials(r); break;
+                case "treemat": yield return TreeMaterials(r); break;
+                case "trees": yield return NearTrees(r); break;
                 case "crest": yield return CrestInputs(r); break;
                 case "menu": yield return Host.Menus(); break;
                 case "call": yield return Call(r); break;
@@ -587,6 +589,83 @@ namespace BwmCompanion
         // What is drawn near a point, and with what: /mat?x&y&z[&r=12] lists every renderer within r metres (path,
         // mesh, shadows) with its materials (shader, textures and their sizes, main colours) and every light there.
         // For learning how the game itself builds something (its tunnels) before making our own to match.
+        // The materials of the terrain's tree kinds (the base island's trees are terrain instances, not objects):
+        // /treemat?kind=Stringybark lists each matching prototype's renderers, meshes, bounds and materials.
+        static string TreeMaterials(Request r)
+        {
+            string kind = r.Str("kind", "");
+            var sb = new StringBuilder();
+            var seenKinds = new HashSet<string>();
+            foreach (Terrain t in UnityEngine.Object.FindObjectsOfType<Terrain>())
+            {
+                if (t == null || t.terrainData == null) continue;
+                foreach (TreePrototype proto in t.terrainData.treePrototypes)
+                {
+                    if (proto == null || proto.prefab == null) continue;
+                    string n = proto.prefab.name;
+                    if (kind != "" && n.IndexOf(kind, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (!seenKinds.Add(n)) continue;
+                    sb.AppendLine("tree " + n);
+                    foreach (Renderer rend in proto.prefab.GetComponentsInChildren<Renderer>(true))
+                    {
+                        MeshFilter mf = rend.GetComponent<MeshFilter>();
+                        sb.AppendLine("  " + rend.name + " | bounds " + V(rend.bounds.size) + (mf != null && mf.sharedMesh != null ? " | mesh " + mf.sharedMesh.name + " " + mf.sharedMesh.vertexCount + " v" : ""));
+                        foreach (Material m in rend.sharedMaterials) DescribeMaterial(sb, m, "    ");
+                    }
+                }
+            }
+            return sb.Length > 0 ? sb.ToString() : "no tree kind matching '" + kind + "'";
+        }
+
+        // The terrain trees nearest a point: /trees?x&z[&n=10][&kind=Text] gives each one's kind, place and height
+        static string NearTrees(Request r)
+        {
+            var at = new Vector2(r.Num("x"), r.Num("z"));
+            int want = (int)r.Num("n", 10);
+            string kind = r.Str("kind", "");
+            var found = new List<(float d, string line)>();
+            foreach (Terrain t in UnityEngine.Object.FindObjectsOfType<Terrain>())
+            {
+                if (t == null || t.terrainData == null) continue;
+                TerrainData data = t.terrainData;
+                TreePrototype[] protos = data.treePrototypes;
+                Vector3 origin = t.transform.position, size = data.size;
+                foreach (TreeInstance tree in data.treeInstances)
+                {
+                    Vector3 w = origin + Vector3.Scale(tree.position, size);
+                    float d = (new Vector2(w.x, w.z) - at).magnitude;
+                    if (d > 200f) continue;
+                    string name = tree.prototypeIndex < protos.Length && protos[tree.prototypeIndex].prefab != null ? protos[tree.prototypeIndex].prefab.name : "?";
+                    if (kind != "" && name.IndexOf(kind, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    found.Add((d, name + " | " + V(w) + " | scale " + F(tree.heightScale) + " | " + F(d) + " m"));
+                }
+            }
+            found.Sort((a2, b2) => a2.d.CompareTo(b2.d));
+            var sb = new StringBuilder();
+            for (int i = 0; i < found.Count && i < want; i++) sb.AppendLine(found[i].line);
+            return sb.Length > 0 ? sb.ToString() : "no trees within 200 m";
+        }
+
+        static void DescribeMaterial(StringBuilder sb, Material m, string indent)
+        {
+            if (m == null) return;
+            sb.AppendLine(indent + "material " + m.name + " | shader " + (m.shader != null ? m.shader.name : "none"));
+            string[] names = null;
+            try { names = m.GetTexturePropertyNames(); } catch (Exception) { }
+            if (names == null) return;
+            foreach (string n in names)
+            {
+                try
+                {
+                    Texture t = m.GetTexture(n);
+                    if (t == null) continue;
+                    Vector2 scale = m.GetTextureScale(n);
+                    sb.AppendLine(indent + "  " + n + ": " + t.name + " " + t.width + "x" + t.height + " scale " + F(scale.x) + ", " + F(scale.y) + " filter " + t.filterMode + " aniso " + t.anisoLevel);
+                }
+                catch (Exception) { }
+            }
+        }
+
         static string Materials(Request r)
         {
             var at = new Vector3(r.Num("x"), r.Num("y"), r.Num("z"));

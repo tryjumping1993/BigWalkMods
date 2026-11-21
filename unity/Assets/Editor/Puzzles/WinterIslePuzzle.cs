@@ -1437,9 +1437,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         // 9. Our own trees: firs, slim spruces and bare birches (WinterIsleDressing.TreeModels), each model with a
         // lighter version for distance; every such tree on the island is one of them, turned and scaled a little
-        Texture2D needles = Kit.FirBranchTexture("Assets/Puzzles/WinterIsle/FirBranch.png");
-        Material firMaterial = b.ShaderMaterial("BWM/Fir", "Fir", m => m.SetTexture("_MainTex", needles));
-        Material birchMaterial = b.ShaderMaterial("BWM/Snowy", "Birch", m => { m.SetFloat("_SnowLine", 0.45f); m.SetFloat("_SnowEdge", 0.08f); m.SetFloat("_SnowNoise", 0.5f); });
+        // (their textures: tools/treetex.py, a 4096 px atlas of snow-laden sprays and 2048 px tiling bark)
+        Material firMaterial = b.ShaderMaterial("BWM/Fir", "Fir", m => Kit.SetTreeMaps(m, "FirBark"));
+        Material birchMaterial = b.ShaderMaterial("BWM/Fir", "Birch", m => Kit.SetTreeMaps(m, "BirchBark"));
         var models = new List<(Mesh near, Mesh far, float height, Material material)>();
         for (int v = 0; v < WinterIsleDressing.TreeModels.Count; v++)
         {
@@ -1453,7 +1453,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Kit.AddFir(near, Vector3.zero, tall, seed, 1f, girth, clear);
                 Kit.AddFir(far, Vector3.zero, tall, seed, 0.5f, girth, clear);
             }
-            models.Add((b.SaveMesh("Fir " + v, near.ToMesh()), b.SaveMesh("Fir " + v + " far", far.ToMesh()), tall, kind == "birch" ? birchMaterial : firMaterial));
+            models.Add((b.SaveMesh("Fir " + v, near.ToMesh(true)), b.SaveMesh("Fir " + v + " far", far.ToMesh(true)), tall, kind == "birch" ? birchMaterial : firMaterial));
         }
         // The models ride in the pack switched off, far under the island; Winter Walk copies them to every place
         // the dressing list gives ("fir:<model>")

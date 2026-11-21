@@ -1,9 +1,11 @@
 // Snow-laden firs for the Winter Isle. Made for this edition.
 // A fir is whorls of drooping branch fronds round a trunk (Kit.AddFir), each frond a shallow roof of two cards
-// textured with a needle spray (Kit.FirBranchTexture: its alpha is the needles' cut-out). Snow settles on the
-// fronds' upper faces, thick and clumpy where they face the sky, so from below and from the side the boughs
-// show dark green undersides under white tops. The vertex colour tints each tree and darkens the inside of
-// the crown (alpha = how deep in the crown). Lit by the sun with wrap and a little light through the needles.
+// textured with one of four snow-laden sprays from an atlas (tools/treetex.py: colour with the needles' cut-out,
+// a normal map, and a mask of where snow lies on the spray). The snow shows where the mask has it and the card
+// faces the sky, so from below the boughs show their dark green undersides. The trunk wears a tiling bark
+// texture mapped in metres (uv.x below -9). The vertex colour tints each tree and darkens the inside of the
+// crown (alpha = how deep in the crown). Lit by the sun with wrap and a little light through the needles.
+// Birches use this shader too, with birch bark; their twigs are plain vertex colour (uv.x -1).
 Shader "BWM/Fir"
 {
     Properties
@@ -17,6 +19,11 @@ Shader "BWM/Fir"
         _SnowEdge ("Snow edge softness", Range(0.01, 0.5)) = 0.18
         _Translucency ("Light through the needles", Range(0, 1)) = 0.25
         _BarkColor ("Bark", Color) = (0.46, 0.33, 0.24, 1)
+        _FrondNormal ("Spray normals", 2D) = "bump" {}
+        _FrondMask ("Spray snow (R), occlusion (G)", 2D) = "black" {}
+        _BarkTex ("Bark", 2D) = "white" {}
+        [Normal] _BarkNormal ("Bark normals", 2D) = "bump" {}
+        _NormalStrength ("Normal strength", Range(0, 2)) = 1
     }
 
     SubShader
@@ -36,8 +43,13 @@ Shader "BWM/Fir"
             float _SnowEdge;
             float _Translucency;
             half4 _BarkColor;
+            float _NormalStrength;
         CBUFFER_END
         TEXTURE2D(_MainTex); SAMPLER(sampler_MainTex);
+        TEXTURE2D(_FrondNormal); SAMPLER(sampler_FrondNormal);
+        TEXTURE2D(_FrondMask); SAMPLER(sampler_FrondMask);
+        TEXTURE2D(_BarkTex); SAMPLER(sampler_BarkTex);
+        TEXTURE2D(_BarkNormal); SAMPLER(sampler_BarkNormal);
 
         float Hash31(float3 p)
         {
@@ -86,6 +98,7 @@ Shader "BWM/Fir"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
                 half4 color : COLOR;
                 float2 uv : TEXCOORD0;
             };
@@ -97,6 +110,7 @@ Shader "BWM/Fir"
                 float3 normalWS : TEXCOORD1;
                 float2 uv : TEXCOORD2;
                 float fogFactor : TEXCOORD3;
+                float4 tangentWS : TEXCOORD4;
                 half4 color : COLOR;
             };
 
@@ -107,6 +121,7 @@ Shader "BWM/Fir"
                 o.positionCS = p.positionCS;
                 o.positionWS = p.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
+                o.tangentWS = float4(TransformObjectToWorldDir(v.tangentOS.xyz), v.tangentOS.w);
                 o.uv = v.uv;
                 o.fogFactor = ComputeFogFactor(p.positionCS.z);
                 o.color = v.color;
@@ -115,33 +130,51 @@ Shader "BWM/Fir"
 
             half4 Frag(Varyings i, bool frontFace : SV_IsFrontFace) : SV_Target
             {
-                bool bark = i.uv.x < 0 && i.uv.x > -1.5;
-                bool core = i.uv.x < -1.5;
-                half4 tex = i.uv.x < 0 ? half4(1, 1, 1, 1) : SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
+                bool bark = i.uv.x < -9.0;                          // textured bark, mapped in metres
+                bool wood = i.uv.x < -0.5 && i.uv.x > -1.5;         // a plain limb in its vertex colour
+                bool core = i.uv.x < -1.5 && i.uv.x > -9.0;         // the far version's dark crown core
+                bool spray = i.uv.x >= 0.0;
+                float2 barkUV = float2(-10.0 - i.uv.x, i.uv.y);
+                half4 tex = spray ? SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv) : half4(1, 1, 1, 1);
                 clip(tex.a - _Cutoff);
                 float3 positionWS = i.positionWS;
-                float3 n = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
+                float faceSign = frontFace ? 1.0 : -1.0;
+                float3 geometric = normalize(i.normalWS) * faceSign;
                 float depth = i.color.a;      // 1 at the crown's surface, 0 deep inside by the trunk
 
-                float3 needles = tex.rgb * i.color.rgb;
-                // bark: plates with dark furrows running up the trunk, paler and darker lengths, and patches of grey lichen
-                float furrow = smoothstep(0.34, 0.6, Noise3(positionWS * float3(21, 0.9, 21)) * 0.75 + Noise3(positionWS * float3(47, 2.6, 47)) * 0.25);
-                float plate = Noise3(positionWS * float3(5, 3.2, 5));
-                float3 barkColor = _BarkColor.rgb * lerp(0.42, 1.12, furrow) * (0.78 + 0.44 * plate);
-                barkColor = lerp(barkColor, float3(0.56, 0.6, 0.52), 0.65 * smoothstep(0.68, 0.82, Noise3(positionWS * float3(2.6, 1.7, 2.6) + 7.3)) * furrow);
-                float3 albedo = bark ? barkColor : needles * lerp(0.45, 1.0, depth);
+                // the surface's own relief, from the spray's or the bark's normal map
+                float3 n = geometric;
+                if (spray || bark)
+                {
+                    float3 t = i.tangentWS.xyz;
+                    t = normalize(t - geometric * dot(geometric, t) + 1e-5);
+                    float3 b = cross(geometric, t) * (i.tangentWS.w * faceSign >= 0.0 ? 1.0 : -1.0);
+                    float3 nt = spray ? UnpackNormal(SAMPLE_TEXTURE2D(_FrondNormal, sampler_FrondNormal, i.uv))
+                                      : UnpackNormal(SAMPLE_TEXTURE2D(_BarkNormal, sampler_BarkNormal, barkUV));
+                    nt.xy *= _NormalStrength;
+                    n = normalize(t * nt.x + b * nt.y + geometric * max(nt.z, 0.05));
+                }
+                half4 mask = spray ? SAMPLE_TEXTURE2D(_FrondMask, sampler_FrondMask, i.uv) : half4(0, 1, 1, 0);
+
+                float3 needles = tex.rgb * i.color.rgb * lerp(0.55, 1.0, mask.g);
+                float3 albedo = needles * lerp(0.5, 1.0, depth);
+                if (bark) albedo = SAMPLE_TEXTURE2D(_BarkTex, sampler_BarkTex, barkUV).rgb * i.color.rgb;
+                if (wood) albedo = i.color.rgb;
                 if (core) albedo = i.color.rgb * float3(0.05, 0.13, 0.07) * (0.8 + 0.4 * Noise3(positionWS * 2.0));
 
-                // Snow: on what faces up, clumped by noise, thickest on the outer parts of the boughs; its edge follows
-                // the snow's own relief (the same maps as the ground's, at a bough's size)
+                // Snow: on a spray, where its mask puts it and the card faces the sky (the boughs' undersides stay
+                // green), less deep in the crown where little falls; on bark and limbs, on what faces up, and snow the
+                // wind has plastered up one side of a trunk in broken patches
                 float3 viewVector = GetWorldSpaceViewDir(positionWS);
                 float viewDistance = length(viewVector);
                 float3 v = viewVector / max(viewDistance, 1e-4);
                 BwmSnowDetail detail = BwmSnowDetailOn(positionWS, viewDistance, 4.0);
                 float clumps = Noise3(positionWS * 1.7) * 0.6 + Noise3(positionWS * 6.0) * 0.4;
-                float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + (clumps - 0.5) * 0.9 + (detail.cavity - 0.5) * 0.3) * smoothstep(0.15, 0.6, depth);
-                // on a trunk: what lies on top, and snow the wind has plastered up one side
-                if (bark) snow = max(snow * smoothstep(0.6, 0.9, n.y), 0.8 * smoothstep(0.78, 0.92, dot(n, normalize(float3(0.72, 0.2, 0.66))) + (clumps - 0.5) * 0.5) * smoothstep(0.45, 0.6, Noise3(positionWS * float3(4, 1.1, 4) + 3.1)));      // in broken patches, never the whole trunk
+                float snow = mask.r * smoothstep(-0.2, 0.3, geometric.y) * smoothstep(0.1, 0.5, depth);
+                if (bark || wood)
+                    snow = max(smoothstep(0.62, 0.9, n.y + (clumps - 0.5) * 0.2), 0.8 * smoothstep(0.78, 0.92, dot(geometric, normalize(float3(0.72, 0.2, 0.66))) + (clumps - 0.5) * 0.5)
+                        * smoothstep(0.45, 0.6, Noise3(positionWS * float3(4, 1.1, 4) + 3.1)) * (bark ? 1.0 : 0.0));
+                if (core) snow = 0.0;
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
@@ -151,7 +184,7 @@ Shader "BWM/Fir"
                 Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
                 float ndl = dot(n, sun.direction);
                 float lit = saturate(ndl * 0.6 + 0.4) * sun.shadowAttenuation;
-                float through = saturate(-ndl) * _Translucency * (1.0 - snow) * sun.shadowAttenuation;
+                float through = spray ? saturate(-ndl) * _Translucency * (1.0 - snow) * sun.shadowAttenuation : 0.0;
                 float3 ambient = SampleSH(n);
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.14) * lerp(0.6, 1.0, depth);
                 float3 color = lerp(shade, albedo * sun.color, lit) + needles * sun.color * through;

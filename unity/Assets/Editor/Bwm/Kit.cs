@@ -351,7 +351,8 @@ namespace Bwm
             }
         }
 
-        // A snow-laden fir added to a mesh being built (use with the BWM/Fir shader and FirBranchTexture): a trunk
+        // A snow-laden fir added to a mesh being built (use with the BWM/Fir shader and SetTreeMaps; build its mesh
+        // with ToMesh(true), for the tangents its normal maps need): a trunk
         // and whorls of drooping branch fronds, each frond a shallow roof of two cards so it has a top for snow to
         // lie on and an underside that stays dark. Vertex colour: rgb tints the tree, alpha is 1 at the crown's
         // surface and 0 deep inside it. uv.x below 0 marks bark. girth below 1 makes a slim spruce: a narrow crown of
@@ -364,26 +365,48 @@ namespace Bwm
             var tint = new Color(R(0.82f, 1.05f), R(0.85f, 1.08f), R(0.8f, 1.0f), 1f);
             float spin = R(0f, Mathf.PI * 2f);
 
-            // trunk: a tapering eight-sided column, bark-marked
+            // trunk: a smooth round column with a flared, buttressed foot, its bark mapped in metres (uv.x -10 minus
+            // the way round, in repeats of the bark texture; uv.y up the trunk, a repeat every 1.1 m)
             float trunkR = height * 0.022f + 0.06f;
-            const int sides = 12;
-            var bark = new Color(1f, 1f, 1f, 1f);
-            for (int s = 0; s < sides; s++)
+            const int sides = 16;
+            const float barkRepeat = 1.1f;
+            int round = Mathf.Max(1, Mathf.RoundToInt(2f * Mathf.PI * trunkR / barkRepeat));
+            var bark = new Color(R(0.85f, 1.05f), R(0.85f, 1.0f), R(0.85f, 1.0f), 1f);
+            float[] ringY = { -0.4f, 0f, 0.18f, 0.45f, 0.9f, height * 0.25f, height * 0.5f, height * 0.75f, height * 0.93f };
+            float RingR(int ring, float a)
             {
-                float a0 = 2f * Mathf.PI * s / sides, a1 = 2f * Mathf.PI * (s + 1) / sides;
-                Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
-                Vector3 b0 = foot + d0 * trunkR + Vector3.down * 0.4f, b1 = foot + d1 * trunkR + Vector3.down * 0.4f;
-                Vector3 t0 = foot + d0 * trunkR * 0.15f + Vector3.up * height * 0.93f, t1 = foot + d1 * trunkR * 0.15f + Vector3.up * height * 0.93f;
-                mb.QuadUV(b0, b1, t1, t0, new Vector2(-1f, 0f), new Vector2(-1f, 0f), new Vector2(-1f, 1f), new Vector2(-1f, 1f), bark, bark, bark, bark);
+                float y = ringY[ring], t = Mathf.Clamp01(y / (height * 0.93f));
+                float r = trunkR * Mathf.Lerp(1f, 0.15f, Mathf.Pow(t, 1.1f));
+                float flare = Mathf.Clamp01(1f - y / 0.9f);      // the foot spreads into the ground, in buttresses
+                return r * (1f + flare * flare * (0.55f + 0.22f * Mathf.Sin(a * 5f + spin) + 0.1f * Mathf.Sin(a * 3f - spin)));
             }
-
-            // the crown's core: a dark cone inside the boughs, so the tree reads as full from a distance (uv.x -2);
-            // close up it is only a thin shadow round the trunk
+            for (int ring = 0; ring + 1 < ringY.Length; ring++)
             {
-                float coreBase = height * Mathf.Max(0.16f, clear), coreR = (height * 0.36f * 0.5f + 0.2f) * girth * (detail < 0.7f ? 1f : 0.35f);
+                if (ringY[ring + 1] <= ringY[ring]) continue;
                 for (int s = 0; s < sides; s++)
                 {
-                    float a0 = 2f * Mathf.PI * s / sides + spin, a1 = 2f * Mathf.PI * (s + 1) / sides + spin;
+                    float a0 = 2f * Mathf.PI * s / sides, a1 = 2f * Mathf.PI * (s + 1) / sides;
+                    Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
+                    float r00 = RingR(ring, a0), r01 = RingR(ring, a1), r10 = RingR(ring + 1, a0), r11 = RingR(ring + 1, a1);
+                    Vector3 b0 = foot + d0 * r00 + Vector3.up * ringY[ring], b1 = foot + d1 * r01 + Vector3.up * ringY[ring];
+                    Vector3 t0 = foot + d0 * r10 + Vector3.up * ringY[ring + 1], t1 = foot + d1 * r11 + Vector3.up * ringY[ring + 1];
+                    float slope0 = (r00 - r10) / (ringY[ring + 1] - ringY[ring]), slope1 = (r01 - r11) / (ringY[ring + 1] - ringY[ring]);
+                    Vector3 n0 = d0 + Vector3.up * slope0, n1 = d1 + Vector3.up * slope1;
+                    float u0 = -10f - round * (float)s / sides, u1 = -10f - round * (float)(s + 1) / sides;
+                    float v0 = ringY[ring] / barkRepeat, v1 = ringY[ring + 1] / barkRepeat;
+                    var foot0 = ring == 0 ? bark * 0.7f : bark;
+                    mb.QuadUVN(b0, b1, t1, t0, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), foot0, foot0, bark, bark, n0, n1, n1, n0);
+                }
+            }
+
+            // the crown's core, for the far version only: a dark cone inside the boughs, so the tree reads as full from
+            // a distance (uv.x -2). Close up the boughs are dense enough without it (it read as a flat collar)
+            if (detail < 0.7f)
+            {
+                float coreBase = height * Mathf.Max(0.16f, clear), coreR = (height * 0.36f * 0.5f + 0.2f) * girth;
+                for (int s = 0; s < 8; s++)
+                {
+                    float a0 = 2f * Mathf.PI * s / 8 + spin, a1 = 2f * Mathf.PI * (s + 1) / 8 + spin;
                     Vector3 d0 = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1));
                     Vector3 b0 = foot + Vector3.up * coreBase + d0 * coreR, b1 = foot + Vector3.up * coreBase + d1 * coreR;
                     Vector3 apex = foot + Vector3.up * height * 0.94f;
@@ -391,6 +414,9 @@ namespace Bwm
                     mb.QuadUV(b0, b1, apex, apex, new Vector2(-2f, 0f), new Vector2(-2f, 0f), new Vector2(-2f, 1f), new Vector2(-2f, 1f), deep, deep, deep, deep);
                 }
             }
+
+            // a frond's texture coordinates in one of the four sprays of the atlas (tools/treetex.py)
+            Vector2 Spray(Vector2 uv, int which) => new Vector2((Mathf.Lerp(0.006f, 0.994f, uv.x) + which % 2) * 0.5f, (Mathf.Lerp(0.006f, 0.994f, uv.y) + which / 2) * 0.5f);
 
             // whorls of fronds, longest at the bottom; each frond droops and curves down towards its tip
             // (on a grown tree the boughs start above the head of a walker 70 cm tall, who can then pass under them)
@@ -402,7 +428,7 @@ namespace Bwm
                 // a fuller crown than a straight cone, drawing in to a narrow spire at the top
                 // (a pine's crown is widest a third of the way up it, not at its foot, and its boughs hardly droop)
                 float reach = (height * 0.36f * (clear > 0f ? Mathf.Pow(1f - t, 0.7f) * Mathf.Lerp(0.55f, 1f, Mathf.Clamp01(t / 0.3f)) * 0.78f : Mathf.Pow(1f - t, 0.82f)) + Mathf.Lerp(0.3f, 0.07f, t)) * girth;
-                int count = t > 0.88f || detail < 0.7f ? 5 : girth < 0.8f ? random.Next(5, 8) : random.Next(7, 10);
+                int count = t > 0.88f || detail < 0.7f ? 5 : girth < 0.8f ? random.Next(6, 9) : random.Next(9, 12);
                 float offset = spin + whorl * 2.39996f;      // golden angle between whorls
                 for (int k = 0; k < count; k++)
                 {
@@ -418,26 +444,30 @@ namespace Bwm
                     Vector3 p1 = p0 + (dir * Mathf.Cos(droop) + Vector3.down * Mathf.Sin(droop)) * len * 0.5f;
                     float droop2 = droop + 0.32f;
                     Vector3 p2 = p1 + (dir * Mathf.Cos(droop2) + Vector3.down * Mathf.Sin(droop2)) * len * 0.5f;
-                    float width = len * (detail < 0.7f ? 0.72f : 0.46f);      // narrow sprays, not paddles
+                    float width = len * (detail < 0.7f ? 0.78f : 0.66f);      // the spray's own outline is cut out, so the card can be as broad as the texture's spray
                     float roof = 0.32f;      // how far each half of the frond tilts down from its spine
                     Vector3 wingL = (side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
                     Vector3 wingR = (-side * Mathf.Cos(roof) + Vector3.down * Mathf.Sin(roof)) * (width * 0.5f);
                     var inner = new Color(tint.r, tint.g, tint.b, 0.25f);
                     var mid = new Color(tint.r, tint.g, tint.b, 0.75f);
                     var outer = new Color(tint.r, tint.g, tint.b, 1f);
-                    // the texture's u runs along the bough (0 at the trunk), v across it (0.5 on the spine)
+                    // the texture's u runs along the bough (0 at the trunk), v across it (0.5 on the spine); each bough is
+                    // one of the atlas's four sprays
+                    int which = random.Next(4);
                     for (int half = 0; half < 2; half++)
                     {
                         Vector3 w = half == 0 ? wingL : wingR;
                         float v = half == 0 ? 0f : 1f;
-                        mb.QuadUV(p0, p1, p1 + w * 0.9f, p0 + w * 0.35f, new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, v), new Vector2(0f, Mathf.Lerp(0.5f, v, 0.35f)), inner, mid, mid, inner);
-                        mb.QuadUV(p1, p2, p2 + w * 0.25f, p1 + w * 0.9f, new Vector2(0.5f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, Mathf.Lerp(0.5f, v, 0.3f)), new Vector2(0.5f, v), mid, outer, outer, mid);
+                        mb.QuadUV(p0, p1, p1 + w * 0.9f, p0 + w * 0.35f, Spray(new Vector2(0f, 0.5f), which), Spray(new Vector2(0.5f, 0.5f), which), Spray(new Vector2(0.5f, v), which), Spray(new Vector2(0f, v), which), inner, mid, mid, inner);
+                        mb.QuadUV(p1, p2, p2 + w * 0.25f, p1 + w * 0.9f, Spray(new Vector2(0.5f, 0.5f), which), Spray(new Vector2(1f, 0.5f), which), Spray(new Vector2(1f, Mathf.Lerp(0.5f, v, 0.3f)), which), Spray(new Vector2(0.5f, v), which), mid, outer, outer, mid);
                     }
                     if (detail >= 0.7f)
                     {
-                        // twigs hanging under the bough: a card straight down from its spine, so it has body seen from the side
-                        Vector3 hang = Vector3.down * width * 0.32f;
-                        mb.QuadUV(p0, p2, p2 + hang * 0.4f, p1 + hang, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.62f), new Vector2(0.5f, 0.9f), inner, outer, mid, mid);
+                        // twigs hanging under the bough: a whole spray turned straight down from its spine, so the bough has
+                        // body seen from the side (its own outline is cut out, so no straight card edge shows)
+                        Vector3 hang = Vector3.down * width * 0.3f;
+                        int other = (which + 1 + random.Next(3)) % 4;
+                        mb.QuadUV(p0 - hang * 0.15f, p2 - hang * 0.15f, p2 + hang * 0.7f, p0 + hang, Spray(new Vector2(0f, 0.5f), other), Spray(new Vector2(1f, 0.5f), other), Spray(new Vector2(1f, 0.02f), other), Spray(new Vector2(0f, 0.02f), other), inner, outer, mid, mid);
                     }
                 }
             }
@@ -449,7 +479,7 @@ namespace Bwm
             {
                 float a = spin + k * 2.0944f + 0.4f;
                 var side = new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a)) * height * 0.017f;
-                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.08f, tip - side * 0.08f, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.55f), new Vector2(1f, 0.45f), top, top, top, top);
+                mb.QuadUV(tipBase - side, tipBase + side, tip + side * 0.08f, tip - side * 0.08f, Spray(new Vector2(0.3f, 0.2f), k), Spray(new Vector2(0.3f, 0.8f), k), Spray(new Vector2(1f, 0.55f), k), Spray(new Vector2(1f, 0.45f), k), top, top, top, top);
             }
         }
 
@@ -462,19 +492,33 @@ namespace Bwm
             var random = new System.Random(seed * 6151 + 11);
             float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
             Color pale = new Color(R(0.82f, 0.9f), R(0.81f, 0.88f), R(0.74f, 0.82f)), scar = new Color(0.17f, 0.16f, 0.16f), twigColor = new Color(0.30f, 0.19f, 0.17f);
-            // a tapered limb from a to b
-            void Limb(Vector3 a, Vector3 b, float ra, float rb, int sides, Color ca, Color cb)
+            // a tapered limb from a to b. 'barked': round (smooth normals) and wearing the birch bark texture, mapped in
+            // metres (uv.x -10 minus the way round in repeats, uv.y the height over a 0.8 m repeat); otherwise a plain
+            // limb in its vertex colour (uv.x -1), for twigs
+            void Limb(Vector3 a, Vector3 b, float ra, float rb, int sides, Color ca, Color cb, bool barked = false)
             {
                 Vector3 axis = (b - a).normalized;
                 Vector3 u = Vector3.Cross(axis, Mathf.Abs(axis.y) > 0.95f ? Vector3.right : Vector3.up).normalized;
                 Vector3 v = Vector3.Cross(u, axis);
+                int round = Mathf.Max(1, Mathf.RoundToInt(2f * Mathf.PI * ra / 0.8f));
                 for (int s = 0; s < sides; s++)
                 {
                     // turned so that one face looks straight up from a leaning limb: that face takes the snow
                     float turned = Mathf.PI / 2f - Mathf.PI / sides;
                     float a0 = 2f * Mathf.PI * s / sides + turned, a1 = 2f * Mathf.PI * (s + 1) / sides + turned;
                     Vector3 d0 = u * Mathf.Cos(a0) + v * Mathf.Sin(a0), d1 = u * Mathf.Cos(a1) + v * Mathf.Sin(a1);
-                    mb.Quad(a + d0 * ra, a + d1 * ra, b + d1 * rb, b + d0 * rb, Color.Lerp(ca, cb, 0.5f));
+                    if (barked)
+                    {
+                        float u0 = -10f - round * (float)s / sides, u1 = -10f - round * (float)(s + 1) / sides;
+                        float v0 = (a.y - foot.y) / 0.8f, v1 = (b.y - foot.y) / 0.8f;
+                        mb.QuadUVN(a + d0 * ra, a + d1 * ra, b + d1 * rb, b + d0 * rb, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), ca, ca, cb, cb, d0, d1, d1, d0);
+                    }
+                    else
+                    {
+                        var plain = new Vector2(-1f, 0f);
+                        Color c = Color.Lerp(ca, cb, 0.5f);
+                        mb.QuadUV(a + d0 * ra, a + d1 * ra, b + d1 * rb, b + d0 * rb, plain, plain, plain, plain, c, c, c, c);
+                    }
                 }
             }
             // fine twigs hanging from a limb's end
@@ -506,17 +550,16 @@ namespace Bwm
             float baseR = height * 0.011f + 0.045f;
             Vector3 Spine(float t) => foot + Vector3.up * (height * t) + leanDir * (leanBy * t * t) + new Vector3(Mathf.Sin(t * 7f + lean), 0f, Mathf.Cos(t * 5f + lean)) * (height * 0.006f);
             float Radius(float t) => Mathf.Lerp(baseR, 0.018f, Mathf.Pow(t, 0.8f));
-            const int segments = 10;
-            Limb(foot + Vector3.down * 0.4f, Spine(0f), baseR * 1.25f, baseR * 1.1f, 6, scar, scar);
+            // (the bark texture carries the lenticels and scars; the foot is darkened, as old birches are black and
+            // fissured there)
+            const int segments = 12;
+            Color white = new Color(1f, 1f, 1f, 1f), sooty = new Color(0.32f, 0.3f, 0.29f, 1f);
+            Limb(foot + Vector3.down * 0.4f, Spine(0f), baseR * 1.3f, baseR * 1.15f, 12, sooty, sooty, true);
             for (int i = 0; i < segments; i++)
             {
                 float t0 = (float)i / segments, t1 = (float)(i + 1) / segments;
-                Color lower = i == 0 ? Color.Lerp(scar, pale, 0.35f) : pale;
-                if (R(0f, 1f) < 0.4f) { Limb(Spine(t0), Spine(t1), Radius(t0), Radius(t1), 6, lower, lower); continue; }      // a clean stretch
-                float cut = Mathf.Lerp(t0, t1, R(0.1f, 0.85f)), band = R(0.003f, 0.016f);      // a dark scar ring somewhere up the segment
-                Limb(Spine(t0), Spine(cut), Radius(t0), Radius(cut), 6, lower, lower);
-                Limb(Spine(cut), Spine(cut + band), Radius(cut) * 1.04f, Radius(cut + band) * 1.04f, 6, scar, scar);
-                Limb(Spine(cut + band), Spine(t1), Radius(cut + band), Radius(t1), 6, pale, pale);
+                Color c0 = Color.Lerp(sooty, white, Mathf.Clamp01(t0 * 7f)), c1 = Color.Lerp(sooty, white, Mathf.Clamp01(t1 * 7f));
+                Limb(Spine(t0), Spine(t1), Radius(t0) * (i == 0 ? 1.1f : 1f), Radius(t1), 12, c0, c1, true);
             }
             Twigs(Spine(1f), Vector3.up + leanDir * 0.3f, 4, height * 0.09f);
 
@@ -540,7 +583,8 @@ namespace Bwm
                     Vector3 dir = (Vector3.up * Mathf.Cos(tilt) + outward * Mathf.Sin(tilt)).normalized;
                     Vector3 next = at + dir * (length / parts);
                     float r1 = Mathf.Max(0.014f, r * 0.72f);
-                    Limb(at, next, r, r1, 4, j == 0 ? pale : Color.Lerp(pale, twigColor, 0.6f), Color.Lerp(pale, twigColor, j == 0 ? 0.6f : 1f));
+                    if (j < 2) Limb(at, next, r, r1, 8, white, j == 0 ? white : Color.Lerp(white, twigColor, 0.5f), true);
+                    else Limb(at, next, r, r1, 4, Color.Lerp(pale, twigColor, 0.6f), twigColor);
                     // a side branch from each joint, to one side and the other
                     float sideTurn = (j % 2 == 0 ? 1f : -1f) * R(0.5f, 1.0f);
                     Vector3 sideDir = (Quaternion.Euler(0f, sideTurn * Mathf.Rad2Deg, 0f) * outward * Mathf.Sin(tilt + 0.25f) + Vector3.up * Mathf.Cos(tilt + 0.25f)).normalized;
@@ -682,6 +726,54 @@ namespace Bwm
             return UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
         }
 
+        // One of the tree textures that tools/treetex.py writes into Assets/Textures/Trees (bwm.ps1 build runs it when
+        // they are missing or older than the script). 'kind': "color" (sRGB; with 'cutout', its alpha is a cut-out
+        // whose coverage the mipmaps keep), "normal", or "data" (linear). Full size (4096 for the fronds), trilinear,
+        // anisotropic, high-quality compression; clamped when 'cutout' (the fronds atlas), repeating otherwise (bark).
+        public static Texture2D TreeMap(string file, string kind, bool cutout = false)
+        {
+            string assetPath = "Assets/Textures/Trees/" + file;
+            if (!System.IO.File.Exists(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", assetPath))))
+            {
+                Debug.LogWarning("[BWM] " + assetPath + " is missing: run python tools/treetex.py (bwm.ps1 build does)");
+                return null;
+            }
+            UnityEditor.AssetDatabase.ImportAsset(assetPath);
+            var importer = (UnityEditor.TextureImporter)UnityEditor.AssetImporter.GetAtPath(assetPath);
+            var type = kind == "normal" ? UnityEditor.TextureImporterType.NormalMap : UnityEditor.TextureImporterType.Default;
+            var wrap = cutout ? TextureWrapMode.Clamp : TextureWrapMode.Repeat;
+            bool srgb = kind == "color";
+            if (importer.textureType != type || importer.sRGBTexture != srgb || !importer.mipmapEnabled || importer.wrapMode != wrap
+                || importer.filterMode != FilterMode.Trilinear || importer.anisoLevel != 8 || importer.maxTextureSize != 4096
+                || importer.textureCompression != UnityEditor.TextureImporterCompression.CompressedHQ
+                || importer.mipMapsPreserveCoverage != cutout || importer.alphaIsTransparency != cutout)
+            {
+                importer.textureType = type;
+                importer.sRGBTexture = srgb;
+                importer.mipmapEnabled = true;
+                importer.wrapMode = wrap;
+                importer.filterMode = FilterMode.Trilinear;
+                importer.anisoLevel = 8;
+                importer.maxTextureSize = 4096;
+                importer.textureCompression = UnityEditor.TextureImporterCompression.CompressedHQ;
+                importer.mipMapsPreserveCoverage = cutout;
+                importer.alphaTestReferenceValue = 0.42f;
+                importer.alphaIsTransparency = cutout;
+                importer.SaveAndReimport();
+            }
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        // The tree textures on a BWM/Fir material: the fronds atlas, and the bark ('bark': "FirBark" or "BirchBark")
+        public static void SetTreeMaps(Material m, string bark)
+        {
+            m.SetTexture("_MainTex", TreeMap("FirFronds_C.png", "color", true));
+            m.SetTexture("_FrondNormal", TreeMap("FirFronds_N.png", "normal", true));
+            m.SetTexture("_FrondMask", TreeMap("FirFronds_M.png", "data", true));
+            m.SetTexture("_BarkTex", TreeMap(bark + "_C.png", "color"));
+            m.SetTexture("_BarkNormal", TreeMap(bark + "_N.png", "normal"));
+        }
+
         // The snow surface maps on a material that has them (BWM/Snow, BWM/SnowOverlay): each map the shader asks for
         public static void SetSnowMaps(Material m)
         {
@@ -790,6 +882,8 @@ namespace Bwm
         readonly List<Color> colors = new List<Color>();
         readonly List<Vector2> uvs = new List<Vector2>();
         readonly List<int> tris = new List<int>();
+        readonly List<Vector3> normals = new List<Vector3>();      // zero: worked out from the faces
+        bool anyNormals;
 
         public int VertexCount => verts.Count;
 
@@ -799,6 +893,7 @@ namespace Bwm
             verts.Add(a); verts.Add(b); verts.Add(c);
             colors.Add(color); colors.Add(color); colors.Add(color);
             uvs.Add(Vector2.zero); uvs.Add(Vector2.zero); uvs.Add(Vector2.zero);
+            normals.Add(Vector3.zero); normals.Add(Vector3.zero); normals.Add(Vector3.zero);
             tris.Add(v); tris.Add(v + 1); tris.Add(v + 2);
         }
 
@@ -809,8 +904,18 @@ namespace Bwm
             verts.Add(a); verts.Add(b); verts.Add(c); verts.Add(d);
             uvs.Add(ua); uvs.Add(ub); uvs.Add(uc); uvs.Add(ud);
             colors.Add(ca); colors.Add(cb); colors.Add(cc); colors.Add(cd);
+            normals.Add(Vector3.zero); normals.Add(Vector3.zero); normals.Add(Vector3.zero); normals.Add(Vector3.zero);
             tris.Add(v); tris.Add(v + 2); tris.Add(v + 1);
             tris.Add(v); tris.Add(v + 3); tris.Add(v + 2);
+        }
+
+        // ...with a normal given at each corner (smooth round surfaces: trunks and limbs)
+        public void QuadUVN(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud, Color ca, Color cb, Color cc, Color cd, Vector3 na, Vector3 nb, Vector3 nc, Vector3 nd)
+        {
+            int start = verts.Count;
+            QuadUV(a, b, c, d, ua, ub, uc, ud, ca, cb, cc, cd);
+            normals[start] = na.normalized; normals[start + 1] = nb.normalized; normals[start + 2] = nc.normalized; normals[start + 3] = nd.normalized;
+            anyNormals = true;
         }
 
         public void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color color)
@@ -819,7 +924,7 @@ namespace Bwm
             Tri(a, d, c, color);
         }
 
-        public Mesh ToMesh()
+        public Mesh ToMesh(bool tangents = false)
         {
             var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
             mesh.SetVertices(verts);
@@ -827,6 +932,13 @@ namespace Bwm
             mesh.SetUVs(0, uvs);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
+            if (anyNormals)
+            {
+                Vector3[] worked = mesh.normals;
+                for (int i = 0; i < worked.Length; i++) if (normals[i] != Vector3.zero) worked[i] = normals[i];
+                mesh.normals = worked;
+            }
+            if (tangents) mesh.RecalculateTangents();
             mesh.RecalculateBounds();
             return mesh;
         }

@@ -1,4 +1,4 @@
-# Big Walk Mods command line.
+﻿# Big Walk Mods command line.
 #   tools\bwm.ps1 build <Puzzle> [-Resite] [-NoPreview] [-NoExport] [-AllowIssues]
 #   tools\bwm.ps1 build-all | list | dump-world | setup
 #   tools\bwm.ps1 launch        start the game with mods (a normal Steam launch stays vanilla)
@@ -49,9 +49,24 @@ function Update-BwmSnowMaps {
     if ($p.ExitCode -ne 0) { Write-Warning 'tools\snowtex.py failed; the snow will be drawn without its surface maps.' }
 }
 
+function Update-BwmTreeMaps {
+    $script = Join-Path $Repo 'tools\treetex.py'
+    $dir = Join-Path $Repo 'unity\Assets\Textures\Trees'
+    $stale = $false
+    foreach ($f in 'FirFronds_C.png', 'FirFronds_N.png', 'FirFronds_M.png', 'FirBark_C.png', 'FirBark_N.png', 'BirchBark_C.png', 'BirchBark_N.png') {
+        $file = Join-Path $dir $f
+        if (-not (Test-Path $file) -or (Get-Item $file).LastWriteTimeUtc -lt (Get-Item $script).LastWriteTimeUtc) { $stale = $true }
+    }
+    if (-not $stale) { return }
+    $p = Start-Process -FilePath python -ArgumentList ('"' + $script + '"') -PassThru -NoNewWindow
+    Set-BwmAffinity $p
+    $p.WaitForExit()
+    if ($p.ExitCode -ne 0) { Write-Warning 'tools\treetex.py failed; the trees will be drawn without their textures.' }
+}
+
 function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     if (-not (Test-Path $Unity)) { Write-Output "Unity editor not found at $Unity"; return 2 }
-    if ($Method -like 'Build*') { Update-BwmSnowMaps }
+    if ($Method -like 'Build*') { Update-BwmSnowMaps; Update-BwmTreeMaps }
     if (Get-Process Unity -ErrorAction SilentlyContinue) { Write-Output 'A Unity editor is already running; close it first (two editors cannot open one project).'; return 2 }
     # The editor only finds its licence through Unity Hub's licensing service, so the Hub must be running and signed in.
     if (-not (Get-Process 'Unity.Licensing.Client' -ErrorAction SilentlyContinue)) {

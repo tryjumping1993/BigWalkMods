@@ -42,12 +42,11 @@ public sealed class TheTreePuzzle : PuzzleDef
         b.MeshPiece("Step", step.ToMesh(), stone);
 
         // a great snow-laden fir, the same make as the island's (Kit.AddFir), decked with baubles
-        Texture2D needles = Kit.FirBranchTexture("Assets/Puzzles/TheTree/FirBranch.png");
-        Material fir = b.ShaderMaterial("BWM/Fir", "Fir", m => { m.SetTexture("_MainTex", needles); m.SetFloat("_SnowLine", 0.45f); });
+        Material fir = b.ShaderMaterial("BWM/Fir", "Fir", m => Kit.SetTreeMaps(m, "FirBark"));
         var tree = new MeshBuilder();
         Kit.AddFir(tree, Vector3.up * 0.6f, TreeHeight, 2026, 1.4f);
         Kit.AddFir(tree, Vector3.up * 0.6f, TreeHeight * 0.97f, 1225, 0.9f);      // a second set of boughs, for a full crown
-        Piece pine = b.MeshPiece("Tree", tree.ToMesh(), fir, false);
+        Piece pine = b.MeshPiece("Tree", tree.ToMesh(true), fir, false);
 
         var baubles = new MeshBuilder();
         var random = new System.Random(2512);
