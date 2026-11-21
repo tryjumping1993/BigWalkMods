@@ -160,7 +160,30 @@ namespace WinterWalk
                 }
             }
             Underground = under;
+            Rescue();
             if (snowfall != null && snowfall.activeSelf == under) snowfall.SetActive(!under);
+        }
+
+        // Nobody is left under the mine: the ground is cut away over the sheds, so a player shoved through a tunnel's
+        // floor (a mantrip can do it) would fall to the sea under the island. Anyone well below the track, straight
+        // under it, is set back on it.
+        void Rescue()
+        {
+            Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
+            if (me == null) return;
+            Vector3 at = me.transform.position;
+            for (int i = 0; i < points.Count; i += 2)
+            {
+                Vector3 d = at - points[i];
+                if (d.y > -2.5f || d.y < -60f || d.x * d.x + d.z * d.z > 4.5f * 4.5f) continue;
+                Vector3 back = points[i] + Vector3.up * 1.2f;
+                PlayerCharacter pc = me.GetComponent<PlayerCharacter>();
+                Rigidbody body = pc != null ? pc.rb : null;
+                me.transform.position = back;
+                if (body != null) { body.position = back; body.linearVelocity = Vector3.zero; }
+                Plugin.L.LogInfo("Winter Walk: mine: set a player who had fallen under the track back on it");
+                return;
+            }
         }
 
         void Update()
