@@ -89,6 +89,33 @@ shoot_island(){
 [ "$which" != winter ] && shoot_island orig
 [ "$which" != orig ] && shoot_island winter
 c 'teleport?puzzle=TheTree' >/dev/null
+# The Winter Isle's shore: if no viewpoint found one, stand on the beach nearest the plaza that has sea a few metres
+# to the south (found from the island's height grid) and look east along it, as above
+if [ "$which" != orig ] && [ ! -e shots/rv-winter-shore.png ]; then
+  read -r sx sz sh < <(python -X utf8 - <<'PY' | tr -d ''
+import struct, numpy as np
+d = open("unity/Land/WinterIsle.land", "rb").read()
+x0, z0, cell, nx, nz = struct.unpack("<fffii", d[:20]); W, H = nx + 1, nz + 1
+g = np.nan_to_num(np.frombuffer(d, dtype="<f4", count=W * H, offset=20), nan=-1).reshape((H, W))
+best = None
+for j in range(8, H - 8):
+    for i in range(8, W - 8):
+        h = g[j, i]
+        if not (1.0 < h < 1.8) or g[j - 4, i] > 0.2 or g[j - 2, i] > 1.2: continue
+        strip = g[j, i - 6:i + 7]
+        if strip.min() < 0.6 or strip.max() > 3: continue
+        x, z = x0 + i * cell, z0 + j * cell
+        dd = (x + 705) ** 2 + (z + 795) ** 2
+        if best is None or dd < best[0]: best = (dd, x, z, h)
+print(best[1], best[2], round(float(best[3]), 2))
+PY
+)
+  if [ -n "$sx" ]; then
+    c "teleport?x=$sx&y=$(python -c "print($sh+1.5)")&z=$sz" >/dev/null; sleep 20
+    c "shot?file=rv-winter-shore&cx=$sx&cy=$(python -c "print($sh+0.75)")&cz=$sz&tx=$(python -c "print($sx+12)")&ty=$(python -c "print($sh+0.8)")&tz=$(python -c "print($sz-1.5)")&fov=70" >/dev/null; sleep 4
+    echo "winter shore from the beach nearest the plaza at $sx,$sz"
+  fi
+fi
 for f in shots/rv-*.png; do [ -e "$f" ] || continue; b=$(basename "$f" .png); mv "$f" "shots/review/${b#rv-}.png"; done
 lg "END review shots ($which)"
 python -X utf8 - <<'PY'

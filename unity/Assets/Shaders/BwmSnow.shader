@@ -44,6 +44,18 @@ Shader "BWM/Snow"
         _SandColor ("Sand", Color) = (0.70, 0.67, 0.60, 1)
         _SandTex ("Sand texture", 2D) = "white" {}
         _GroundTiling ("Ground tiling (per metre)", Float) = 0.18
+        // The game's own ground, lent by Winter Walk (Dresser) from its terrain layers, each at the layer's own size
+        [Normal] _BareNormal ("Heath normals", 2D) = "bump" {}
+        _LitterTex ("Woodland litter", 2D) = "white" {}
+        [Normal] _LitterNormal ("Litter normals", 2D) = "bump" {}
+        _GravelTex ("Gravel", 2D) = "white" {}
+        [Normal] _GravelNormal ("Gravel normals", 2D) = "bump" {}
+        [Normal] _SandNormal ("Sand normals", 2D) = "bump" {}
+        _BareTiling ("Heath tiling (per metre)", Float) = 0.3
+        _LitterTiling ("Litter tiling (per metre)", Float) = 0.3
+        _GravelTiling ("Gravel tiling (per metre)", Float) = 0.35
+        _SandTiling ("Sand tiling (per metre)", Float) = 0.3
+        _GameGround ("The game's ground is lent (0 or 1)", Float) = 0
         _PisteCentre ("Pistes fall away from (world x, -, z)", Vector) = (0, 0, 0, 0)
     }
 
@@ -71,6 +83,11 @@ Shader "BWM/Snow"
             half4 _SandColor;
             float _GroundTiling;
             float4 _PisteCentre;
+            float _BareTiling;
+            float _LitterTiling;
+            float _GravelTiling;
+            float _SandTiling;
+            float _GameGround;
             float _WindTile;
             float _WindStrength;
             float _GrainTile;
@@ -102,6 +119,13 @@ Shader "BWM/Snow"
         TEXTURE2D(_RockTex); SAMPLER(sampler_RockTex);
         TEXTURE2D(_BareTex); SAMPLER(sampler_BareTex);
         TEXTURE2D(_SandTex); SAMPLER(sampler_SandTex);
+        // (sampled with the heath's sampler: the game's terrain textures all repeat, filtered alike)
+        TEXTURE2D(_BareNormal);
+        TEXTURE2D(_LitterTex);
+        TEXTURE2D(_LitterNormal);
+        TEXTURE2D(_GravelTex);
+        TEXTURE2D(_GravelNormal);
+        TEXTURE2D(_SandNormal);
 
         float Hash21(float2 p)
         {
@@ -321,27 +345,44 @@ Shader "BWM/Snow"
                 // an ice rim: a ragged white line of ice where the water meets the land
                 float iceRim = Crisp(0.14 - abs(positionWS.y - 0.04) + (ValueNoise(positionWS.xz * 0.8) - 0.5) * 0.12, 0.0, 0.0);
                 rockColor = lerp(rockColor, float3(0.84, 0.93, 0.98), iceRim * 0.9);
-                // (from three sides, like the rock: laid from above alone it smears down a slope)
-                float3 bareTex = SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.zy * _GroundTiling).rgb * tw.x
-                    + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV).rgb * tw.y
-                    + SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, positionWS.xy * _GroundTiling).rgb * tw.z;
-                // ...and again much finer, or bare ground is a blur at a walker's feet (their eyes are 60 cm up)
-                bareTex *= 0.55 + 0.9 * SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, groundUV * 7.3).g;
-                // on a slope, and on the high ground, what shows through thin snow is the rock, not heath
-                float3 heath = _BareColor.rgb * bareTex * 1.7;
-                // under the conifers the ground is needle litter: dark, reddish, fine; at a rock's foot it is scree
-                float3 litter = float3(0.40, 0.29, 0.19) * (0.8 + 0.4 * ValueNoise(positionWS.xz * 9.0)) * (0.85 + 0.3 * bareTex.g);      // (near-black reads as a hole in the snow)
+                // The ground under thin snow is the game's own: heath, woodland litter under the conifers, gravel where
+                // the wind or feet have scoured it, each texture at its own size and with its normal map, so a bare patch
+                // is the same stuff a walker sees on the old island, not a smear. (Before Winter Walk lends them, or in
+                // the editor, the older single heath texture stands in.)
+                float2 heathUV = positionWS.xz * (_GameGround > 0.5 ? _BareTiling : _GroundTiling);
+                float3 heathTex = SAMPLE_TEXTURE2D(_BareTex, sampler_BareTex, heathUV).rgb;
+                float3 litterTex = SAMPLE_TEXTURE2D(_LitterTex, sampler_BareTex, positionWS.xz * _LitterTiling).rgb;
+                float3 gravelTex = SAMPLE_TEXTURE2D(_GravelTex, sampler_BareTex, positionWS.xz * _GravelTiling).rgb;
+                float underTrees = smoothstep(0.25, 0.7, i.under.x + (patchy - 0.5) * 0.4);
+                float scoured = saturate(max(path * (1.0 - path) * 4.0, saturate((i.form - 0.62) * 4.0)) + (patchy - 0.5) * 0.3) * (1.0 - underTrees);
+                float3 heath, litter;
+                if (_GameGround > 0.5)
+                {
+                    heath = lerp(heathTex, gravelTex, scoured) * float3(0.95, 0.97, 1.0);      // a little colder under a winter sky
+                    litter = litterTex * 0.92;
+                }
+                else
+                {
+                    heath = _BareColor.rgb * heathTex * 1.7;
+                    litter = float3(0.40, 0.29, 0.19) * (0.8 + 0.4 * ValueNoise(positionWS.xz * 9.0));
+                }
+                // its height, read from its brightness: snow lies in the low parts first and the high parts show through
+                float groundHeight = dot(lerp(lerp(heathTex, gravelTex, scoured), litterTex, underTrees), float3(0.33, 0.34, 0.33)) * 2.2 - 0.5;
+                // the edge of thin snow follows that ground: tussock tops and stones come through first
+                if (_GameGround > 0.5) bare = Crisp(i.ground.x * 0.85 + (patchy - 0.5) * 0.4 + (groundHeight - 0.45) * 0.3, (0.5 - windH.g) * 0.25 + grainN.x * 0.12, 0.65) * (1.0 - path * 0.45);
                 float3 scree = bareRock * (0.7 + 0.55 * step(0.5, ValueNoise(positionWS.xz * 7.0 + 2.0))) * (0.85 + 0.3 * ValueNoise(positionWS.xz * 23.0));
-                heath = lerp(lerp(heath, scree, Crisp(i.under.y, (patchy - 0.5) * 0.5, 0.5)), litter, smoothstep(0.25, 0.7, i.under.x + (patchy - 0.5) * 0.4));
+                heath = lerp(lerp(heath, scree, Crisp(i.under.y, (patchy - 0.5) * 0.5, 0.5)), litter, underTrees);
                 float3 bareColor = lerp(heath, bareRock, max(smoothstep(0.93, 0.8, ground.y), smoothstep(30.0, 46.0, positionWS.y)) * (1.0 - smoothstep(0.3, 0.6, i.under.x)));
-                // snow lying among the heath in small pockets, each with an edge (an even mix reads as grey plastic)
-                float pockets = Crisp(ValueNoise(positionWS.xz * 2.7 + 11.0) * 0.5 + (patchy - 0.5) * 0.45, windH.g * 0.5 + grainN.y * 0.1, 0.55);
-                bareColor = lerp(bareColor, _Color.rgb * 0.92, max(pockets * 0.85, 0.12 + 0.22 * Noise3(positionWS * 5.0)));      // and a thin frost over all of it
+                // snow left in the low parts of the ground (between tussocks, in the hollows of the litter), with an edge
+                float pockets = Crisp(0.62 - groundHeight * 0.55 + (patchy - 0.5) * 0.35, windH.g * 0.2, 0.55) * (_GameGround > 0.5 ? 1.0 : 0.0);
+                bareColor = lerp(bareColor, _Color.rgb * 0.92, max(pockets * 0.9, (_GameGround > 0.5 ? 0.04 : 0.12) + (_GameGround > 0.5 ? 0.06 : 0.22) * Noise3(positionWS * 5.0)));      // and a thin frost over all of it
                 float wet = 1.0 - smoothstep(0.15, 0.9, positionWS.y);
                 // sand: the texture at two sizes (one alone is a blur at a walker's feet), darker where the last wave wet
                 // it, with drifted snow lying on the upper beach in patches
                 float3 sandTex = SAMPLE_TEXTURE2D(_SandTex, sampler_SandTex, groundUV * 0.7).rgb * (0.6 + 0.8 * SAMPLE_TEXTURE2D(_SandTex, sampler_SandTex, groundUV * 4.3).g);
                 float3 sandColor = _SandColor.rgb * sandTex * 1.5 * lerp(1.0, 0.62, wet) * lerp(0.92, 1.06, windH.g);
+                if (_GameGround > 0.5)      // the game's own beach sand, at its size, wetter and darker towards the water
+                    sandColor = SAMPLE_TEXTURE2D(_SandTex, sampler_SandTex, positionWS.xz * _SandTiling).rgb * lerp(1.0, 0.6, wet) * lerp(0.95, 1.03, windH.g);
                 sandColor = lerp(sandColor, _Color.rgb * 0.95, Crisp(patchy + (positionWS.y - 1.2) * 0.25, windH.g * 0.3 + grainN.x * 0.1, 0.72) * (1.0 - wet) * 0.9);
                 sandColor = lerp(sandColor, float3(0.84, 0.93, 0.98), iceRim * 0.9);
                 float3 earth = lerp(bareColor, sandColor, sand);
@@ -369,6 +410,14 @@ Shader "BWM/Snow"
                 tilt += grainN.xy * bank * 1.5;      // the heaped banks are loose and lumpy
                 float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * (sand * 0.45)
                     + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.3));
+                // the bare ground's own relief (the game's normal maps, laid from above: x along the world's x, y along z)
+                if (_GameGround > 0.5 && earthy > 0.01)
+                {
+                    float3 bn = lerp(lerp(UnpackNormal(SAMPLE_TEXTURE2D(_BareNormal, sampler_BareTex, heathUV)), UnpackNormal(SAMPLE_TEXTURE2D(_GravelNormal, sampler_BareTex, positionWS.xz * _GravelTiling)), scoured),
+                        UnpackNormal(SAMPLE_TEXTURE2D(_LitterNormal, sampler_BareTex, positionWS.xz * _LitterTiling)), underTrees);
+                    bn = lerp(bn, UnpackNormal(SAMPLE_TEXTURE2D(_SandNormal, sampler_BareTex, positionWS.xz * _SandTiling)), sand);
+                    n = normalize(lerp(n, normalize(ground + float3(bn.x, 0, bn.y) * 1.2), earthy * (1.0 - rock)));
+                }
 
                 #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
                     float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));

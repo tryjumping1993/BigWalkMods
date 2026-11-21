@@ -251,16 +251,25 @@ namespace WinterWalk
                 Renderer rend = kv.Value.GetComponentInChildren<Renderer>(true);
                 if (rend != null && rend.sharedMaterial != null && rend.sharedMaterial.HasProperty("_MainTex")) { granite = rend.sharedMaterial.GetTexture("_MainTex"); break; }
             }
+            // the game's terrain layers: heath, woodland litter, gravel and dry sand, each with its normal map and size
+            TerrainLayer heathLayer = null, litterLayer = null, gravelLayer = null, sandLayer = null;
             foreach (Terrain terrain in FindObjectsOfType<Terrain>())
             {
                 foreach (TerrainLayer layer in terrain.terrainData.terrainLayers)
                 {
                     if (layer == null || layer.diffuseTexture == null) continue;
-                    if (layer.name.Contains("Heathland") && heath == null) heath = layer.diffuseTexture;
-                    if (layer.name.Contains("SandDry") && sand == null) sand = layer.diffuseTexture;
+                    if (layer.name.Contains("Heathland") && heathLayer == null) heathLayer = layer;
+                    if (layer.name.Contains("Woodland") && litterLayer == null) litterLayer = layer;
+                    if (layer.name.Contains("Gravel") && gravelLayer == null) gravelLayer = layer;
+                    if (layer.name.Contains("SandDry") && sandLayer == null) sandLayer = layer;
                 }
-                if (heath != null && sand != null) break;
+                if (heathLayer != null && litterLayer != null && gravelLayer != null && sandLayer != null) break;
             }
+            if (heathLayer != null) heath = heathLayer.diffuseTexture;
+            if (sandLayer != null) sand = sandLayer.diffuseTexture;
+            // (the game's terrain shader sets its own sizes: some layers say 500 or 700 m, so anything that large is taken
+            // to be a ground texture of the usual few metres)
+            float Tiling(TerrainLayer layer) => layer != null && layer.tileSize.x > 0.01f && layer.tileSize.x < 20f ? 1f / layer.tileSize.x : 0.36f;
             int lent = 0;
             foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(Il2CppType.Of<Material>()))
             {
@@ -269,9 +278,26 @@ namespace WinterWalk
                 if (granite != null) m.SetTexture("_RockTex", granite);
                 if (heath != null) m.SetTexture("_BareTex", heath);
                 if (sand != null) m.SetTexture("_SandTex", sand);
+                bool all = heathLayer != null && litterLayer != null && gravelLayer != null && sandLayer != null;
+                if (all)
+                {
+                    m.SetTexture("_BareNormal", heathLayer.normalMapTexture);
+                    m.SetTexture("_LitterTex", litterLayer.diffuseTexture);
+                    m.SetTexture("_LitterNormal", litterLayer.normalMapTexture);
+                    m.SetTexture("_GravelTex", gravelLayer.diffuseTexture);
+                    m.SetTexture("_GravelNormal", gravelLayer.normalMapTexture);
+                    m.SetTexture("_SandNormal", sandLayer.normalMapTexture);
+                    m.SetFloat("_BareTiling", Tiling(heathLayer));
+                    m.SetFloat("_LitterTiling", Tiling(litterLayer));
+                    m.SetFloat("_GravelTiling", Tiling(gravelLayer));
+                    m.SetFloat("_SandTiling", Tiling(sandLayer));
+                    m.SetFloat("_GameGround", 1f);
+                }
                 lent++;
             }
-            Plugin.L.LogInfo("Winter Walk: lent the snow " + (granite != null ? "granite " : "") + (heath != null ? "heath " : "") + (sand != null ? "sand " : "") + "to " + lent + " material(s)");
+            Plugin.L.LogInfo("Winter Walk: lent the snow " + (granite != null ? "granite " : "") + (heath != null ? "heath " : "") + (sand != null ? "sand " : "") + "to " + lent + " material(s)"
+                + "; the game's ground layers: heath " + (heathLayer != null ? heathLayer.tileSize.x.ToString("0.#") + " m" : "none") + ", litter " + (litterLayer != null ? litterLayer.tileSize.x.ToString("0.#") + " m" : "none")
+                + ", gravel " + (gravelLayer != null ? gravelLayer.tileSize.x.ToString("0.#") + " m" : "none") + ", sand " + (sandLayer != null ? sandLayer.tileSize.x.ToString("0.#") + " m" : "none"));
         }
 
         // Our trees, roofs and props draw their snow with the same surface maps as the ground (BwmSnowCommon.hlsl)
