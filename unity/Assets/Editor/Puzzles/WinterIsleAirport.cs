@@ -264,7 +264,9 @@ public static class WinterIsleAirport
                 Kit.AddBox(deckMarks, D(StripTo - 6f, -7f + k * 2f, 0.01f), new Vector3(1f, 0.03f, 8f), Cream, yawStrip);
             b.MeshPiece("Summit Airstrip", deck.ToMesh(), snowy, true);
             b.MeshPiece("Summit Airstrip Marks", deckMarks.ToMesh(), bare, false);
-            Kit.LightString(b, "Summit Airstrip Lights", new List<Vector3> { D(StripFrom, -StripHalf, 2.4f), D(StripFrom, 0f, 3.2f), D(StripFrom, StripHalf, 2.4f) }, 0.3f, 0.45f, false, true, 911);
+            // (posts drawn here, from the deck: LightString's own start at the pack's root, the sea floor)
+            foreach (var (side, h) in new[] { (-StripHalf, 2.4f), (0f, 3.2f), (StripHalf, 2.4f) }) Kit.AddBox(deck, D(StripFrom, side, 0f), new Vector3(0.12f, h + 0.08f, 0.12f), Timber, yawStrip);
+            Kit.LightString(b, "Summit Airstrip Lights", new List<Vector3> { D(StripFrom, -StripHalf, 2.4f), D(StripFrom, 0f, 3.2f), D(StripFrom, StripHalf, 2.4f) }, 0.3f, 0.45f, false, false, 911);
             foreach (int side in new[] { -1, 1 }) Stand(D(StripFrom + 9f, side * 5f, 0f), yawStrip);
         }
         b.MeshPiece("Airport Marks", marks.ToMesh(), bare, false);

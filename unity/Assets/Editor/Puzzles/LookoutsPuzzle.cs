@@ -23,7 +23,8 @@ public sealed class LookoutsPuzzle : PuzzleDef
     static readonly Color[] Colours = { new Color(0.85f, 0.12f, 0.1f), new Color(0.12f, 0.6f, 0.25f), new Color(0.98f, 0.75f, 0.2f), new Color(0.2f, 0.4f, 0.95f) };
     const float StationRadius = 7f;
     // each lookout's ground, for the island to level and keep clear
-    public override IEnumerable<Vector3> ExtraSites => Stations.Select(s => new Vector3(s.x, s.y, StationRadius));
+    // (not the summit's: the summit is level ground already, and a flat there would cut into its plateau)
+    public override IEnumerable<Vector3> ExtraSites => Stations.Where((s, i) => i != 2).Select(s => new Vector3(s.x, s.y, StationRadius));
 
     PuzzleBuilder b;
     Vector3 site;
@@ -40,7 +41,7 @@ public sealed class LookoutsPuzzle : PuzzleDef
         float toObservatory = Bearing(at, new Vector2(site.x, site.z));
         var mb = new MeshBuilder();
         var glow = new MeshBuilder();
-        Kit.AddDisc(mb, new Vector3(0f, -0.4f, 0f), 4.6f, 0.7f, IsleKit.Stone, 20);
+        Kit.AddDisc(mb, new Vector3(0f, -3.0f, 0f), 4.6f, 3.3f, IsleKit.Stone, 20);      // a deep drum, so it never floats on a slope
         Vector2 mast = IsleKit.Turn(-2.8f, -1.6f, toObservatory), post = IsleKit.Turn(1.3f, 0.6f, toObservatory);
         Kit.AddBox(mb, new Vector3(mast.x, 0.3f, mast.y), new Vector3(0.34f, 11f, 0.34f), IsleKit.Wood);
         Kit.AddBox(mb, new Vector3(mast.x, 11.3f, mast.y), new Vector3(1.4f, 0.2f, 1.4f), IsleKit.DarkWood);
@@ -57,7 +58,7 @@ public sealed class LookoutsPuzzle : PuzzleDef
         Vector2 face = IsleKit.Turn(1.3f, 0.6f + 0.12f, toObservatory);
         Piece lever = b.Part("Button Sim", c.x + face.x, c.y + face.y, 1.25f, toObservatory).Named("Lookout " + Names[i] + " Lever");
         lever.Set("PuzzleSimPressSwitch", "group", "lookouts").Set("PuzzleSimPressSwitch", "activeSeconds", 2f).Set("PuzzleSimPressSwitch", "timeoutSeconds", 4f);
-        Piece lights = Kit.LightRing(b, "Lookout " + Names[i] + " Lights", c.x, c.y, 4.2f, 0.6f, 2.2f, true, 60 + i);
+        Piece lights = Kit.LightRing(b, "Lookout " + Names[i] + " Lights", c.x, c.y, 9.8f, 9.8f, 2.2f, true, 60 + i);      // (sizes across, not radii)
         if (parent != null) { platform.Under(parent); lamp.Under(parent); telescope.Under(parent); lever.Under(parent); if (lights != null) lights.Under(parent); }
         return lever;
     }
@@ -104,7 +105,7 @@ public sealed class LookoutsPuzzle : PuzzleDef
             }
         }
         IsleKit.StartCorner(b, 0f, -3.2f, 180f);
-        Kit.LightRing(b, "Observatory Lights", 0f, 0f, 9.6f, 10f, 2.4f, true, 71);
+        Kit.LightRing(b, "Observatory Lights", 0f, 0f, 19.6f, 19.6f, 2.4f, true, 71);
         Debug.Log("[BWM] Lookouts: " + string.Join(", ", Stations.Select((s, i) => Names[i] + " at " + Sdk.F(s.x) + ", " + Sdk.F(s.y) + " (" + Sdk.F((s - new Vector2(site.x, site.z)).magnitude) + " m)")));
     }
 }

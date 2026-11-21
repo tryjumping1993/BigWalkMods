@@ -383,8 +383,15 @@ public static class WinterIsleRail
                     if (name[k] != ' ') OBox(station, L(sh + Vector3.up * 2.55f + Rr * (side * 0.73f) + flatF * ((-1.8f + k * 0.27f) * side)), Rr, Vector3.up, flatF, 0.02f, 0.18f, 0.09f, gold);
                 Kit.AddGlow(glow, L(sh + Vector3.up * 3.15f), new Vector3(0.4f, 0.14f, 0.4f), yaw, new Color(1f, 0.8f, 0.45f), s * 0.17f);
                 var posts = new List<Vector3>();
-                for (int k = -StationReach; k <= StationReach; k += 5) { int j = Mathf.Clamp(c + k, 0, n - 1); posts.Add(L(Line[j] + Right(j) * (side * (Out(j) + 1.7f)) + Vector3.up * (PlatformTop + 3.1f))); }
-                Kit.LightString(b, "Rail Station Lights " + s + (side < 0 ? "L" : "R"), posts, 0.35f, 0.5f, false, true, 800 + s * 2 + side);
+                for (int k = -StationReach; k <= StationReach; k += 5)
+                {
+                    int j = Mathf.Clamp(c + k, 0, n - 1);
+                    Vector3 top = Line[j] + Right(j) * (side * (Out(j) + 1.7f)) + Vector3.up * (PlatformTop + 3.1f);
+                    posts.Add(L(top));
+                    // its post, from the platform up (LightString's own posts start at the pack's root: the sea floor)
+                    OBox(station, L(top - Vector3.up * 1.55f), Rr, Vector3.up, flatF, 0.06f, 1.6f, 0.06f, timber);
+                }
+                Kit.LightString(b, "Rail Station Lights " + s + (side < 0 ? "L" : "R"), posts, 0.35f, 0.5f, false, false, 800 + s * 2 + side);
             }
             var mk = new GameObject("Rail Station " + s + " " + name);
             mk.transform.SetParent(markers.transform, false);
