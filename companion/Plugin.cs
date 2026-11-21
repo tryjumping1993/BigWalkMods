@@ -193,6 +193,8 @@ namespace BwmCompanion
                 case "snow": yield return Snow(r); break;
                 case "find": yield return Find(r); break;
                 case "mat": yield return Materials(r); break;
+                case "active": yield return SetActive(r); break;
+                case "inspect": yield return InspectFirst(r); break;
                 case "treemat": yield return TreeMaterials(r); break;
                 case "trees": yield return NearTrees(r); break;
                 case "crest": yield return CrestInputs(r); break;
@@ -716,6 +718,52 @@ namespace BwmCompanion
                     + " shadows " + light.shadows + (light.isActiveAndEnabled ? "" : " | off"));
             }
             sb.AppendLine("ambient: mode " + RenderSettings.ambientMode + " intensity " + F(RenderSettings.ambientIntensity) + " sky " + RenderSettings.ambientSkyColor);
+            return sb.ToString();
+        }
+
+        // The fields and properties of the first live object of a game type: /inspect?type=Train[&filter=speed]
+        static string InspectFirst(Request r)
+        {
+            Type type = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(r.Str("type", ""))).FirstOrDefault(t => t != null);
+            if (type == null) return "ERROR no type '" + r.Str("type") + "'";
+            object typed = typeof(UnityEngine.Object).GetMethods().First(x => x.Name == "FindObjectOfType" && x.IsGenericMethod && x.GetParameters().Length == 0).MakeGenericMethod(type).Invoke(null, null);
+            if (typed == null) return "ERROR no live " + type.Name;
+            string filter = r.Str("filter", "");
+            var sb = new StringBuilder(type.Name + " on " + PathOf(((Component)typed).transform) + Environment.NewLine);
+            foreach (PropertyInfo p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (filter != "" && p.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (p.GetIndexParameters().Length > 0) continue;
+                string v;
+                try { object o = p.GetValue(typed); v = o == null ? "null" : o.ToString(); } catch (Exception e) { v = "(" + e.GetType().Name + ")"; }
+                if (v.Length > 160) v = v.Substring(0, 160);
+                sb.AppendLine("  " + p.Name + " = " + v);
+            }
+            return sb.ToString();
+        }
+
+        // Switches on or off the object (active or not) whose name is exactly ?name=, the nearest to (nx, ny, nz):
+        // /active?name=UnfurledMap&nx=..&ny=..&nz=..&on=1   (for looking at things the game keeps hidden)
+        static string SetActive(Request r)
+        {
+            var near = new Vector3(r.Num("nx"), r.Num("ny"), r.Num("nz"));
+            Transform best = null; float bestD = float.MaxValue;
+            foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>(true))
+            {
+                if (t.name != r.Str("name", "")) continue;
+                float d = (t.position - near).sqrMagnitude;
+                if (d < bestD) { bestD = d; best = t; }
+            }
+            if (best == null) return "ERROR nothing named '" + r.Str("name") + "'";
+            best.gameObject.SetActive(r.Num("on", 1f) > 0.5f);
+            var sb = new StringBuilder(PathOf(best) + " active " + best.gameObject.activeSelf + " at " + V(best.position) + " rotation " + V(best.eulerAngles) + " scale " + V(best.lossyScale));
+            Renderer rend = best.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                sb.Append(" | bounds " + V(rend.bounds.size));
+                foreach (Material m in rend.sharedMaterials)
+                    if (m != null) sb.Append(" | material " + m.name + " (" + (m.shader != null ? m.shader.name : "none") + ")" + (m.mainTexture != null ? " texture " + m.mainTexture.name + " " + m.mainTexture.width + "x" + m.mainTexture.height : ""));
+            }
             return sb.ToString();
         }
 

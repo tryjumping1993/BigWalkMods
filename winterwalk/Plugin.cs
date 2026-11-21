@@ -39,8 +39,9 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<MineDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<JetpackDriver>();
-            BlizzardMean = Config.Bind("General", "BlizzardMeanMinutes", 120f, "Blizzards arrive at random on the Winter Isle; this is the average wait between them, in minutes of play.");
+            BlizzardMean = Config.Bind("General", "BlizzardMeanMinutes", 90f, "Blizzards arrive at random on the Winter Isle; this is the average wait between them, in minutes of play.");
             ClassInjector.RegisterTypeInIl2Cpp<WeatherDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<MapDriver>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -53,6 +54,7 @@ namespace WinterWalk
             go.AddComponent<MineDriver>();
             go.AddComponent<JetpackDriver>();
             go.AddComponent<WeatherDriver>();
+            go.AddComponent<MapDriver>();
             L.LogInfo("Winter Walk loaded");
         }
     }

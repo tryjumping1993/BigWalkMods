@@ -66,11 +66,11 @@ public static class IsleKit
 
     // The blindfold on a hook on a post at (x, z), its hook facing 'yaw', for the blind-mask puzzles: the game's own
     // blindfold, which the blind turnstile needs a player to wear; it can be hung back on the hook
-    public static void BlindfoldHook(PuzzleBuilder b, float x, float z, float yaw, float baseHeight = 0f, bool onGround = true)
+    public static void BlindfoldHook(PuzzleBuilder b, float x, float z, float yaw, float baseHeight = 0f, bool onGround = true, string tag = "")
     {
         var post = new MeshBuilder();
         Kit.AddBox(post, Vector3.zero, new Vector3(0.18f, 1.9f, 0.18f), Wood, yaw);
-        b.MeshPiece("Blindfold Post", post.ToMesh(), Snowy(b)).Transform.position = b.WorldPoint(x, z, baseHeight, onGround);
+        b.MeshPiece("Blindfold Post" + tag, post.ToMesh(), Snowy(b)).Transform.position = b.WorldPoint(x, z, baseHeight, onGround);
         Vector2 front = Turn(0f, 0.4f, yaw), face = Turn(0f, 0.12f, yaw);
         Piece blindfold = b.Part("Vanilla Item", x + front.x, z + front.y, baseHeight + 1.3f, yaw, onGround).Named("Blindfold")
             .Set("PuzzleVanillaItem", "itemType", 0).Set("PuzzleVanillaItem", "savesOnReload", false);

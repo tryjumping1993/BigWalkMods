@@ -127,7 +127,7 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   walkie-talkies, megaphone, torches, GPS, map, compass, laser, night vision, a backpack and belt on hooks), at
   the landing, the plaza, the summit, the lodge and the mining yard. Items are not saved: a reload resets them.
 - **Weather and the fog veil:** `winterwalk\WeatherDriver.cs` works out mist and cloud from the hour and blizzards
-  from the network clock (Poisson, mean `BlizzardMeanMinutes` of real play, default 120; a game day is only 15 real
+  from the network clock (Poisson, mean `BlizzardMeanMinutes` of real play, default 90; a game day is only 15 real
   minutes); `SkyDriver` blends them into the sky, and a blizzard switches on the pack's "Blizzard Snowfall".
   `game 'set?path=WinterWalk.WeatherDriver.ForceBlizzard&value=1'` holds one (-1 lets go). The island's pack rings
   itself with `BWM/Veil` ribbons (clear near the camera) and hangs `BWM/VeilGlow` blooms over its lit places. The

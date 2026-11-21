@@ -1,0 +1,90 @@
+"""The Winter Isle's map, drawn from the island's own height grid (unity/Land/WinterIsle.land) and the puzzles'
+sites, in the manner of the game's folding map: deep blue sea, shaded relief, a fine white grid, coloured markers.
+  python tools/islemap.py            writes unity/Assets/Textures/Map/WinterIsleMap.png (the inset Winter Walk stamps
+                                     onto the game's map) and docs/winter-isle-map.png (the same with a numbered key)
+"""
+import glob, json, math, os, struct
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from scipy import ndimage
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+d = open(os.path.join(REPO, "unity", "Land", "WinterIsle.land"), "rb").read()
+x0, z0, cell, nx, nz = struct.unpack("<fffii", d[:20]); W, H = nx + 1, nz + 1
+g = np.nan_to_num(np.frombuffer(d, dtype="<f4", count=W * H, offset=20), nan=-6).reshape((H, W))[::-1]      # north up
+SCALE = 2
+g = ndimage.zoom(g, SCALE, order=1)
+h, w = g.shape
+land = g > 0.15
+gy, gx = np.gradient(ndimage.gaussian_filter(g, 1.2), cell / SCALE)
+slope = np.hypot(gx, gy)
+shade = np.clip(0.8 + (-gx * 0.6 + gy * 0.8) * 0.32, 0.55, 1.2)      # lit from the north-west
+rng = np.random.default_rng(3)
+img = np.zeros((h, w, 3), np.float32)
+depth = np.clip(-g / 6.0, 0, 1)
+img[:] = np.array([0.10, 0.26, 0.42]) * (1 - depth[..., None] * 0.25)
+shallow = (~land) & (g > -2.5)
+img[shallow] = np.array([0.20, 0.42, 0.55])
+snow = np.array([0.93, 0.95, 0.98]); rock = np.array([0.42, 0.43, 0.47]); wood = np.array([0.20, 0.33, 0.27])
+c = snow[None, None, :] * shade[..., None]
+rocky = np.clip((slope - 0.75) / 0.4, 0, 1)[..., None]
+c = c * (1 - rocky) + rock * shade[..., None] * rocky
+speck = ndimage.gaussian_filter(rng.random((h, w)), 2.0)
+speck = (speck - speck.min()) / (speck.max() - speck.min())
+forest = ((g > 6) & (g < 330) & (slope < 0.75) & (speck > 0.5))[..., None]
+c = np.where(forest, c * 0.45 + wood * 0.55, c)
+img[land] = c[land]
+im = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).convert("RGBA")
+dr = ImageDraw.Draw(im)
+def P(x, z): return ((x - x0) / cell * SCALE, h - 1 - (z - z0) / cell * SCALE)
+def font(size):
+    for f in ("courbd.ttf", "cour.ttf", "arialbd.ttf"):
+        try: return ImageFont.truetype(f, size)
+        except OSError: pass
+    return ImageFont.load_default()
+for gxm in range(-3000, -300, 250): dr.line([P(gxm, z0), P(gxm, z0 + nz * cell)], fill=(255, 255, 255, 70), width=1)
+for gzm in range(-2700, -450, 250): dr.line([P(x0, gzm), P(x0 + nx * cell, gzm)], fill=(255, 255, 255, 70), width=1)
+# the lines: the causeway, the gondola, the ski lift
+plaza, summit = (-705, -795), (-2250, -1900)
+dr.line([P(-468, -700), P(-459, -747)], fill=(250, 250, 250, 255), width=5)
+dr.line([P(*plaza), P(*summit)], fill=(200, 30, 30, 255), width=4)
+sites = {}
+for f in glob.glob(os.path.join(REPO, "unity", "Assets", "Puzzles", "*", "site.json")):
+    name = os.path.basename(os.path.dirname(f))
+    if name in ("WinterIsle", "BwmTutorial", "IslandGear"): continue
+    s = json.load(open(f)); sites[name] = (s["x"], s["z"])
+order = sorted((n for n in sites if n != "TheTree"), key=lambda n: (-sites[n][1], sites[n][0]))
+colours = [(220, 40, 40), (30, 150, 70), (40, 100, 220), (240, 190, 40), (160, 60, 170), (240, 120, 30)]
+def marker(x, z, text, colour, r=15):
+    px, pz = P(x, z)
+    dr.ellipse([px - r, pz - r, px + r, pz + r], fill=colour + (255,), outline=(255, 255, 255, 255), width=3)
+    f = font(int(r * 1.15)); tw = dr.textlength(text, font=f)
+    dr.text((px - tw / 2, pz - r * 0.68), text, fill=(255, 255, 255, 255), font=f)
+for i, n in enumerate(order): marker(*sites[n], str(i + 1), colours[i % len(colours)])
+px, pz = P(*plaza)
+dr.regular_polygon((px, pz, 22), 3, fill=(20, 120, 50, 255), outline=(255, 255, 255, 255))      # The Tree
+px, pz = P(*summit)
+dr.regular_polygon((px, pz, 20), 5, rotation=180, fill=(240, 200, 40, 255), outline=(255, 255, 255, 255))
+if os.path.exists(os.path.join(REPO, "unity", "Land", "WinterIsle.mine")):
+    mx, mz = [float(v) for v in open(os.path.join(REPO, "unity", "Land", "WinterIsle.mine")).read().split()[:2]]
+    px, pz = P(mx, mz); dr.rectangle([px - 13, pz - 13, px + 13, pz + 13], fill=(40, 40, 45, 255), outline=(255, 255, 255, 255), width=3)
+f = font(64); dr.text((40, 30), "WINTER ISLE", fill=(255, 255, 255, 255), font=f)
+border = 10
+dr.rectangle([0, 0, w - 1, h - 1], outline=(214, 190, 60, 255), width=border)
+out = os.path.join(REPO, "unity", "Assets", "Textures", "Map"); os.makedirs(out, exist_ok=True)
+im.resize((1536, int(1536 * h / w))).save(os.path.join(out, "WinterIsleMap.png"))
+# the key, for people: the same map with the puzzles named beside it
+keyw = 620
+sheet = Image.new("RGBA", (w + keyw, h), (24, 28, 36, 255)); sheet.paste(im, (0, 0))
+kd = ImageDraw.Draw(sheet); f = font(27)
+kd.text((w + 24, 20), "Puzzles", fill=(255, 255, 255, 255), font=font(40))
+for i, n in enumerate(order):
+    y = 84 + i * 43
+    kd.ellipse([w + 24, y, w + 58, y + 34], fill=colours[i % len(colours)] + (255,))
+    t = str(i + 1); kd.text((w + 41 - kd.textlength(t, font=font(20)) / 2, y + 6), t, fill=(255, 255, 255, 255), font=font(20))
+    kd.text((w + 72, y + 2), n, fill=(235, 235, 235, 255), font=f)
+y = 84 + len(order) * 43 + 14
+for label in ("green triangle: The Tree (plaza)", "gold star: the summit", "dark square: mine tower", "red line: gondola", "white line: causeway"):
+    kd.text((w + 24, y), label, fill=(200, 205, 215, 255), font=font(22)); y += 32
+sheet.convert("RGB").save(os.path.join(REPO, "docs", "winter-isle-map.png"))
+print("wrote the map:", len(order), "puzzles")

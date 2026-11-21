@@ -2,7 +2,7 @@
 //
 // The island is cloudy, and its weather turns with the time of day: freezing mist at dawn, a clearer, brighter spell
 // about midday, snow thickening towards evening, a heavy still night. On top of that come blizzards, as a Poisson
-// process: on average one every two hours of play (config BlizzardMeanMinutes), each lasting six to eleven minutes,
+// process: on average one every hour and a half of play (config BlizzardMeanMinutes), each lasting six to eleven minutes,
 // setting in over a minute and blowing itself out over two. In a blizzard the fog closes in, the light dims, and a
 // second, driving snowfall from the island's pack ("Blizzard Snowfall") is switched on.
 //

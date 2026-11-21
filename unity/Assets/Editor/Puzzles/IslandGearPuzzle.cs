@@ -108,6 +108,15 @@ public sealed class IslandGearPuzzle : PuzzleDef
         };
         if (WinterIsleMine.Load())
             wanted.Add(("Mine Gear", WinterIsleMine.Tower + new Vector2(WinterIsleMine.TowerFacing.y, -WinterIsleMine.TowerFacing.x) * 14f, new[] { Torch, Torch, Torch, NightVision, NightVision, Walkie, Walkie, Map, Clock }));
+        // the Winter Isle's close-up for the game's folding map (tools/islemap.py draws it; Winter Walk's MapDriver
+        // stamps it onto the map): carried on a speck under the plaza, since a picture only reaches the game on a material
+        {
+            var picture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Textures/Map/WinterIsleMap.png");
+            if (picture == null) throw new System.Exception("No Assets/Textures/Map/WinterIsleMap.png: run tools\\islemap.py");
+            var speck = new MeshBuilder();
+            Kit.AddBox(speck, new Vector3(0f, -40f, 0f), Vector3.one * 0.01f, Color.white);
+            b.MeshPiece("Map Overlay", speck.ToMesh(), b.ShaderMaterial("BWM/MapStamp", "Map Stamp", m => m.SetTexture("_MainTex", picture)), false);
+        }
         int built = 0;
         foreach (var w in wanted)
         {
