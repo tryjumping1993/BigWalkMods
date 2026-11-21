@@ -4,7 +4,7 @@
 // to one straps a jetpack on this PC's player: the model from The Tree's pack ("Jetpack Model") is hung on their
 // back, and its tank is filled. To fly: jump, let go of jump, and press it again in the air; while it is held the
 // jetpack fires (flames under its nozzles), pushing up hard and a little the way the camera looks, and burning fuel.
-// The tank holds a generous forty seconds of firing; walking up to the presents again fills it.
+// It never runs out of fuel.
 //
 // Only this player is driven, through its own Rigidbody, as the skiing is; the game's networking shows the flight
 // to the others. Other players' jetpacks are not shown on their backs yet (nothing tells one PC what another wears).
@@ -140,12 +140,12 @@ namespace WinterWalk
                 bool grounded = gap < 0.25f;
                 if (grounded && !TestFire) { armed = false; firing = false; }
                 else if (!held) armed = true;      // let go after the jump (or walked off an edge): the next press fires
-                firing = (armed || TestFire) && held && Fuel > 0f;
+                firing = (armed || TestFire) && held;      // (no fuel: it never runs out)
                 if (flame != null && flame.activeSelf != firing) flame.SetActive(firing);
                 wasHeld = held;
                 if (!firing)
                 {
-                    State = "jetpack on, " + Fuel.ToString("0") + " s of fuel" + (grounded ? "" : armed ? ", ready to fire" : "");
+                    State = "jetpack on" + (grounded ? "" : armed ? ", ready to fire" : "");
                     return;
                 }
                 PlayerCharacter pc = me.GetComponent<PlayerCharacter>();
@@ -167,8 +167,7 @@ namespace WinterWalk
                     }
                 }
                 body.linearVelocity = v;
-                Fuel = Mathf.Max(0f, Fuel - dt);
-                State = "jetpack firing, " + Fuel.ToString("0.0") + " s of fuel";
+                State = "jetpack firing";
             }
             catch (Exception e)
             {

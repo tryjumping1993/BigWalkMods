@@ -119,7 +119,7 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   at the tree line) is a second `GondolaDriver`, set up by `ConfigureLift`, and opens with the gondola; its state is
   `GondolaDriver.LiftState`. Other players' gear is not shown.
 - **Jetpacks** (`winterwalk\JetpackDriver.cs`): walking up to one of the opened presents under The Tree ("Jetpack
-  Present...") straps a jetpack on and fills its 40 s tank; jump, let go, press jump again in the air and it fires
+  Present...") straps a jetpack on (it never runs out of fuel); jump, let go, press jump again in the air and it fires
   while held. Jump is read from Rewired (the game's input) by the action named with "jump", else the space bar.
   `game 'set?path=WinterWalk.JetpackDriver.TestFire&value=true'` fires it without a controller; `Up`, `Back` and
   `Scale` move the worn model live. Other players' jetpacks are not shown.
@@ -216,6 +216,9 @@ the user and friends, who must all have the same packs and SDK version.
 - **Do not `Start-Process -Wait` Unity:** it also waits for Unity's compiler server, which lingers for minutes.
 - **Stripped engine methods:** the game is IL2CPP, so engine methods it never calls are missing. In the
   companion prefer the generic forms (`FindObjectOfType<T>()`), and test each new call live.
+- **The tutorial puzzle** (`TutorialPuzzle.cs`, on the mainland) is a smoke test only: its pack is kept out of the
+  profile (its gourd would count towards the island's towers). `build-all` re-exports it; delete
+  `profile\BepInEx\plugins\BigPuzzleSDK\BwmTutorial.puzzlepack` afterwards.
 - **Puzzle ids:** the SDK ties a puzzle's permanent id to its root object in `Assets\Puzzles\<Name>\<Name>.unity`
   and records it in `unity\ProjectSettings\BigWalkPuzzleIds.json`. Builds reuse that root. Deleting the scene
   or that file gives the puzzle a new id, which breaks saves and multiplayer matching for it.
