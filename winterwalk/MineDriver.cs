@@ -47,6 +47,16 @@ namespace WinterWalk
         float nextLook, nextPlinthCheck, nextUnderCheck;
         GameObject tripRoot, gates, snowfall;
         string file;
+        bool dressed;
+        // The lamps' light: a few real lights, moved every quarter second to the lamps nearest this player's camera
+        // (hundreds of lamps hang in the mine; only those near enough to see cost anything)
+        const int LightCount = 14;
+        const float LightReach = 48f;
+        readonly List<Vector3> lamps = new List<Vector3>();
+        readonly List<Light> lights = new List<Light>();
+        GameObject lightRoot;
+        float nextDress;
+        public static string Look = "not dressed";      // read-only: which of the game's materials the mine wears
 
         static float Smooth(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
 
@@ -58,12 +68,17 @@ namespace WinterWalk
             if (tripRoot == null) return false;
             if (file == null) file = Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location), "WinterIsle.mineline");
             if (!File.Exists(file)) { State = "no WinterIsle.mineline beside the plugin"; tripRoot = null; return false; }
-            points.Clear(); kinds.Clear();
+            points.Clear(); kinds.Clear(); lamps.Clear();
             var stops = new List<int>();
             foreach (string text in File.ReadAllLines(file))
             {
                 if (text.Length == 0 || text[0] == '#') continue;
                 string[] parts = text.Split(' ');
+                if (parts[0] == "L" && parts.Length >= 4)
+                {
+                    lamps.Add(new Vector3(float.Parse(parts[1], CultureInfo.InvariantCulture), float.Parse(parts[2], CultureInfo.InvariantCulture), float.Parse(parts[3], CultureInfo.InvariantCulture)));
+                    continue;
+                }
                 if (parts.Length < 5) continue;
                 if (parts[4] == "1") stops.Add(points.Count);
                 points.Add(new Vector3(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture), float.Parse(parts[2], CultureInfo.InvariantCulture)));
@@ -143,6 +158,89 @@ namespace WinterWalk
             return filled >= 5;
         }
 
+        // The mine wears the game's own materials, so it is drawn to the same standard as the game's tunnels: their
+        // concrete (a 2048 px surface with a normal map, tinted by our vertex colours, lit and shadowed by the game)
+        // on the rock, and the game's flat vertex-colour material on timber and track. The pack's own material is
+        // only what shows until these are found.
+        void Dress()
+        {
+            Material concrete = null, flat = null;
+            foreach (Renderer r in UnityEngine.Object.FindObjectsOfType<Renderer>(true))
+            {
+                if (r == null) continue;
+                Material m = r.sharedMaterial;
+                if (m == null) continue;
+                if (concrete == null && m.name == "Concrete_Mottle_Vertex") concrete = m;
+                else if (flat == null && m.name == "hhVertexColors") flat = m;
+                if (concrete != null && flat != null) break;
+            }
+            if (concrete == null) { Look = "the game's tunnel material is not loaded yet"; return; }
+            var rock = new Material(concrete) { name = "Mine Rock" };
+            // our texture coordinates are in metres: one repeat of the surface a metre, as in the game's tunnels
+            foreach (string map in new[] { "_AlbedoMap", "_NormalMap", "_MaskMap" })
+                if (rock.HasProperty(map)) { rock.SetTextureScale(map, Vector2.one); rock.SetTextureOffset(map, Vector2.zero); }
+            int rocks = 0, others = 0;
+            Transform island = tripRoot.transform.parent;
+            for (int i = 0; i < island.childCount; i++)
+            {
+                Transform child = island.GetChild(i);
+                string n = child.name;
+                if (!n.StartsWith("Mine ")) continue;
+                MeshRenderer renderer = child.GetComponent<MeshRenderer>();
+                if (renderer == null) continue;
+                if (n.StartsWith("Mine Tunnel") || n == "Mine Hall" || n == "Mine Mouths") { renderer.sharedMaterial = rock; rocks++; }
+                else if ((n == "Mine Props" || n == "Mine Track") && flat != null) { renderer.sharedMaterial = flat; others++; }
+            }
+            dressed = true;
+            Look = "rock: " + concrete.name + " (" + concrete.shader.name + ") on " + rocks + " meshes; timber and track: " + (flat != null ? flat.name + " on " + others : "the pack's own");
+            Plugin.L.LogInfo("Winter Walk: mine dressed: " + Look);
+        }
+
+        void MoveLights()
+        {
+            Camera cam = Camera.main;
+            if (cam == null || lamps.Count == 0) return;
+            if (lightRoot == null)
+            {
+                lightRoot = new GameObject("Mine Lights");
+                lights.Clear();
+                for (int i = 0; i < LightCount; i++)
+                {
+                    var go = new GameObject("Mine Light " + i);
+                    go.transform.SetParent(lightRoot.transform, false);
+                    Light light = go.AddComponent<Light>();
+                    light.type = LightType.Point;
+                    light.range = 9f;
+                    light.intensity = 2.2f;
+                    light.color = new Color(1f, 0.76f, 0.47f);
+                    light.shadows = LightShadows.None;
+                    light.enabled = false;
+                    lights.Add(light);
+                }
+            }
+            Vector3 eye = cam.transform.position;
+            // the nearest lamps, by insertion into a short sorted list
+            var best = new List<int>();
+            var bestD = new List<float>();
+            for (int i = 0; i < lamps.Count; i++)
+            {
+                float d = (lamps[i] - eye).sqrMagnitude;
+                if (d > LightReach * LightReach) continue;
+                int at = bestD.Count;
+                while (at > 0 && bestD[at - 1] > d) at--;
+                if (at >= LightCount) continue;
+                best.Insert(at, i); bestD.Insert(at, d);
+                if (best.Count > LightCount) { best.RemoveAt(LightCount); bestD.RemoveAt(LightCount); }
+            }
+            for (int i = 0; i < lights.Count; i++)
+            {
+                if (lights[i] == null) { lightRoot = null; return; }
+                bool on = i < best.Count;
+                if (on) lights[i].transform.position = lamps[best[i]] - Vector3.up * 0.25f;
+                if (lights[i].enabled != on) lights[i].enabled = on;
+            }
+        }
+
         // Whether the camera is in a tunnel or the hall: near a point of the line that is roofed
         void CheckUnderground()
         {
@@ -198,8 +296,10 @@ namespace WinterWalk
                     nextLook = Time.unscaledTime + 2f;
                     trips.Clear();
                     plinths.Clear();
+                    dressed = false;
                     if (!Find()) return;
                 }
+                if (!dressed && Time.unscaledTime >= nextDress) { nextDress = Time.unscaledTime + 10f; Dress(); }
                 Open = ForceOpen || TowerComplete();
                 if (ForceOpen) State = "open (forced open for testing)";
                 if (gates != null && gates.activeSelf == Open) gates.SetActive(!Open);
@@ -217,6 +317,7 @@ namespace WinterWalk
                 {
                     nextUnderCheck = Time.unscaledTime + 0.25f;
                     CheckUnderground();
+                    MoveLights();
                 }
             }
             catch (Exception e)

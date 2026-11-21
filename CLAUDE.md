@@ -91,14 +91,20 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   search keeps new puzzles off it. So after adding or moving a puzzle, rebuild `WinterIsle` too: that is what
   clears its trees and lays its path. `TheTreePuzzle.cs` is the gourd tower in the plaza
   (`WinterIslePuzzle.Plaza`), one plinth per puzzle.
-- **The mine** (`WinterIsleMine.cs`, built by the island's pack): a hall under the summit at 30 m above the sea,
-  three level tunnels out to portals (east, north-west, south), cross-cuts, a closed double track and eight
-  mantrips. Its light is baked into vertex colours (shader `BWM/Mine` takes no sun or sky), so change lamps in
-  the builder, not with lights. `winterwalk\MineDriver.cs` runs the mantrips from the network clock and opens the
-  gates; `game 'set?path=WinterWalk.MineDriver.ForceOpen&value=true'` opens it for testing, as
-  `GondolaDriver.ForceOpen` does the gondola. The island's ground is left out over each portal's open cut
-  (`WinterIsleMine.InCut`). The build writes `unity\Land\WinterIsle.mine`, which The Tree reads to place the mine
-  tower, so build WinterIsle before TheTree.
+- **The mine** (`WinterIsleMine.cs`, built by the island's pack): one low single-track line (2.9 m wide, 1.75 m
+  high: a seated rider clears it, on foot it is a crouch) that runs under the whole island and surfaces at about
+  thirteen stations, plus one big hall under the summit. The stations are placed and the line routed by the
+  build (`PlaceStations`, `FindRoute`); where the ground is too thin the tunnel runs in a stone shed and the
+  island's mesh leaves the ground out (`InCut`). The build writes the line and the lamps' places beside the
+  Winter Walk plugin as `WinterIsle.mineline`, and the mine tower's place to `unity/Land/WinterIsle.mine`, which
+  The Tree reads, so build WinterIsle before TheTree. In the game `winterwalk/MineDriver.cs` runs the twelve
+  mantrips from the network clock, opens the gates, stops the snowfall underground, and gives the mine the game's
+  own tunnel material (`Concrete_Mottle_Vertex`, tinted by our vertex colours) and prop material, with a small
+  pool of real lights that follows the camera from lamp to lamp. So the mine's faces must wind the right way
+  (`Q` takes the point a face is seen from) and carry texture coordinates in metres; `BWM/Mine` is only the
+  fallback. `game 'set?path=WinterWalk.MineDriver.ForceOpen&value=true'` opens it for testing, as
+  `GondolaDriver.ForceOpen` does the gondola; `game 'mat?x&y&z&r&name=Text'` lists what the game draws near a
+  point (materials, textures, lights), which is how the game's tunnels were matched.
 - **Towers:** the SDK supports one tower button list, and shows one plinth per puzzle loaded, first in the list
   first. The Tree's list is its own five plinths (the gondola), then the mine tower's five (the mine), then the
   summit's twenty; the mine tower and the summit have their own hold buttons wired to `HoldToOpen`. So the mine

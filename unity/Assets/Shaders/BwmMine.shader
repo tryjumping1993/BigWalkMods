@@ -1,8 +1,8 @@
 // The coal mine's rock, timber and track. Made for this edition.
 // Nothing from the sky reaches underground, so this takes no sun and no sky light: the lamps' light is worked out
-// when the mine is built and stored in the vertex colour (rock colour times light). uv.x is 1 on lamp glass,
-// which glows; uv.y is each lamp's own phase, for a slow flicker. A little grain from the world position keeps
-// the rock from looking like flat paint.
+// when the mine is built and stored in the vertex colour (rock colour times light). A little grain from the world
+// position keeps the rock from looking like flat paint. This is only what the mine falls back to: in the game
+// Winter Walk gives its rock the game's own tunnel material (MineDriver), which the same colours tint.
 Shader "BWM/Mine"
 {
     Properties
@@ -78,9 +78,7 @@ Shader "BWM/Mine"
             {
                 float grain = Noise(i.positionWS * 3.1) * 0.6 + Noise(i.positionWS * 11.0) * 0.4;
                 float3 rock = i.color.rgb * (1.0 - _Grain + _Grain * 2.0 * grain);
-                float flicker = 0.9 + 0.1 * sin(_Time.y * 2.3 + i.uv.y * 6.2831853) * sin(_Time.y * 7.1 + i.uv.y * 40.0);
-                float3 lamp = i.color.rgb * _Glow * flicker;
-                return half4(lerp(rock, lamp, step(0.5, i.uv.x)), 1);
+                return half4(rock * 0.55, 1);      // (the colours are tints for the game's lit material; alone they are too bright)
             }
             ENDHLSL
         }

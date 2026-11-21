@@ -192,6 +192,7 @@ namespace BwmCompanion
                 case "season": yield return Season(r); break;
                 case "snow": yield return Snow(r); break;
                 case "find": yield return Find(r); break;
+                case "mat": yield return Materials(r); break;
                 case "crest": yield return CrestInputs(r); break;
                 case "menu": yield return Host.Menus(); break;
                 case "call": yield return Call(r); break;
@@ -582,6 +583,62 @@ namespace BwmCompanion
         }
 
         // ---- looking ----
+
+        // What is drawn near a point, and with what: /mat?x&y&z[&r=12] lists every renderer within r metres (path,
+        // mesh, shadows) with its materials (shader, textures and their sizes, main colours) and every light there.
+        // For learning how the game itself builds something (its tunnels) before making our own to match.
+        static string Materials(Request r)
+        {
+            var at = new Vector3(r.Num("x"), r.Num("y"), r.Num("z"));
+            float radius = r.Num("r", 12f);
+            var sb = new StringBuilder();
+            var seen = new HashSet<string>();
+            string[] common = { "_BaseMap", "_MainTex", "_BumpMap", "_NormalMap", "_MetallicGlossMap", "_OcclusionMap", "_DetailAlbedoMap", "_DetailNormalMap", "_EmissionMap", "_MaskMap", "_Albedo", "_Normal" };
+            string[] colours = { "_BaseColor", "_Color", "_EmissionColor", "_Tint" };
+            string[] floats = { "_Smoothness", "_Metallic", "_BumpScale", "_Tiling", "_Scale", "_TriplanarScale", "_Cull" };
+            int shown = 0;
+            foreach (Renderer rend in UnityEngine.Object.FindObjectsOfType<Renderer>())
+            {
+                if (rend == null || (rend.bounds.ClosestPoint(at) - at).magnitude > radius) continue;
+                string where = PathOf(rend.transform);
+                if (where.StartsWith("Winter Dressing") || (r.Has("name") && where.IndexOf(r.Str("name"), StringComparison.OrdinalIgnoreCase) < 0)) continue;
+                if (++shown > 40) break;
+                MeshFilter mf = rend.GetComponent<MeshFilter>();
+                sb.AppendLine(PathOf(rend.transform) + " | bounds " + V(rend.bounds.size) + (mf != null && mf.sharedMesh != null ? " | mesh " + mf.sharedMesh.name + " " + mf.sharedMesh.vertexCount + " v" : "")
+                    + " | shadows " + rend.shadowCastingMode + " | layer " + rend.gameObject.layer);
+                foreach (Material m in rend.sharedMaterials)
+                {
+                    if (m == null) continue;
+                    sb.Append("    material " + m.name + " | shader " + (m.shader != null ? m.shader.name : "none"));
+                    if (!seen.Add(m.name)) { sb.AppendLine(" (above)"); continue; }
+                    sb.AppendLine();
+                    string[] names = null;
+                    try { names = m.GetTexturePropertyNames(); } catch (Exception) { }
+                    foreach (string n in names ?? common)
+                    {
+                        try
+                        {
+                            if (!m.HasProperty(n)) continue;
+                            Texture t = m.GetTexture(n);
+                            if (t == null) continue;
+                            Vector2 scale = m.GetTextureScale(n);
+                            sb.AppendLine("        " + n + ": " + t.name + " " + t.width + "x" + t.height + " scale " + F(scale.x) + ", " + F(scale.y));
+                        }
+                        catch (Exception) { }
+                    }
+                    foreach (string n in colours) try { if (m.HasProperty(n)) sb.AppendLine("        " + n + ": " + m.GetColor(n)); } catch (Exception) { }
+                    foreach (string n in floats) try { if (m.HasProperty(n)) sb.AppendLine("        " + n + ": " + F(m.GetFloat(n))); } catch (Exception) { }
+                }
+            }
+            foreach (Light light in UnityEngine.Object.FindObjectsOfType<Light>())
+            {
+                if (light == null || (light.transform.position - at).magnitude > radius * 2f) continue;
+                sb.AppendLine("light " + PathOf(light.transform) + " | " + light.type + " at " + V(light.transform.position) + " range " + F(light.range) + " intensity " + F(light.intensity) + " colour " + light.color
+                    + " shadows " + light.shadows + (light.isActiveAndEnabled ? "" : " | off"));
+            }
+            sb.AppendLine("ambient: mode " + RenderSettings.ambientMode + " intensity " + F(RenderSettings.ambientIntensity) + " sky " + RenderSettings.ambientSkyColor);
+            return sb.ToString();
+        }
 
         static string Find(Request r)
         {
