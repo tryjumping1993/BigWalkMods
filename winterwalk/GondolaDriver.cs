@@ -183,6 +183,19 @@ namespace WinterWalk
                     Open = open = ForceOpen || TreeComplete();
                     if (ForceOpen) State = "running (forced open for testing)";
                 }
+                if (!open && isLift)
+                {
+                    // a stopped chairlift: the chairs hang still at their places along the cable
+                    for (int i = 0; i < cabins.Count; i++)
+                    {
+                        if (cabins[i] == null) { lineRoot = null; return; }
+                        Vector3 grip = At(period * i / cabins.Count, out Vector3 heading);
+                        heading.y = 0f;
+                        cabins[i].position = grip;
+                        if (heading.sqrMagnitude > 1e-6f) cabins[i].rotation = Quaternion.LookRotation(heading.normalized, Vector3.up);
+                    }
+                    return;
+                }
                 if (!open)
                 {
                     // waiting in a row along the bottom station's return line

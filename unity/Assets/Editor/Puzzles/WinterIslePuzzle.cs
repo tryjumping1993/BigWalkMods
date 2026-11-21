@@ -1185,6 +1185,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
         structures.Add((SkiLiftBottom, 16f));
         structures.Add((SkiLiftTop, 13f));
         for (float t = 0f; t <= 1f; t += 0.006f) structures.Add((Vector2.Lerp(SkiLiftBottom, SkiLiftTop, t), 8f));      // ...and the ski lift's
+        {
+            Vector2 finishAt = PisteFinish(out _, out _);
+            for (float t = 0f; t <= 1f; t += 0.02f) structures.Add((Vector2.Lerp(SkiLiftBottom, finishAt, t), 6f));      // a clear way from the finish to the lift
+        }
         bool Free(Vector2 p, float margin)      // clear of paths, the plaza, the lake, structures and every puzzle site
         {
             if (PathDistance(p) < 3.5f + margin || (p - Plaza).magnitude < PlazaRadius + margin || (p - Lake).magnitude < LakeRadius + 6f + margin) return false;

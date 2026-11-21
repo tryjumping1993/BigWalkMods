@@ -79,7 +79,8 @@ public sealed class TheTreePuzzle : PuzzleDef
             Color[] ribbon = { new Color(0.95f, 0.8f, 0.3f), new Color(0.95f, 0.95f, 0.92f), new Color(0.8f, 0.1f, 0.1f) };
             for (int i = 0; i < 18; i++)
             {
-                float a = Mathf.PI * 1.5f + 2f * Mathf.PI * (i / 18f) + Mathf.PI / 5f + R(-0.12f, 0.12f), r = R(2.6f, 4.8f);
+                // in clusters between the plinths, out at the boughs' tips where they show (deep under them they were hidden)
+                float a = Mathf.PI * 1.5f - 2f * Mathf.PI * (i % 5) / 5f - Mathf.PI / 5f + R(-0.22f, 0.22f), r = R(4.6f, 6.4f);
                 float sx = R(0.4f, 0.95f), sy = R(0.3f, 0.75f), sz = R(0.4f, 0.95f), yaw = R(0f, 90f);
                 var at = new Vector3(Mathf.Cos(a) * r, 0.6f, Mathf.Sin(a) * r);
                 Color c = paper[pr.Next(paper.Length)], band = ribbon[pr.Next(ribbon.Length)];
