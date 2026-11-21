@@ -24,6 +24,7 @@ namespace WinterWalk
         internal static ManualLogSource L;
         internal static ConfigEntry<bool> Enabled;
         internal static ConfigEntry<bool> Tracks;
+        internal static ConfigEntry<float> BlizzardMean;
         internal const float RockSnowRaise = 0.2f;      // rocks keep more bare granite than the list's snow line says
 
         public override void Load()
@@ -38,6 +39,8 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<MineDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<JetpackDriver>();
+            BlizzardMean = Config.Bind("General", "BlizzardMeanMinutes", 120f, "Blizzards arrive at random on the Winter Isle; this is the average wait between them, in minutes of play.");
+            ClassInjector.RegisterTypeInIl2Cpp<WeatherDriver>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -49,6 +52,7 @@ namespace WinterWalk
             go.AddComponent<GondolaDriver>().ConfigureLift("Ski Lift Line", "Ski Lift Chairs", "Ski Lift Chair ", 1.6f, 9f);      // the chairlift from the lodge
             go.AddComponent<MineDriver>();
             go.AddComponent<JetpackDriver>();
+            go.AddComponent<WeatherDriver>();
             L.LogInfo("Winter Walk loaded");
         }
     }
@@ -62,10 +66,11 @@ namespace WinterWalk
 
         // Winter's values
         const float SkyExponent = 0.55f;
-        static readonly Color SkyTint = new Color(0.86f, 0.90f, 0.98f, 1f);
-        const float SunStrength = 0.85f, SkyLight = 1.6f, ShadowStrength = 0.7f;
-        const float FogDensity = 2.6f;
-        const float CloudDensity = 1.2f;      // the thin cloud layer at full winter (the game's own value is 1.51)
+        // (an overcast island: a greyer sky, a weaker sun and a thick cloud layer; WeatherDriver moves these by the hour)
+        static readonly Color SkyClear = new Color(0.8f, 0.84f, 0.92f, 1f);
+        const float SunBright = 0.72f, SkyLight = 1.6f, ShadowStrength = 0.6f;
+        const float FogBase = 2.9f;
+        const float CloudBase = 2.1f;      // the cloud layer at full winter (the game's own value is 1.51)
         static readonly Color FogTint = new Color(0.92f, 0.95f, 1f, 1f);
 
         // The game's own values, read once per sky (a new walk makes a new one)
@@ -125,8 +130,15 @@ namespace WinterWalk
                 Vector3 p = cam.transform.position;
                 float dx = Mathf.Max(0f, Mathf.Max(Dresser.X0 - p.x, p.x - Dresser.X1)), dz = Mathf.Max(0f, Mathf.Max(Dresser.Z0 - p.z, p.z - Dresser.Z1));
                 float weight = Plugin.Enabled.Value ? 1f - Smooth(Mathf.Sqrt(dx * dx + dz * dz) / FadeDistance) : 0f;
-                if (Mathf.Abs(weight - lastWeight) < 0.002f) return;      // nothing to change: leave the sky alone
-                lastWeight = weight;
+                // the island's weather (WeatherDriver): mist and cloud by the hour, and blizzards
+                float mist = WeatherDriver.Mist, cloud = WeatherDriver.Cloud, gloom = WeatherDriver.Gloom, storm = WeatherDriver.Blizzard;
+                float signature = weight + mist * 0.37f + cloud * 0.11f + storm * 1.7f;
+                if (Mathf.Abs(signature - lastWeight) < 0.002f) return;      // nothing to change: leave the sky alone
+                lastWeight = signature;
+                float SunStrength = Mathf.Lerp(SunBright, 0.3f, gloom);
+                float FogDensity = FogBase * (1f + mist * 0.9f + storm * 3.2f);
+                float CloudDensity = Mathf.Lerp(CloudBase, CloudBase * 1.7f, Mathf.Max(cloud, storm));
+                Color SkyTint = Color.Lerp(SkyClear, new Color(0.62f, 0.66f, 0.72f, 1f), Mathf.Max(cloud * 0.6f, storm));
 
                 env.Sky.Settings.skyColorExponent = Mathf.Lerp(skyExponent0, SkyExponent, weight);
                 env.Sky.Settings.skyColorTint = Color.Lerp(skyTint0, SkyTint, weight);

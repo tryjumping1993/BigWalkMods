@@ -610,27 +610,29 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // Falling snow: one particle emitter that a small script keeps over each player's camera while they are on or
     // near the island. Flakes drift on a light wind with a wandering flutter, and live in world space so that
     // walking does not drag them along.
-    void Snowfall(PuzzleBuilder b)
+    // The falling snow (and, with 'blizzard', the driving snow Winter Walk's WeatherDriver switches on in a blizzard:
+    // four times as much, small and fast, blown flat by the wind)
+    void Snowfall(PuzzleBuilder b, bool blizzard = false)
     {
-        Piece fall = b.Empty("Snowfall", 0f, 0f, 0f, false);
+        Piece fall = b.Empty(blizzard ? "Blizzard Snowfall" : "Snowfall", 0f, 0f, 0f, false);
         ParticleSystem ps = fall.Go.AddComponent<ParticleSystem>();
         ParticleSystem.MainModule main = ps.main;
         main.loop = true;
         main.playOnAwake = true;
         main.prewarm = true;
         main.duration = 10f;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(6f, 9f);
+        main.startLifetime = blizzard ? new ParticleSystem.MinMaxCurve(2.5f, 4f) : new ParticleSystem.MinMaxCurve(6f, 9f);
         main.startSpeed = 0f;
         main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.075f);
         main.startColor = new Color(1f, 1f, 1f, 0.92f);
         main.gravityModifier = 0f;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 9000;
+        main.maxParticles = blizzard ? 16000 : 9000;
         main.scalingMode = ParticleSystemScalingMode.Shape;
 
         ParticleSystem.EmissionModule emission = ps.emission;
         emission.enabled = true;
-        emission.rateOverTime = 1100f;
+        emission.rateOverTime = blizzard ? 4200f : 1100f;
 
         ParticleSystem.ShapeModule shape = ps.shape;
         shape.enabled = true;
@@ -640,13 +642,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
         ParticleSystem.VelocityOverLifetimeModule velocity = ps.velocityOverLifetime;
         velocity.enabled = true;
         velocity.space = ParticleSystemSimulationSpace.World;
-        velocity.x = new ParticleSystem.MinMaxCurve(0.5f, 1.3f);       // the wind
-        velocity.y = new ParticleSystem.MinMaxCurve(-2.6f, -1.5f);     // falling
-        velocity.z = new ParticleSystem.MinMaxCurve(-0.2f, 0.5f);
+        velocity.x = blizzard ? new ParticleSystem.MinMaxCurve(9f, 15f) : new ParticleSystem.MinMaxCurve(0.5f, 1.3f);       // the wind
+        velocity.y = blizzard ? new ParticleSystem.MinMaxCurve(-4.5f, -2.5f) : new ParticleSystem.MinMaxCurve(-2.6f, -1.5f);     // falling
+        velocity.z = blizzard ? new ParticleSystem.MinMaxCurve(-3f, 4f) : new ParticleSystem.MinMaxCurve(-0.2f, 0.5f);
 
         ParticleSystem.NoiseModule noise = ps.noise;
         noise.enabled = true;
-        noise.strength = 0.55f;
+        noise.strength = blizzard ? 2.2f : 0.55f;
         noise.frequency = 0.3f;
         noise.scrollSpeed = 0.25f;
         noise.octaveCount = 2;
@@ -662,12 +664,83 @@ public sealed class WinterIslePuzzle : PuzzleDef
         ParticleSystemRenderer renderer = fall.Go.GetComponent<ParticleSystemRenderer>();
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
         renderer.sharedMaterial = b.ShaderMaterial("BWM/Snowflake", "Snowflake");
+        if (blizzard) { renderer.renderMode = ParticleSystemRenderMode.Stretch; renderer.velocityScale = 0.012f; renderer.lengthScale = 1f; }      // streaks
         renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         renderer.receiveShadows = false;
 
         Component follow = b.AddCustomScript(fall, "SnowfallFollow");
         Sdk.Set(follow, "areaCentre", new Vector3((X0 + X1) / 2f, 0f, (Z0 + Z1) / 2f));
         Sdk.Set(follow, "areaSize", new Vector3(X1 - X0, 0f, Z1 - Z0));
+        if (blizzard) { Sdk.Set(follow, "height", 7f); fall.Go.SetActive(false); }      // (Winter Walk switches it on)
+    }
+
+    // The freezing fog round the island, and the glow of its lights through it. Three ribbons of mist ring the island's
+    // box, each further out and taller than the last (BWM/Veil: thick from afar, clear near the camera, so walking in
+    // is gradual); and over the lowland, the lodge and the summit hang big soft blooms of red and green light
+    // (BWM/VeilGlow) that show through the fog from the mainland and fade out as a player comes near.
+    void Veil(PuzzleBuilder b, Vector3 root, System.Func<Vector2, float> heightAt)
+    {
+        var verts = new List<Vector3>(); var uvs = new List<Vector2>(); var tris = new List<int>();
+        foreach (var (outBy, tall) in new[] { (40f, 190f), (110f, 260f), (190f, 330f) })
+        {
+            // a rounded rectangle round the box, a point every 40 m
+            float x0 = X0 - outBy, x1 = X1 + outBy, z0 = Z0 - outBy, z1 = Z1 + outBy, r = 260f;
+            var ring = new List<Vector2>();
+            void Corner(Vector2 c, float from) { for (int k = 0; k <= 10; k++) { float a = from + Mathf.PI * 0.5f * k / 10f; ring.Add(c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r); } }
+            Corner(new Vector2(x1 - r, z1 - r), 0f); Corner(new Vector2(x0 + r, z1 - r), Mathf.PI * 0.5f);
+            Corner(new Vector2(x0 + r, z0 + r), Mathf.PI); Corner(new Vector2(x1 - r, z0 + r), Mathf.PI * 1.5f);
+            ring.Add(ring[0]);
+            float along = outBy * 7f;
+            for (int i = 0; i + 1 < ring.Count; i++)
+            {
+                int steps = Mathf.Max(1, Mathf.CeilToInt((ring[i + 1] - ring[i]).magnitude / 40f));
+                for (int st = 0; st < steps; st++)
+                {
+                    Vector2 a = Vector2.Lerp(ring[i], ring[i + 1], (float)st / steps), c = Vector2.Lerp(ring[i], ring[i + 1], (float)(st + 1) / steps);
+                    float len = (c - a).magnitude;
+                    int v0 = verts.Count;
+                    verts.Add(new Vector3(a.x - root.x, -3f - root.y, a.y - root.z)); uvs.Add(new Vector2(along, 0f));
+                    verts.Add(new Vector3(c.x - root.x, -3f - root.y, c.y - root.z)); uvs.Add(new Vector2(along + len, 0f));
+                    verts.Add(new Vector3(c.x - root.x, tall - root.y, c.y - root.z)); uvs.Add(new Vector2(along + len, 1f));
+                    verts.Add(new Vector3(a.x - root.x, tall - root.y, a.y - root.z)); uvs.Add(new Vector2(along, 1f));
+                    tris.AddRange(new[] { v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3 });
+                    along += len;
+                }
+            }
+        }
+        var veil = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+        veil.SetVertices(verts); veil.SetUVs(0, uvs); veil.SetTriangles(tris, 0); veil.RecalculateBounds();
+        Piece veilPiece = b.MeshPiece("Fog Veil", veil, b.ShaderMaterial("BWM/Veil", "Veil"), false);
+        veilPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // the blooms: red and green by turns, over the places that are lit
+        var gv = new List<Vector3>(); var gu = new List<Vector2>(); var gu2 = new List<Vector2>(); var gc = new List<Color>(); var gt = new List<int>();
+        var places = new List<(Vector2 at, float up, float radius)>
+        {
+            (Plaza, 24f, 150f), (Plaza + new Vector2(120f, 40f), 18f, 110f), (Plaza + new Vector2(-110f, -90f), 18f, 110f), (Plaza + new Vector2(60f, -150f), 16f, 100f),
+            (ShorePoint + (Plaza - ShorePoint).normalized * 60f, 14f, 90f), (Lake, 14f, 100f), (GondolaBottom, 22f, 90f),
+            (new Vector2(-520f, -900f), 16f, 110f), (new Vector2(-760f, -1120f), 16f, 120f), (new Vector2(-880f, -1250f), 16f, 110f), (new Vector2(-640f, -1270f), 16f, 100f),
+            (new Vector2(-860f, -660f), 16f, 100f), (new Vector2(-1040f, -960f), 18f, 110f),
+            (PisteFinish(out _, out _), 26f, 140f), (SkiLiftBottom, 20f, 100f), (SkiLiftTop, 20f, 110f), (Summit, 26f, 170f),
+        };
+        if (WinterIsleMine.Stations.Count > 0) places.Add((WinterIsleMine.Tower, 20f, 110f));
+        for (int i = 0; i < places.Count; i++)
+        {
+            float h = heightAt(places[i].at);
+            if (float.IsNaN(h)) h = 0f;
+            var centre = new Vector3(places[i].at.x - root.x, h + places[i].up - root.y, places[i].at.y - root.z);
+            Color c = i % 2 == 0 ? new Color(1f, 0.16f, 0.1f) : new Color(0.12f, 1f, 0.3f);
+            int v0 = gv.Count;
+            foreach (var corner in new[] { new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f) })
+            { gv.Add(centre); gu.Add(corner); gu2.Add(new Vector2(places[i].radius, i * 1.7f)); gc.Add(c); }
+            gt.AddRange(new[] { v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3 });
+        }
+        var glow = new Mesh();
+        glow.SetVertices(gv); glow.SetUVs(0, gu); glow.SetUVs(1, gu2); glow.SetColors(gc); glow.SetTriangles(gt, 0);
+        glow.bounds = new Bounds(new Vector3((X0 + X1) / 2f - root.x, 300f - root.y, (Z0 + Z1) / 2f - root.z), new Vector3(X1 - X0 + 800f, 1400f, Z1 - Z0 + 800f));      // (every vertex sits at its bloom's centre: the real extent is the shader's)
+        Piece glowPiece = b.MeshPiece("Fog Glow", glow, b.ShaderMaterial("BWM/VeilGlow", "Veil Glow"), false);
+        glowPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        Debug.Log("[BWM] Winter Isle: a fog veil of " + (tris.Count / 6) + " panels and " + places.Count + " blooms of light");
     }
 
     public override void Build(PuzzleBuilder b)
@@ -2729,6 +2802,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
 
         Snowfall(b);
+        Snowfall(b, true);
+        Veil(b, root, HeightAt);
 
         // Christmas lights down both sides of the causeway, a post every 9 m
         var candy = new MeshBuilder();

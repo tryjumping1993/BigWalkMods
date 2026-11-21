@@ -358,3 +358,8 @@ and finished assets for the puzzles.
   second press of jump in the air, with no fuel limit (user, 2026-11-21). Seen in the game: the stations and their tools, the jetpack
   strapping on at a present and sitting on the player's back, and flight with the test switch (about 20 m up in
   three seconds). Not tried: firing it from a real controller's jump button.
+- **Fog veil and weather (user, 2026-11-21):** three ribbons of freezing fog ring the island, thinning to nothing
+  near the camera, with eighteen red and green blooms of light showing through from the mainland; an overcast sky;
+  mist and cloud that turn with the hour; blizzards as a Poisson process, mean two hours of real play. Seen in the
+  game from the mainland by day and night, and a forced blizzard from the player's view (blurred: the idle test
+  player was asleep). The veil's panels show faint vertical seams against the sky.
