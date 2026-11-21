@@ -355,12 +355,23 @@ public static class WinterIsleMine
     public static IEnumerable<(Vector2 at, float radius)> KeptClear()
     {
         for (int k = 0; k < line.Count; k += 2)
-            if (lineCut[k] || lineKind[k] == 0) yield return (new Vector2(line[k].x, line[k].z), 5.5f);
+            if (lineCut[k] || lineKind[k] == 0) yield return (new Vector2(line[k].x, line[k].z), lineKind[k] == 0 ? 5.5f : 3.2f);
+    }
+    // Where the tunnel runs in a shed, and the height of the shed's roof: the island heaps its ground over each one
+    // (a low bank of snow, not a grey strip of roof across the forest)
+    public static IEnumerable<(Vector2 at, float roof)> ShedRoofs()
+    {
+        for (int k = 0; k < line.Count; k++)
+        {
+            bool near = false;
+            for (int o = -1; o <= 1; o++) if (lineCut[(k + o + line.Count) % line.Count]) near = true;
+            if (near) yield return (new Vector2(line[k].x, line[k].z), line[k].y + Crown + 0.55f);
+        }
     }
 
     static long CutKey(Vector2 p) => ((long)Mathf.FloorToInt(p.x / 1.5f) << 32) ^ (uint)Mathf.FloorToInt(p.y / 1.5f);
-    // Whether the island's ground is left out at p (over the tunnel where it runs in a shed)
-    public static bool InCut(Vector2 p) => cutCells.Contains(CutKey(p));
+    // Whether the island's ground is left out at p. Never now: the ground is heaped over the sheds instead (ShedRoofs)
+    public static bool InCut(Vector2 p) => false;
 
     public static void Save()
     {
@@ -708,12 +719,8 @@ public static class WinterIsleMine
                 if (!lineCut[i] && !lineCut[j]) continue;
                 Vector3 mid = (line[i] + line[j]) * 0.5f;
                 Vector3 along = line[j] - line[i];
+                // (the roof lies under the bank of ground the island heaps over it: ShedRoofs)
                 float yaw = Mathf.Atan2(along.x, along.z) * Mathf.Rad2Deg, top = mid.y + Crown + 0.55f;
-                for (float lateral = -3.2f; lateral <= 3.21f; lateral += 1.6f)
-                {
-                    float h = heightAt(new Vector2(mid.x, mid.z) + lineRight[i] * lateral);
-                    if (!float.IsNaN(h)) top = Mathf.Max(top, Mathf.Min(h + 0.3f, mid.y + Crown + 3f));
-                }
                 float stretch = along.magnitude + 0.06f;
                 foreach (int side in new[] { -1, 1 })
                     Kit.AddBox(shed, mid + Side(i) * (side * 2.62f) + Vector3.down * 3f - root, new Vector3(1.5f, top - mid.y + 3f, stretch), Stone * (0.9f + 0.15f * Hash(70, i, side + 1)), yaw);

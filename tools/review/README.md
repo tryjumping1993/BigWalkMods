@@ -41,6 +41,7 @@ Rounds so far (original / winter):
 | 17 | 8/7 | 9/5 | 9/6 | 9/7 | 8/5 | 7/7 | landform, vegetation (first time), paths |
 | 18 | 9/7 | 9/5 | 9/5 | 9/6 | 9/5 | 8/7 | landform, paths |
 | 19 | 8/6 | 9/5 | 9/5 | 9/6 | 9/4 | 7/6 | landform (just), paths (after the crag blocks: they read as stacked boxes) |
+| 20 | 8/6 | 9/5 | 9/5 | 9/6 | 9/4 | 7/7 | paths (after faceting the mountain and removing the crag blocks; landform nearest) |
 
 What each round's gaps led to is in the git log. Things the reviewer has asked for more than once: clutter lying
 on the snow, dense woods a walker is inside of, a shore that is not raw terrain, peaks that are not smooth cones.
@@ -73,6 +74,14 @@ ski slope". The terrain reviewer's brief is `brief.md`.
 | 7 | 5 | 4 | 4 | 4 | 3 | 5 | 6 | NO |
 | 8 | 5 | 3 | 4 | 5 | 3 | 5 | 5 | NO |
 | 9 | 5 | 4 | 5 | 5 | 2 | 6 | 5 | NO |
+| 10 | 5 | 4 | 6 | 6 | 3 | 5 | 6 | NO |
+| 11 | 4 | 4 | 6 | 6 | 3 | 6 | 6 | NO |
+
+Rounds 10 and 11 pulled opposite ways on the lesser peaks: round 10 asked for them lower, and round 11, with them
+lowered, called the mountain a symmetrical pyramid and asked for a distinct second summit at three quarters to four
+fifths of the main one. Round 11 also showed that a bench followed by a steeper pitch hides the whole face below it
+from the bowl and the summit (both reviewers want to see the runs drop away), so the profile is now concave with only
+a short, gentle step; the build prints the slope down the middle run, which is the check to make before shooting.
 
 Round 4 lost ground on pistes and snow: the fir walls planted along the runs' edges put three cameras inside
 branches, the berm along each edge showed as a dark brown outline from the air, and bare patches and shrubs still

@@ -168,7 +168,8 @@ public static class WinterIsleDressing
         plants++;
     }
 
-    static readonly string[] BigRound = { "rock-whale", "rock-boulder01", "rock-quadrasphere", "rock-dome", "rock-bullet" };
+    // (angular and split shapes among the round ones: one rounded type everywhere read as the same boulder repeated)
+    static readonly string[] BigRound = { "rock-whale", "rock-boulder01", "rock-quadrasphere", "rock-dome", "rock-bullet", "rock-wedge", "rock-slab", "rock-wedge", "rock-boulder01" };
     static readonly string[] SmallRound = { "rock-dome", "rock-pointy", "rock-bullet", "rock-boulder01", "rock-wedge" };
     static readonly string[] Masses = { "rock-cliff01", "rock-cliff01", "rock-knuckles", "rock-whale" };
 
@@ -434,6 +435,30 @@ public static class WinterIsleDressing
                 trailside++;
             }
 
+        // ---- boulder fields: in patches of open ground off the trails, the game's own heaps of broken rock half sunk
+        //      in the snow, with loose blocks round them, so a walker sees a field of stones and not one rock ----
+        int fields = 0;
+        for (float z = l.Z0; z < l.Z1; z += 9f)
+            for (float x = l.X0; x < l.X1; x += 9f)
+            {
+                var p = new Vector2(x + R(-4f, 4f), z + R(-4f, 4f));
+                if (Mathf.PerlinNoise(p.x * 0.012f + 81.3f, p.y * 0.012f + 7.7f) < 0.66f) continue;
+                float h = l.Height(p), toPath = l.ToPath(p);
+                if (float.IsNaN(h) || h < 2f || toPath < 6f || toPath > 70f || l.Slope(p) > 0.45f || !l.Free(p, 2f) || InsideRock(p, 3f)) continue;
+                if ((p - WinterIslePuzzle.Peak).magnitude < 1500f && WinterIslePuzzle.SkiFace(p) > 0.2f) continue;      // not on the ski face
+                if (R(0f, 1f) > 0.55f) continue;
+                float d = R(5f, 12f);
+                Rock("rock-scatterBIG", p, LowGround(p, d * 0.4f), d, R(0.4f, 0.55f), 0.5f, 6f);
+                int blocks = random.Next(2, 7);
+                for (int i = 0; i < blocks; i++)
+                {
+                    Vector2 q = p + new Vector2(R(-1f, 1f), R(-1f, 1f)).normalized * d * R(0.6f, 1.4f);
+                    if (l.ToPath(q) < 2.5f || InsideRock(q, 0.2f) || float.IsNaN(l.Height(q))) continue;
+                    Rock(Pick(BigRound), q, LowGround(q, 0.6f), R(0.8f, 3f), R(0.4f, 0.6f), 0.45f, 22f, true, false);
+                }
+                fields++;
+            }
+
         // ---- snow banked against the bigger rocks, before anything else is stood on that ground ----
         if (l.Bank != null) foreach (var r in big) l.Bank(r.at, r.diameter * 0.75f + 1.5f, Mathf.Min(0.22f * r.diameter, 1.4f));
 
@@ -449,7 +474,7 @@ public static class WinterIsleDressing
                 var p = new Vector2(x + R(-2.1f, 2.1f), z + R(-2.1f, 2.1f));
                 float h = l.Height(p);
                 if (twice == 1 && l.Forest(p) < 0.5f) continue;
-                if (float.IsNaN(h) || h < 2.5f || h > 340f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;      // (the tree line is high on the great mountain)
+                if (float.IsNaN(h) || h < 2.5f || h > WinterIslePuzzle.TreeLineAt(p) + 110f || l.Slope(p) > 0.6f || l.ToShore(p) < 22f || l.Beach(p)) continue;      // (the tree line is high on the great mountain)
                 float forest = l.Forest(p);
                 float inGrove = Mathf.Max(Smooth01((Grove(p) - 0.4f) / 0.14f) * (1f - Smooth01((h - 200f) / 60f)), forest);
                 // glades: open ground inside a grove, a few tens of metres across
@@ -459,7 +484,7 @@ public static class WinterIsleDressing
                 // direction away from the summit)
                 Vector2 fromTop = p - WinterIslePuzzle.Peak;
                 float downhill = fromTop.magnitude, round_ = Mathf.Atan2(fromTop.y, fromTop.x) * downhill;
-                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(downhill * 0.004f + 17.7f, round_ * 0.022f + 61.3f) > 0.68f) continue;
+                if (forest >= 0.5f && WinterIslePuzzle.Piste(p) <= 0.005f && Mathf.PerlinNoise(downhill * 0.004f + 17.7f, round_ * 0.022f + 61.3f) > 0.74f) continue;
                 // denser and thinner patches within a grove, and saplings feathering its edges
                 float thick = Mathf.Lerp(0.6f, 1.05f, Mathf.PerlinNoise(p.x * 0.033f + 41.9f, p.y * 0.033f + 13.6f));
                 float edge = inGrove > 0.02f && inGrove < 0.45f ? 0.18f : 0f;
@@ -473,7 +498,7 @@ public static class WinterIsleDressing
                 // over the last stretch below the tree line: stunted, and only in clumps with open snow between
                 // the tree line is ragged: tongues of forest run up the spurs between the runs (far from any run), and
                 // the stretch just below the line elsewhere has only clumps
-                float lineBand = Smooth01((h - (WinterIslePuzzle.TreeLine - 90f)) / 90f);
+                float lineBand = Smooth01((h - (WinterIslePuzzle.TreeLineAt(p) - 90f)) / 90f);
                 if (lineBand > 0f)
                 {
                     float clearOfRuns = float.MaxValue;
@@ -670,7 +695,7 @@ public static class WinterIsleDressing
             }
 
         File.WriteAllText(outputFile, output.ToString());
-        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs (" + spruces + " of them spruces, " + pines + " pines), " + birches + " birches, " + wooded + " of the trees in " + l.Woods.Count + " woods, " + rocks + " rocks (" + slabs + " slabs, " + trailside + " by the trails, " + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
+        Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs (" + spruces + " of them spruces, " + pines + " pines), " + birches + " birches, " + wooded + " of the trees in " + l.Woods.Count + " woods, " + rocks + " rocks (" + slabs + " slabs, " + trailside + " by the trails, " + fields + " boulder fields, " + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
             + plants + " plants (" + scattered + " of them scatter); written to " + outputFile);
     }
 }

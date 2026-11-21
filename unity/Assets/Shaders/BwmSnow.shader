@@ -295,6 +295,16 @@ Shader "BWM/Snow"
                 // Rock where the ground itself (not the snow's relief) is steep. The snow line is ragged at three
                 // scales and follows the snow's own relief, and its edge is crisp: thin snow lies or it does not
                 float3 ground = normalize(i.normalWS);
+                // On steep ground the maps laid from above stretch down the slope into streaks: there they are laid from
+                // the side as well (as the rock is), blended by which way the ground faces
+                float3 twS = pow(abs(ground), 4.0);
+                twS /= twS.x + twS.y + twS.z;
+                float3 windNX = UnpackNormal(SAMPLE_TEXTURE2D(_WindNormal, sampler_WindNormal, positionWS.zy / _WindTile));
+                float3 windNZ = UnpackNormal(SAMPLE_TEXTURE2D(_WindNormal, sampler_WindNormal, positionWS.xy / _WindTile));
+                windH = windH * twS.y + SAMPLE_TEXTURE2D(_WindHeight, sampler_WindHeight, positionWS.zy / _WindTile).rgb * twS.x
+                    + SAMPLE_TEXTURE2D(_WindHeight, sampler_WindHeight, positionWS.xy / _WindTile).rgb * twS.z;
+                float3 sideTilt = float3(0, windNX.y, windNX.x) * twS.x + float3(windNZ.x, windNZ.y, 0) * twS.z;
+                windN.xy *= twS.y; farN.xy *= twS.y; grainN.xy *= saturate(twS.y * 1.5);
                 float ragged = (Noise3(positionWS * 0.13 + 2.0) - 0.5) * 0.26 + (Noise3(positionWS * 0.45) - 0.5) * 0.16 + (Noise3(positionWS * 1.9) - 0.5) * 0.07;
                 // (the snow's own relief and the crust map's grain shape the edge up close)
                 float rock = 1.0 - Crisp(ground.y + ragged, (windH.g - 0.5) * 0.1 + grainN.y * 0.06, _RockLine);
@@ -325,8 +335,12 @@ Shader "BWM/Snow"
                 float caught = Crisp(strata * 0.6 + Noise3(positionWS * 1.3 + 3.0) * 0.25 + Noise3(positionWS * 4.1) * 0.15, grainN.x * 0.08, 0.54);
                 // ...and lying whole on whatever is not steep: snow under about 40 degrees, bare rock over about 52, a broken
                 // edge between (an even speckle over every face read as noise, not as snow on a mountain)
-                float lying = smoothstep(0.6, 0.77, ground.y + (Noise3(positionWS * 0.45 + 9.0) - 0.5) * 0.16 + (Noise3(positionWS * 2.3) - 0.5) * 0.07);
-                rockColor = lerp(rockColor, _Color.rgb * 0.92, max(lying * 0.95, saturate((ground.y - 0.45) * 2.5) * caught * 0.35));
+                // (a crisp, ragged edge: a soft blend from 40 to 52 degrees read as blurred patches)
+                float lying = Crisp(ground.y + (Noise3(positionWS * 0.45 + 9.0) - 0.5) * 0.16 + (Noise3(positionWS * 2.3) - 0.5) * 0.07, (Noise3(positionWS * 6.0) - 0.5) * 0.03, 0.685);
+                // ...and in the gullies and couloirs, where it slides and collects: long tongues of snow down the rock
+                // with ragged edges (the mesh's vertex alpha is low in a hollow, at a larger scale on steep ground)
+                float gully = Crisp(saturate((0.47 - i.form) * 5.0) + (Noise3(positionWS * 0.35 + 5.0) - 0.5) * 0.35 + (Noise3(positionWS * 1.7) - 0.5) * 0.12, grainN.x * 0.05, 0.5);
+                rockColor = lerp(rockColor, _Color.rgb * 0.92, max(max(lying * 0.95, gully * 0.92), saturate((ground.y - 0.45) * 2.5) * caught * 0.1));
 
                 // bare ground and sand where the snow is thin
                 float2 groundUV = positionWS.xz * _GroundTiling;
@@ -408,7 +422,7 @@ Shader "BWM/Snow"
                     + _WindStrength * calm * (windN.xy + farN.xy * 0.5)
                     + _GrainStrength * grainN.xy * grainFade;
                 tilt += grainN.xy * bank * 1.5;      // the heaped banks are loose and lumpy
-                float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * (sand * 0.45)
+                float3 n = normalize(ground + float3(tilt.x, 0, tilt.y) * relief + sideTilt * (_WindStrength * calm * relief) + float3(windN.x + grainN.x * grainFade, 0, windN.y + grainN.y * grainFade) * (sand * 0.45)
                     + float3(trackN.x, 0, trackN.y) * (path * snowy) + float3(trailSlope.x, 0, trailSlope.y) * snowy + acrossFall * (cord * 0.3));
                 // the bare ground's own relief (the game's normal maps, laid from above: x along the world's x, y along z)
                 if (_GameGround > 0.5 && earthy > 0.01)

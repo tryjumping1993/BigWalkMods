@@ -382,27 +382,23 @@ namespace Bwm
         {
             var random = new System.Random(seed * 5167 + 9);
             float R(float a, float b) => a + (b - a) * (float)random.NextDouble();
-            int n = 14;
+            // a broken plate: seven to ten straight edges at uneven angles (a smooth round outline read as a disc)
+            int n = random.Next(7, 11);
             var r = new float[n];
-            for (int k = 0; k < n; k++) r[k] = R(0.62f, 1.08f);
-            for (int pass = 0; pass < 2; pass++)
-            {
-                var eased = (float[])r.Clone();
-                for (int k = 0; k < n; k++) eased[k] = (r[(k + n - 1) % n] + r[k] * 2f + r[(k + 1) % n]) / 4f;
-                r = eased;
-            }
-            int bite = random.Next(n);
-            r[bite] *= 0.85f;      // a corner worn off (a deep bite read as a notch cut out)
+            var at = new float[n + 1];
+            for (int k = 0; k < n; k++) { r[k] = R(0.58f, 1.1f); at[k] = 2f * Mathf.PI * (k + R(-0.32f, 0.32f)) / n; }
+            at[n] = at[0] + 2f * Mathf.PI;
             float spin = R(0f, Mathf.PI * 2f);
             Quaternion turn = Quaternion.Euler(tilt.x, 0f, tilt.y);
             Vector3 P(float a, float rr, float y) => foot + turn * new Vector3(Mathf.Cos(a) * rr * radius, y, Mathf.Sin(a) * rr * radius);
             float draft = freeboard * 4f, cap = R(0.06f, 0.16f);
-            // (sea ice is greyish white with a faint blue in its broken edges, not a saturated blue)
-            Color side = Color.Lerp(ice, new Color(0.78f, 0.83f, 0.86f, 1f), 0.65f), under = Color.Lerp(ice, new Color(0.42f, 0.5f, 0.56f, 1f), 0.6f), rim = Color.Lerp(ice, Color.white, 0.7f);
+            // (sea ice is greyish white, its broken edges a dull grey that is darker under the water: pale blue sides
+            // glowed against the sea)
+            Color side = Color.Lerp(ice, new Color(0.52f, 0.57f, 0.61f, 1f), 0.8f), under = Color.Lerp(ice, new Color(0.26f, 0.32f, 0.37f, 1f), 0.8f), rim = Color.Lerp(ice, new Color(0.86f, 0.88f, 0.9f, 1f), 0.7f);
             Vector3 middle = P(0f, 0f, freeboard + cap * 2.6f);      // (above the ring of lumps round it, or the cap dips in the middle like a hole)
             for (int k = 0; k < n; k++)
             {
-                float a0 = spin + 2f * Mathf.PI * k / n, a1 = spin + 2f * Mathf.PI * (k + 1) / n;
+                float a0 = spin + at[k], a1 = spin + at[k + 1];
                 float r0 = r[k], r1 = r[(k + 1) % n];
                 Vector3 e0 = P(a0, r0, freeboard), e1 = P(a1, r1, freeboard);
                 Vector3 w0 = P(a0, r0 * 0.97f, 0f), w1 = P(a1, r1 * 0.97f, 0f);

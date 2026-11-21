@@ -5,8 +5,8 @@
 # - Eye level: the player is set down on the ground at each point in review-viewpoints.txt (the Winter Isle's are
 #   taken afresh from world/winter-viewpoints.tsv, twelve spread along its trails), and the shot is taken from the
 #   game camera's own position, looking level along the planned heading. Points under water are skipped.
-# - Shore: from the even eye points, due south until the sea; the player stands 14 m back from the water, looking
-#   east along the shore. Taken at the first one where a player can stand within 6 m of sea level (not a cliff).
+# - Shore: from the even eye points, due south until the sea; the player stands 10 m back from the water, looking
+#   south-east, over the water's edge and along the shore. Taken at the first one where a player can stand within 6 m of sea level (not a cliff).
 # - pick-heading.py turns the camera to the nearest open heading when the view is blocked within 6 m.
 # It pauses between teleports on purpose: see the CPU note in CLAUDE.md.
 here=$(dirname "$0"); cd /z/Programming/BigWalkMods
@@ -71,12 +71,13 @@ shoot_island(){
           if [ -z "$g" ] || python -c "import sys; sys.exit(0 if $g < 0.3 else 1)"; then found=1; break; fi
         done
         if [ -n "$found" ]; then
-          back=$(python -c "print($sz+14)")
+          back=$(python -c "print($sz+10)")
           read px py pz <<< "$(stand $x $back)"
           # only where a player can stand: not slid off a cliff into the sea
           if [ -n "$py" ] && python -c "import sys, math; sys.exit(0 if 0.5 < $py < 6.5 and math.hypot($px-($x), $pz-($back)) < 8 else 1)"; then
             sleep 1.5; shore=$((shore+1))
-            read tx tz turned <<< "$(python -I "$here/pick-heading.py" $px $pz 1 0 "$(c "look?x=$px&y=$py&z=$pz&n=24")")"
+            # looking south-east, so the water and the shoreline are both in the frame (due east put the sea out of it)
+            read tx tz turned <<< "$(python -I "$here/pick-heading.py" $px $pz 0.45 -0.89 "$(c "look?x=$px&y=$py&z=$pz&n=24")")"
             c 'time?hour=13' >/dev/null
             c "shot?file=rv-$isl-shore&cx=$px&cy=$py&cz=$pz&tx=$tx&ty=$py&tz=$tz&fov=70" >/dev/null; sleep 4
             echo "$isl shore south of $name at $x,$back  camera $px,$py,$pz  turned $turned deg"
@@ -92,7 +93,8 @@ c 'teleport?puzzle=TheTree' >/dev/null
 # The Winter Isle's shore: if no viewpoint found one, stand on the beach nearest the plaza that has sea a few metres
 # to the south (found from the island's height grid) and look east along it, as above
 if [ "$which" != orig ] && [ ! -e shots/rv-winter-shore.png ]; then
-  read -r sx sz sh < <(python -X utf8 - <<'PY' | tr -d ''
+  read -r sx sz sh < <(python -X utf8 - <<'PY' | tr -d '
+'
 import struct, numpy as np
 d = open("unity/Land/WinterIsle.land", "rb").read()
 x0, z0, cell, nx, nz = struct.unpack("<fffii", d[:20]); W, H = nx + 1, nz + 1
@@ -112,7 +114,7 @@ PY
 )
   if [ -n "$sx" ]; then
     c "teleport?x=$sx&y=$(python -c "print($sh+1.5)")&z=$sz" >/dev/null; sleep 20
-    c "shot?file=rv-winter-shore&cx=$sx&cy=$(python -c "print($sh+0.75)")&cz=$sz&tx=$(python -c "print($sx+12)")&ty=$(python -c "print($sh+0.8)")&tz=$(python -c "print($sz-1.5)")&fov=70" >/dev/null; sleep 4
+    c "shot?file=rv-winter-shore&cx=$sx&cy=$(python -c "print($sh+0.75)")&cz=$sz&tx=$(python -c "print($sx+9)")&ty=$(python -c "print($sh+0.6)")&tz=$(python -c "print($sz-8)")&fov=70" >/dev/null; sleep 4
     echo "winter shore from the beach nearest the plaza at $sx,$sz"
   fi
 fi

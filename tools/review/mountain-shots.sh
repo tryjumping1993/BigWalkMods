@@ -9,7 +9,7 @@ ground(){ c "ground?x=$1&z=$2" | sed -n 's/^ground: \(-\{0,1\}[0-9.]*\).*/\1/p';
 py(){ python -c "import math; print(round($1, 2))"; }
 PX=-2250; PZ=-1900; B=0.32
 sm(){ echo "(lambda t: t*t*(3-2*t))(min(1,max(0,$1)))"; }
-swing(){ python -c "import math; print(round(0.045*math.sin($1/260.0+2.1)*$(sm "($1-300)/200.0"), 4))"; }      # as RunOffset(1, d) in WinterIslePuzzle.cs: keep in step
+swing(){ python -c "import math; print(round(0.05*math.sin($1/115.0+2.1)*$(sm "($1-300)/200.0")*(1-$(sm "($1-1220)/130.0")), 4))"; }      # as RunOffset(1, d) in WinterIslePuzzle.cs: keep in step
 mkdir -p shots/mountain
 c "set?path=WinterWalk.GondolaDriver.ForceOpen&value=true" >/dev/null      # the cabins out on the line
 c "time?hour=13" >/dev/null
