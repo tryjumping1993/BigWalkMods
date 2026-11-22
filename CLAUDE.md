@@ -368,7 +368,10 @@ each time, and do not commit broken or half-built states.
     over open sea with nothing under them (near -1817, -2497), 2,749 rocks lie wholly under the ground.
   - Jagged spikes at the rail tunnels' mouths (a tester's screenshot, 2026-11-21): snow-shaded, one-sided triangles
     beside the track at a portal, seen from outside and gone looking back: slivers of the island's ground mesh left
-    standing where the ground is cut away over the tunnel (`InCut`), not dressing. Separately, 72 dressing rocks reach
+    standing where the ground is cut away over the tunnel (`InCut`), not dressing. A second shot shows one as a tall
+    thin sliver rising from the snow past the top of a portal's stone wall: a ground vertex far above its neighbours.
+    Suspect `HeightAt`'s smooth curve overshooting at the sharp step where the ground is cut or benched (or the crags
+    on steep ground). Separately, 72 dressing rocks reach
     into the rail tunnels or the mine (the biggest 47-59 m granite cliffs through "Mine Walls", e.g. -940, 13, -1158;
     by their boxes, so some may be near misses).
   - Seeing through our shaders (the snow most) on quality settings above Low, with a large slowdown (the user,
