@@ -10,6 +10,9 @@ Shader "BWM/Veil"
         _NearClear ("Clear this near the camera (m)", Float) = 25
         _NearFull ("Full strength from here (m)", Float) = 190
         _Drift ("Drift speed", Float) = 0.012
+        _Festive ("Red and green light in the fog at night", Range(0, 2)) = 0.55
+        _FestiveDay ("...and by day", Range(0, 1)) = 0.05
+        _FestiveBand ("Length of one colour along the fog (m)", Float) = 420
     }
     SubShader
     {
@@ -30,9 +33,10 @@ Shader "BWM/Veil"
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _Color;
-                float _Density, _NearClear, _NearFull, _Drift;
+                float _Density, _NearClear, _NearFull, _Drift, _Festive, _FestiveDay, _FestiveBand;
             CBUFFER_END
             float _BwmBlizzard;      // 0..1, set by Winter Walk: the veil thickens in a blizzard
+            float _BwmNight;         // 0 day .. 1 night, set by Winter Walk: the fog's Christmas lights come on at dusk
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; float3 positionWS : TEXCOORD1; float3 light : TEXCOORD2; };
@@ -66,7 +70,16 @@ Shader "BWM/Veil"
                 float dist = distance(i.positionWS, _WorldSpaceCameraPos);
                 float near = smoothstep(_NearClear, _NearFull, dist);
                 float alpha = saturate(_Density + _BwmBlizzard * 0.25) * top * body * near;
-                return half4(_Color.rgb * min(i.light, 1.1), alpha);
+                // The island's lights in the fog: long stretches of red and of green along each ribbon, strongest low
+                // down where the lights are, swelling and fading in turn (red while green rests, then green), lit at dusk
+                float along = i.uv.x / _FestiveBand * 3.14159265 + billow * 0.9;
+                float wave = sin(along);
+                float turn = sin(_Time.y * 0.35);
+                float red = smoothstep(0.15, 0.95, wave) * (0.6 + 0.4 * turn);
+                float green = smoothstep(0.15, 0.95, -wave) * (0.6 - 0.4 * turn);
+                float low = pow(saturate(1.0 - i.uv.y * 1.35), 2.0);
+                float3 festive = (float3(1.0, 0.13, 0.08) * red + float3(0.1, 0.95, 0.28) * green) * low * lerp(_FestiveDay, _Festive, _BwmNight);
+                return half4(_Color.rgb * min(i.light, 1.1) + festive, alpha);
             }
             ENDHLSL
         }

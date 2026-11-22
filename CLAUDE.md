@@ -149,6 +149,17 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   itself with `BWM/Veil` ribbons (clear near the camera) and hangs `BWM/VeilGlow` blooms over its lit places. The
   game's fog does not draw for a screenshot's own camera: use `shot?file=x` with no camera for the player's view,
   and `walk` first, or the idle player is asleep and the view blurred.
+- **The island's lights at night** (the user's design, 2026-11-22): the mountain is strung like a Christmas tree. The
+  island's `Garlands` winds one string of bulbs down it from the summit in a spiral (a turn every 42 m of height, a
+  bulb every 6 m: 5,500) and puts bulbs both sides of the open railway (1,800), in runs of red, green, red, green,
+  gold. All are one mesh drawn by `BWM/TinyLight` (squares turned to the camera, never under a pixel or two, so
+  the strings show from across the island); the light they throw on the snow is a map of the island baked by the
+  build (`LightPools.png`, each bulb's colour spread 4 m) that the ground's shader adds at night (`_GlowMap`,
+  `_GlowStrength`), so no real lights are used. The fog veil carries long stretches of red and green that swell and
+  fade in turn (`BWM/Veil`: `_Festive`, `_FestiveBand`), and the blooms over lit places are a third of their first
+  size (`BloomSize` in `Veil`). All of it is lit by `_BwmNight`, which Winter Walk's `WeatherDriver` sets from the
+  hour (up from 17 to 19 h, down from 5.5 to 7.5 h, half in a blizzard); `WeatherDriver.ForceNight` 0..1 holds it for
+  tests. It is the same at every quality level (checked at Low and Very High).
 - **Towers:** the SDK supports one tower button list, and shows one plinth per puzzle loaded, first in the list
   first. The Tree's list is its own five plinths (the gondola), then the mine tower's five (the mine), the airport
   tower's five (the biplanes), the train tower's five (the railway), then the summit's twenty; every tower but the

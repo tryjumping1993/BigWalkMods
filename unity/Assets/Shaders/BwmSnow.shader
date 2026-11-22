@@ -57,6 +57,9 @@ Shader "BWM/Snow"
         _SandTiling ("Sand tiling (per metre)", Float) = 0.3
         _GameGround ("The game's ground is lent (0 or 1)", Float) = 0
         _PisteCentre ("Pistes fall away from (world x, -, z)", Vector) = (0, 0, 0, 0)
+        _GlowMap ("Light strings' pools of light on the snow (the build bakes it)", 2D) = "black" {}
+        _GlowBox ("Light pools: world x0, z0, 1 / width, 1 / depth", Vector) = (0, 0, 0, 0)
+        _GlowStrength ("Light pools: strength at night", Range(0, 2)) = 0.5
     }
 
     SubShader
@@ -93,7 +96,13 @@ Shader "BWM/Snow"
             float _GrainTile;
             float _GrainStrength;
             float _TrackTile;
+            float4 _GlowBox;
+            float _GlowStrength;
         CBUFFER_END
+        // The coloured light the island's strings of bulbs throw on the snow at night: a map baked by the build, lit as
+        // far as Winter Walk says it is night (_BwmNight, 0 by day)
+        TEXTURE2D(_GlowMap); SAMPLER(sampler_GlowMap);
+        float _BwmNight;
         // Tracks pressed into the snow by players: Winter Walk keeps the snow's height round the camera in this
         // texture (millimetres, 128 = untouched) and sets these globals; without it _BwmTrail is 0
         TEXTURE2D(_BwmTrailTex); SAMPLER(sampler_BwmTrailTex);
@@ -490,6 +499,8 @@ Shader "BWM/Snow"
                     * (1.0 - path) * (1.0 - rock) * (1.0 - earthy) * (1.0 - icy) * sun.color * sun.shadowAttenuation;
 
                 color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1) * (1.0 - earthy);
+                if (_BwmNight > 0.001 && _GlowBox.z > 0.0)
+                    color += snowColor * SAMPLE_TEXTURE2D(_GlowMap, sampler_GlowMap, (positionWS.xz - _GlowBox.xy) * _GlowBox.zw).rgb * (_BwmNight * _GlowStrength);
                 color = MixFog(color, i.fogFactor);
                 return half4(color, 1);
             }

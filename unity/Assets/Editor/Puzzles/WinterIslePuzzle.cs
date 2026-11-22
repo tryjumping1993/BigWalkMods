@@ -723,7 +723,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Piece veilPiece = b.MeshPiece("Fog Veil", veil, b.ShaderMaterial("BWM/Veil", "Veil"), false);
         veilPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-        // the blooms: red and green by turns, over the places that are lit
+        // the blooms: red and green by turns, over the places that are lit. Small (a third of the size they were first
+        // made, at the user's word, 2026-11-22): the fog itself carries the red and green now (BWM/Veil)
+        const float BloomSize = 0.3f;
         var gv = new List<Vector3>(); var gu = new List<Vector2>(); var gu2 = new List<Vector2>(); var gc = new List<Color>(); var gt = new List<int>();
         var places = new List<(Vector2 at, float up, float radius)>
         {
@@ -742,7 +744,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Color c = i % 2 == 0 ? new Color(1f, 0.16f, 0.1f) : new Color(0.12f, 1f, 0.3f);
             int v0 = gv.Count;
             foreach (var corner in new[] { new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f) })
-            { gv.Add(centre); gu.Add(corner); gu2.Add(new Vector2(places[i].radius, i * 1.7f)); gc.Add(c); }
+            { gv.Add(centre); gu.Add(corner); gu2.Add(new Vector2(places[i].radius * BloomSize, i * 1.7f)); gc.Add(c); }
             gt.AddRange(new[] { v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3 });
         }
         var glow = new Mesh();
@@ -751,6 +753,140 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Piece glowPiece = b.MeshPiece("Fog Glow", glow, b.ShaderMaterial("BWM/VeilGlow", "Veil Glow"), false);
         glowPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         Debug.Log("[BWM] Winter Isle: a fog veil of " + (tris.Count / 6) + " panels and " + places.Count + " blooms of light");
+    }
+
+    // The island's tiny lights. The mountain is strung like a Christmas tree: one string winds down it from the summit
+    // in a spiral, a turn every 42 m of height, a bulb about every 6 m; and both sides of the railway carry bulbs
+    // wherever it runs in the open. Each bulb is a bead on a short stake (BWM/TinyLight draws all of them as one mesh;
+    // at night they are lit, and never smaller than a pixel or two, so the strings show from across the island). The
+    // light they throw on the snow is baked into a map of the island the ground's shader adds at night, so the
+    // mountain glows in bands of red, green and gold without a single real light.
+    void Garlands(PuzzleBuilder b, Vector3 root, System.Func<Vector2, float> heightAt, Material ground)
+    {
+        var bulbs = new List<(Vector3 at, Color color)>();
+        Color red = new Color(1f, 0.14f, 0.1f), green = new Color(0.12f, 0.95f, 0.28f), gold = new Color(1f, 0.74f, 0.22f);
+        Color Pick(int n) { int run = n / 3 % 5; return run == 4 ? gold : run % 2 == 0 ? red : green; }      // runs of three: red, green, red, green, gold (so their light on the snow keeps its colour)
+        var stakes = new MeshBuilder();
+        var stakeColor = new Color(0.2f, 0.17f, 0.14f);
+        void Bulb(Vector3 world, float stake)
+        {
+            if (stake > 0.05f) Kit.AddBox(stakes, new Vector3(world.x - root.x, world.y - stake - root.y, world.z - root.z), new Vector3(0.035f, stake - 0.03f, 0.035f), stakeColor);
+            bulbs.Add((world, Pick(bulbs.Count)));
+        }
+
+        // the mountain's spiral
+        int onMountain = 0;
+        {
+            const float Top = 580f, Bottom = 60f, Pitch = 42f, Spacing = 6f;
+            float theta = 0f;
+            Vector2 last = new Vector2(1e9f, 0f);
+            float lastRadius = 40f;
+            while (true)
+            {
+                float want = Top - Pitch * theta / (2f * Mathf.PI);
+                if (want < Bottom) break;
+                var dir = new Vector2(Mathf.Cos(theta), Mathf.Sin(theta));
+                // outward from the summit to where the ground first drops below the string's height here
+                float found = -1f, prev = heightAt(Peak + dir * 4f);
+                for (float r = 12f; r < 1700f; r += 8f)
+                {
+                    float h = heightAt(Peak + dir * r);
+                    if (float.IsNaN(h)) break;
+                    if (prev >= want && h < want)
+                    {
+                        float lo = r - 8f, hi = r;
+                        for (int it = 0; it < 5; it++) { float mid = (lo + hi) * 0.5f; if (heightAt(Peak + dir * mid) >= want) lo = mid; else hi = mid; }
+                        found = (lo + hi) * 0.5f;
+                        break;
+                    }
+                    prev = h;
+                }
+                if (found > 0f)
+                {
+                    Vector2 p = Peak + dir * found;
+                    lastRadius = found;
+                    if ((p - last).magnitude >= Spacing && !WinterIsleMine.InCut(p) && !WinterIsleRail.InCut(p))
+                    {
+                        float g = heightAt(p);
+                        if (g > 2f) { Bulb(new Vector3(p.x, g + 0.8f, p.y), 0.8f); onMountain++; }
+                        last = p;
+                    }
+                }
+                theta += 1.5f / Mathf.Max(lastRadius, 30f);      // about a metre and a half of string a step
+            }
+        }
+
+        // the railway: a bulb each side by turns, every point of open track (4 m)
+        int onRail = 0;
+        foreach (RailLine l in WinterIsleRail.Lines)
+            for (int i = 0; i < l.N; i++)
+            {
+                if (l.Kind[i] == 1) continue;      // not in the tunnels
+                Vector3 side = WinterIsleRail.Right(l, i) * (i % 2 == 0 ? 2.7f : -2.7f);
+                Vector3 at = l.P[i] + side;
+                float g = heightAt(new Vector2(at.x, at.z));
+                // on the ground a stake in the snow; on a trestle a short post on the deck's edge
+                float y = l.Kind[i] == 2 || float.IsNaN(g) ? l.P[i].y + 1.1f : Mathf.Max(g, l.P[i].y - 0.4f) + 0.9f;
+                Bulb(new Vector3(at.x, y, at.z), l.Kind[i] == 2 ? 1.1f : 0.9f);
+                onRail++;
+            }
+
+        // one mesh of squares, each vertex at its bulb's centre (the shader turns them to the camera)
+        var verts = new List<Vector3>(); var uvs = new List<Vector2>(); var uv2 = new List<Vector2>(); var colors = new List<Color>(); var tris = new List<int>();
+        var random = new System.Random(1224);
+        foreach (var bulb in bulbs)
+        {
+            int v0 = verts.Count;
+            float phase = (float)random.NextDouble();
+            var centre = new Vector3(bulb.at.x - root.x, bulb.at.y - root.y, bulb.at.z - root.z);
+            foreach (var corner in new[] { new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f) })
+            { verts.Add(centre); uvs.Add(corner); uv2.Add(new Vector2(phase, 0f)); colors.Add(bulb.color); }
+            tris.AddRange(new[] { v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3 });
+        }
+        var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+        mesh.SetVertices(verts); mesh.SetUVs(0, uvs); mesh.SetUVs(1, uv2); mesh.SetColors(colors); mesh.SetTriangles(tris, 0);
+        mesh.bounds = new Bounds(new Vector3((X0 + X1) / 2f - root.x, 300f - root.y, (Z0 + Z1) / 2f - root.z), new Vector3(X1 - X0 + 200f, 1400f, Z1 - Z0 + 200f));
+        Piece lights = b.MeshPiece("Tiny Lights", mesh, b.ShaderMaterial("BWM/TinyLight", "Tiny Lights"), false);
+        lights.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        Piece stakePiece = b.MeshPiece("Tiny Light Stakes", stakes.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Bare", m => m.SetFloat("_SnowLine", 2f)), false);
+        stakePiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // the pools of light on the snow: each bulb's colour spread about 4 m round it, over the island's box
+        const int W = 1024;
+        int H = Mathf.CeilToInt(W * (Z1 - Z0) / (X1 - X0));
+        var pool = new Vector3[W * H];
+        float perX = W / (X1 - X0), perZ = H / (Z1 - Z0), sigma = 4.2f * perX;
+        int reach = Mathf.CeilToInt(sigma * 2.6f);
+        foreach (var bulb in bulbs)
+        {
+            float px = (bulb.at.x - X0) * perX - 0.5f, pz = (bulb.at.z - Z0) * perZ - 0.5f;
+            for (int dz = -reach; dz <= reach; dz++)
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    int ix = Mathf.RoundToInt(px) + dx, iz = Mathf.RoundToInt(pz) + dz;
+                    if (ix < 0 || iz < 0 || ix >= W || iz >= H) continue;
+                    float ddx = ix - px, ddz = iz - pz;
+                    float fall = Mathf.Exp(-(ddx * ddx + ddz * ddz) / (2f * sigma * sigma)) * 0.34f;
+                    pool[iz * W + ix] += new Vector3(bulb.color.r, bulb.color.g, bulb.color.b) * fall;
+                }
+        }
+        var texture = new Texture2D(W, H, TextureFormat.RGB24, false);
+        var pixels = new Color[W * H];
+        for (int k = 0; k < pixels.Length; k++) pixels[k] = new Color(Mathf.Min(1f, pool[k].x), Mathf.Min(1f, pool[k].y), Mathf.Min(1f, pool[k].z)).gamma;
+        texture.SetPixels(pixels);
+        texture.Apply();
+        const string poolPath = "Assets/Puzzles/WinterIsle/LightPools.png";
+        System.IO.File.WriteAllBytes(poolPath, texture.EncodeToPNG());
+        Object.DestroyImmediate(texture);
+        UnityEditor.AssetDatabase.ImportAsset(poolPath, UnityEditor.ImportAssetOptions.ForceUpdate);
+        var importer = (UnityEditor.TextureImporter)UnityEditor.AssetImporter.GetAtPath(poolPath);
+        importer.wrapMode = TextureWrapMode.Clamp; importer.sRGBTexture = true; importer.mipmapEnabled = true; importer.maxTextureSize = 1024;
+        importer.npotScale = UnityEditor.TextureImporterNPOTScale.None;
+        importer.SaveAndReimport();
+        ground.SetTexture("_GlowMap", UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(poolPath));
+        ground.SetVector("_GlowBox", new Vector4(X0, Z0, 1f / (X1 - X0), 1f / (Z1 - Z0)));
+        UnityEditor.EditorUtility.SetDirty(ground);
+        Debug.Log("[BWM] Winter Isle tiny lights: " + onMountain + " on the mountain's spiral, " + onRail + " along the railway; their light on the snow baked into a " + W + " x " + H + " map");
     }
 
     public override void Build(PuzzleBuilder b)
@@ -3006,6 +3142,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Snowfall(b);
         Snowfall(b, true);
         Veil(b, root, HeightAt);
+        Garlands(b, root, HeightAt, groundMaterial);
 
         // Christmas lights down both sides of the causeway, a post every 9 m
         var candy = new MeshBuilder();

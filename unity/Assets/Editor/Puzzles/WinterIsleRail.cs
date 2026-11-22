@@ -270,7 +270,7 @@ public static class WinterIsleRail
         R = Vector3.Cross(Vector3.up, Fw).normalized;
         U = Vector3.Cross(Fw, R);
     }
-    static Vector3 Right(RailLine l, int i) { Frame(l, i, out _, out Vector3 R, out _); return R; }
+    public static Vector3 Right(RailLine l, int i) { Frame(l, i, out _, out Vector3 R, out _); return R; }
     public static Vector3 Track(RailLine l, int i, int side) => l.P[l.W(i)] + Right(l, i) * Offset(l, i, side);
 
     // The train tower's place (The Tree builds it): beside the loop's Plaza station on the plaza's side, clear of the
