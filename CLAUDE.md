@@ -366,9 +366,11 @@ each time, and do not commit broken or half-built states.
     reproduced at the 30 fps cap on this PC) and suggests fog that hides it until within about 50 m.
   - Dressing: 27 copies float 0.6 m or more over what is under them (some over the sea or a tunnel cut), 25 stand
     over open sea with nothing under them (near -1817, -2497), 2,749 rocks lie wholly under the ground.
-  - Jagged ground in the tunnels: 72 dressing rocks reach into the rail tunnels or the mine, the biggest 47-59 m
-    granite cliffs through "Mine Walls" (e.g. -940, 13, -1158; -1607, 0, -664); the dressing list should keep rocks
-    clear of the tunnels.
+  - Jagged spikes at the rail tunnels' mouths (a tester's screenshot, 2026-11-21): snow-shaded, one-sided triangles
+    beside the track at a portal, seen from outside and gone looking back: slivers of the island's ground mesh left
+    standing where the ground is cut away over the tunnel (`InCut`), not dressing. Separately, 72 dressing rocks reach
+    into the rail tunnels or the mine (the biggest 47-59 m granite cliffs through "Mine Walls", e.g. -940, 13, -1158;
+    by their boxes, so some may be near misses).
   - Seeing through our shaders (the snow most) on quality settings above Low, with a large slowdown (the user,
     2026-11-21). Every level renders Deferred+ (no depth priming), so the difference is another per-level setting:
     the debug log writes the full pipeline settings and renderer features at each walk and on every change of
