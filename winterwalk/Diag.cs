@@ -442,7 +442,7 @@ namespace WinterWalk
         int slowFrames, slowSuppressed, snapshots, marks;
         string toast = "";
         bool inWalk, onIsle, guiFailed;
-        int players = -1;
+        int players = -1, quality = -1;
         string affinity = "", states = "";
         long memStep;
         IntPtr meAt = IntPtr.Zero;
@@ -556,7 +556,18 @@ namespace WinterWalk
                 floatFor = airFor = crouchHeld = 0f; jumpWatch = false;
                 renderCheckAt = now + 25f;      // once the packs have built
             }
-            if (renderCheckAt > 0f && now >= renderCheckAt) { renderCheckAt = 0f; try { Diag.Event(Census.Shaders()); } catch (Exception e) { Diag.Warn("shader check failed: " + e.Message); } }
+            if (renderCheckAt > 0f && now >= renderCheckAt)
+            {
+                renderCheckAt = 0f;
+                try { Diag.Event(Census.Shaders()); } catch (Exception e) { Diag.Warn("shader check failed: " + e.Message); }
+                try { Diag.Event("how this PC renders: " + Census.Pipeline()); quality = QualitySettings.GetQualityLevel(); } catch (Exception e) { Diag.Warn("pipeline check failed: " + e.Message); }
+            }
+            // the player changing the graphics settings
+            if (quality >= 0 && Time.frameCount % 60 == 0)
+            {
+                int q = QualitySettings.GetQualityLevel();
+                if (q != quality) { quality = q; try { Diag.Event("graphics settings changed: " + Census.Pipeline()); } catch (Exception e) { Diag.Warn("graphics settings changed to level " + q + " (" + e.Message + ")"); } }
+            }
             bool isle = pos.x > Dresser.X0 && pos.x < Dresser.X1 && pos.z > Dresser.Z0 && pos.z < Dresser.Z1;
             if (isle != onIsle) { onIsle = isle; Diag.Event((isle ? "came onto the Winter Isle at " : "left the Winter Isle at ") + Diag.V(pos)); }
             if (!Diag.PlayerChecks.Value) return;
@@ -841,6 +852,72 @@ namespace WinterWalk
     {
         // How this PC draws: the quality level and render pipeline, and each of our shaders (BWM/...) in use, whether
         // this GPU runs it and how many renderers wear it. (For "the ground is see-through on my PC".)
+        // The quality level in use and what its render pipeline does (depth priming, rendering path, depth and opaque
+        // textures, MSAA, HDR, render scale, shadows...) with the renderer's features (SSAO, HBAO...): above "Low"
+        // players see through much of the world and it runs slowly, so every log says what this PC was set to
+        internal static string Pipeline()
+        {
+            var sb = new StringBuilder("quality ");
+            int q = QualitySettings.GetQualityLevel();
+            try { sb.Append(QualitySettings.names[q]); } catch (Exception) { }
+            sb.Append(" (level ").Append(q).Append(')');
+            UnityEngine.Rendering.RenderPipelineAsset rp = null;
+            try { rp = QualitySettings.renderPipeline ?? UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline; } catch (Exception) { }
+            if (rp == null) return sb.Append(", no render pipeline asset").ToString();
+            sb.Append(", pipeline ").Append(rp.name).Append(':');
+            var urp = rp.TryCast<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>();
+            if (urp == null) return sb.ToString();
+            sb.Append(Plain(urp));
+            try
+            {
+                UnityEngine.Rendering.Universal.ScriptableRendererData data = urp.scriptableRendererData;
+                if (data != null)
+                {
+                    sb.Append("\n  renderer ").Append(data.name).Append(':');
+                    var u = data.TryCast<UnityEngine.Rendering.Universal.UniversalRendererData>();
+                    sb.Append(Plain(u != null ? (object)u : data));
+                    var features = data.rendererFeatures;
+                    sb.Append("\n  renderer features:");
+                    if (features != null)
+                        for (int i = 0; i < features.Count; i++)
+                        {
+                            var f = features[i];
+                            if (f != null) sb.Append(' ').Append(f.name).Append(" (").Append(f.GetIl2CppType().Name).Append(f.isActive ? "" : ", off").Append(");");
+                        }
+                }
+            }
+            catch (Exception e) { sb.Append("\n  (renderer: ").Append(e.GetType().Name).Append(": ").Append(e.Message).Append(')'); }
+            // every quality level's renderer, to compare with "Low"
+            try
+            {
+                sb.Append("\n  every level:");
+                string[] names = QualitySettings.names;
+                for (int i = 0; i < names.Length; i++)
+                {
+                    var asset = QualitySettings.GetRenderPipelineAssetAt(i)?.TryCast<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>();
+                    var d = asset != null ? asset.scriptableRendererData?.TryCast<UnityEngine.Rendering.Universal.UniversalRendererData>() : null;
+                    sb.Append(' ').Append(names[i]).Append(" = ").Append(asset != null ? asset.name : "default");
+                    if (d != null) sb.Append(" (").Append(d.renderingMode).Append(", depth priming ").Append(d.depthPrimingMode).Append(", depth texture ").Append(asset.supportsCameraDepthTexture).Append(", shadows ").Append(asset.shadowDistance.ToString("0", CultureInfo.InvariantCulture)).Append(" m)");
+                    sb.Append(';');
+                }
+            }
+            catch (Exception e) { sb.Append(" (").Append(e.GetType().Name).Append(": ").Append(e.Message).Append(')'); }
+            return sb.ToString();
+        }
+
+        // " name=value" for every plain value (numbers, switches, choices) of an object, as the game holds them
+        static string Plain(object o)
+        {
+            var sb = new StringBuilder();
+            foreach (PropertyInfo p in o.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            {
+                Type t = p.PropertyType;
+                if (!(t.IsPrimitive || t.IsEnum) || p.GetIndexParameters().Length > 0 || p.Name.StartsWith("Native") || p.Name.Contains("Debug")) continue;
+                try { object v = p.GetValue(o); sb.Append(' ').Append(p.Name.StartsWith("m_") ? p.Name.Substring(2) : p.Name).Append('=').Append(v is float f ? f.ToString("0.###", CultureInfo.InvariantCulture) : v); } catch (Exception) { }
+            }
+            return sb.ToString();
+        }
+
         internal static string Shaders()
         {
             var sw = Stopwatch.StartNew();
