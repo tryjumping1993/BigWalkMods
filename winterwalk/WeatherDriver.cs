@@ -60,6 +60,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("weather");
             try
             {
                 Enviro.EnviroManager env = Enviro.EnviroManager.instance;

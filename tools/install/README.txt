@@ -26,7 +26,14 @@ NOTES
   - With the mod installed, Big Walk always starts with it. Your saves are not changed, but a walk on the island is
     best kept on its own save slot.
   - Everyone in a walk must have the same version, or the island's puzzles will not match up.
-  - Problems? The mod loader's log is BepInEx\LogOutput.log in the game's folder: send it along.
+
+SOMETHING WRONG? (a crash, being stuck, slowness, something odd)
+  - While playing, press F8 the moment you see it. That marks the moment in the mod's debug log, with a screenshot.
+  - Afterwards, close Big Walk and double-click Send-Logs.cmd (in this folder). It puts the logs in one zip on your
+    Desktop: send that file along, with a line on what happened and roughly when.
+  - The mod keeps a debug log of each of your last 12 game starts (in AppData\LocalLow\House House\Big Walk\
+    WinterWalk-logs). It holds no saves; it does name you and your PC. Turn it off with DebugLog = false in
+    BepInEx\config\bwm.winterwalk.cfg in the game's folder.
 
 Built on BepInEx and the Big Puzzle SDK by markviews, with other open-source parts: see THIRD-PARTY-NOTICES.txt and
 the licenses folder. Big Walk is by House House; this is an unofficial fan mod and contains none of the game's files.

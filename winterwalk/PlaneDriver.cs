@@ -153,6 +153,7 @@ namespace WinterWalk
             parked.Remove(plane);
             Flying = true;
             Vector3 seat = plane.transform.position + Vector3.up * SeatHeight;
+            Diag.Touched("plane");
             player.position = seat;
             PlayerCharacter pc = player.GetComponent<PlayerCharacter>();
             if (pc != null && pc.rb != null) { pc.rb.position = seat; pc.rb.linearVelocity = Vector3.zero; }
@@ -175,6 +176,7 @@ namespace WinterWalk
             leftAt = Time.unscaledTime;
             // out beside the cockpit, on the left
             Vector3 side = Quaternion.Euler(0f, yaw, 0f) * Vector3.left;
+            Diag.Touched("plane");
             player.position = player.position + side * 2.2f;
             State = "climbed out (" + why + ")";
             Plugin.L.LogInfo("Winter Walk: left a biplane: " + why);
@@ -182,6 +184,7 @@ namespace WinterWalk
 
         void FixedUpdate()
         {
+            using var diag = Diag.Time("plane");
             try
             {
                 Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
@@ -259,6 +262,7 @@ namespace WinterWalk
                 // flown into something: when the body cannot go where it is sent, the flight ends there
                 if (!onGround && Speed > 10f && body.linearVelocity.magnitude < Speed * 0.35f) slowFor += dt; else slowFor = 0f;
                 if (slowFor > 0.4f) { body.linearVelocity = Vector3.zero; Leave(t, "struck something at speed"); return; }
+                Diag.Touched("plane");
                 body.linearVelocity = v;
                 // the plane round the player: its wheels SeatHeight below them, nose along the heading, banked
                 flown.transform.position = t.position - Vector3.up * SeatHeight;

@@ -81,6 +81,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("lights");
             try
             {
                 if (!found)

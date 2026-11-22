@@ -166,6 +166,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("gondola");
             try
             {
                 if (lineRoot == null)

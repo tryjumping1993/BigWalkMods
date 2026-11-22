@@ -300,6 +300,7 @@ namespace WinterWalk
                 Vector3 back = points[i] + Vector3.up * 1.2f;
                 PlayerCharacter pc = me.GetComponent<PlayerCharacter>();
                 Rigidbody body = pc != null ? pc.rb : null;
+                Diag.Touched("mine rescue");
                 me.transform.position = back;
                 if (body != null) { body.position = back; body.linearVelocity = Vector3.zero; }
                 Plugin.L.LogInfo("Winter Walk: mine: set a player who had fallen under the track back on it");
@@ -309,6 +310,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("mine");
             try
             {
                 if (tripRoot == null)

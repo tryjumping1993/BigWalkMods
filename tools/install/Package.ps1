@@ -72,7 +72,7 @@ foreach ($f in Get-ChildItem -Path $ww -File) {
 }
 
 # the installer
-foreach ($f in 'Install.cmd', 'Install.ps1', 'Install-Common.ps1', 'Uninstall.cmd', 'Uninstall.ps1', 'README.txt') {
+foreach ($f in 'Install.cmd', 'Install.ps1', 'Install-Common.ps1', 'Uninstall.cmd', 'Uninstall.ps1', 'Send-Logs.cmd', 'Send-Logs.ps1', 'README.txt') {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $f) -Destination (Join-Path $stage $f)
 }
 Set-Content -Path (Join-Path $stage 'version.txt') -Value $Version -Encoding ASCII

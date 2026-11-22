@@ -313,6 +313,7 @@ namespace WinterWalk
                 if (wakeAt == Vector3.zero) return;
                 try
                 {
+                    Diag.Touched("dinosaur catch");
                     pc.transform.position = wakeAt;
                     if (pc.rb != null) { pc.rb.position = wakeAt; pc.rb.linearVelocity = Vector3.zero; pc.rb.angularVelocity = Vector3.zero; }
                 }
@@ -545,6 +546,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("dinosaurs");
             try
             {
                 if (dinos.Count == 0 || dinos[0].root == null)

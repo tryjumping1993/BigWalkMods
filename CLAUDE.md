@@ -20,6 +20,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
+| `logs [n] [-Full]` | Winter Walk's debug log of the latest session (n = 2 the one before): the header, what became of the session before, warnings, snapshots, marks, slow frames, the last heartbeat. |
 | `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 0.9 GB) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
 | (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods\trailer\` (`-Music <wav> -MusicStart 2.4` lays the game's menu theme under it; `menu_theme.py` extracts that from the game). `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
@@ -233,7 +234,8 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Tracks in the snow** (`winterwalk\SnowTrails.cs`): the snow's surface is a height field in millimetres, kept only
   where disturbed. Each player's PC stamps it from where it sees every `PlayerCharacter` (a walk treads a trench
   with banks pushed up beside it, anything faster than 4.2 m/s a smooth groove), falling snow fills it by 1 mm
-  every 7 s, and a 64 m window round the camera goes to the ground shader as `_BwmTrailTex`, which marches the
+  every 7 s, tracks more than 100 m from the camera are forgotten (all of them off the isle), and a 64 m window round
+  the camera goes to the ground shader as `_BwmTrailTex`, which marches the
   eye's ray into the trench. Nothing is sent between players. The player's origin rides 0.75 m above the ground.
   Test without a controller: `game 'set?path=WinterWalk.SnowTrails.TestPattern&value=true'` draws tracks in front
   of the camera, `game 'walk?x=..&z=..'` makes the player leave a real one. Config `SnowTracks` turns it off.
@@ -261,6 +263,22 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - The first build finds the nearest flat, clear ground to the spawn rooms that is not near another puzzle and
   remembers it in `Assets\Puzzles\<Name>\site.json`; edit that file, or override `FixedSite` / `Near` / `Yaw`.
 
+## The debug log (players' and ours)
+
+`winterwalk\Diag.cs` writes one file per game start to `LocalLow\House House\Big Walk\WinterWalk-logs\session-*.log`
+(12 kept), on every player's PC: all of BepInEx's log with times (written through at once; heartbeats and snapshots
+forced to disk for a PC that freezes), a header (PC, versions, every pack with a fingerprint to compare between
+friends), what became of the session before (closed normally or not, Windows' crash/hang records and CPU hardware
+errors in its time, a crash dump), a heartbeat every 10 s (fps, Winter Walk's own ms per frame by driver, memory, the
+player's state), walk events, "<driver> started/stopped moving the player" (drivers call `Diag.Touched` where they
+write the player's body; `using var diag = Diag.Time("name")` times a driver), snapshots when the player is off the
+ground but not falling for 2 s, or jump/crouch does nothing (the game's movement components, what is below), slow
+frames, a count of what is drawn by owner and distance when the fps stays low, memory past each 2 GB step (biggest
+textures and meshes), a shader check 25 s into a walk (for "see-through ground"), and the Dresser's check of its
+copies (floating, buried, over nothing). F8 (`MarkKey`) marks a moment with a screenshot and both counts;
+`game 'set?path=WinterWalk.DiagDriver.TestMark&value=true'` does it without a keyboard. Players send
+`Send-Logs.cmd` (in the zip) output: one zip on their Desktop. Config `[Debug]` in `bwm.winterwalk.cfg`.
+
 ## Testing
 
 1. `bwm.ps1 build <Puzzle>` and Read `previews\<Puzzle>-*.png`.
@@ -283,7 +301,11 @@ the user and friends, who must all have the same packs and SDK version.
 
 - **This PC's CPU (2026-11-20):** one core of the i9-13900K (logical CPUs 4 and 5) logs machine-check errors, and
   the PC has frozen twice under bursty load (game + teleport-and-screenshot loops + Unity builds). `bwm.local.ps1`
-  (not committed) sets `BWM_AFFINITY` so `bwm.ps1` keeps Unity and the game off that core. Never run a Unity build
+  (not committed) sets `BWM_AFFINITY` so `bwm.ps1` keeps Unity and the game off that core (`play` and `launch`), and
+  `CpuAffinity = FFFFFFCF` in the profile's `bwm.winterwalk.cfg` makes Winter Walk do it in the game itself, however
+  it starts (a players' install on this PC needs the same line in the game folder's config). On 2026-11-21 the game
+  crashed three times on that core (a code address one bit wrong, garbage pointers) a minute or less after Windows
+  logged corrected errors on APIC 16. Never run a Unity build
   while the game is up (`game quit` first), keep the frame cap, and leave a few seconds between teleports.
 - **Unity licence:** batch mode only finds the licence while Unity Hub is running and signed in. `bwm.ps1`
   starts the Hub if needed. Only editor 6000.3.17f1 (at `Z:\Unity\6000.3.17f1`) is wanted; never let the Hub
@@ -332,3 +354,15 @@ each time, and do not commit broken or half-built states.
   (`D:\My Drive\Big Christmas Walk\`, synced by Drive for desktop); the user shares it by link. Never make the repo
   public.
 - Nothing has been tested with two players.
+- Found by the debug log on 2026-11-21, not yet fixed:
+  - The "BWM Test" save loads the player into the game's spawn room at (-242, 37, -485) with no collider beneath (not
+    even terrain within 500 m) and holds them there, off the ground, unable to jump. Suspect the dev profile's
+    SkipIntro (players' installs do not have it): try without it.
+  - Memory: 16 GB private, 11-12 GB in RAM in a walk; 55 million mesh vertices, most in the island's "Grass N"
+    scatter meshes (about a million vertices each, readable, so kept twice; `WinterIslePuzzle.cs` section 7b).
+  - Drawing: all ~200,000 dressing renderers (rocks, firs, plants; 196,000 casting shadows) count as visible from
+    anywhere, even the mainland 1 km away: nothing culls them by distance. The user suggests fog that hides the
+    mountain until within about 50 m.
+  - Dressing: 27 copies float 0.6 m or more over what is under them (some over the sea or a tunnel cut), 25 stand
+    over open sea with nothing under them (near -1817, -2497), 2,749 rocks lie wholly under the ground.
+  - Friends report seeing through the snow/floor everywhere; the shader check in their debug logs should say why.

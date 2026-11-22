@@ -31,8 +31,10 @@ namespace WinterWalk
         {
             L = Log;
             Enabled = Config.Bind("General", "WinterSky", true, "Blend the sky and light towards winter near the Winter Isle.");
-            ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             Tracks = Config.Bind("General", "SnowTracks", true, "Players leave tracks in the Winter Isle's snow.");
+            Diag.Start(Config, "0.1.0");      // the debug log (Diag.cs), first, so it sees everything after
+            ClassInjector.RegisterTypeInIl2Cpp<DiagDriver>();
+            ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
             ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
             ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
@@ -49,6 +51,7 @@ namespace WinterWalk
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
+            go.AddComponent<DiagDriver>();
             go.AddComponent<SkyDriver>();
             go.AddComponent<Dresser>();
             go.AddComponent<SnowTrails>();
@@ -64,7 +67,7 @@ namespace WinterWalk
             go.AddComponent<JetpackDriver>();
             go.AddComponent<WeatherDriver>();
             go.AddComponent<MapDriver>();
-            L.LogInfo("Winter Walk loaded");
+            L.LogInfo("Winter Walk loaded" + (Diag.FilePath != null ? "; debug log " + Diag.FilePath : ""));
         }
     }
 
@@ -110,6 +113,7 @@ namespace WinterWalk
 
         void LateUpdate()
         {
+            using var diag = Diag.Time("sky");
             try
             {
                 Enviro.EnviroManager env = Enviro.EnviroManager.instance;

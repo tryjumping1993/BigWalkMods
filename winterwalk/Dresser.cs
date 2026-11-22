@@ -53,6 +53,82 @@ namespace WinterWalk
 
         public static int Count => entries.Count;
 
+        // ---- the debug log's check of the copies (players report rocks floating round the island) ----
+        // Five seconds after dressing, a few milliseconds a frame: every copy against what is under it (its lowest
+        // point, or a tree's foot, more than 0.6 m above anything that is not itself) and against where it was put
+        // (moved more than half a metre: something physical in it). The worst go to the debug log with places.
+        readonly List<int> placedEntry = new List<int>();      // the entry each child of the holder was copied from
+        int checkAt = -1, floating, moved, bodies, bare, buried;
+        float checkFrom;
+        readonly List<KeyValuePair<float, string>> worstFloat = new List<KeyValuePair<float, string>>(), worstMoved = new List<KeyValuePair<float, string>>(),
+            worstBuried = new List<KeyValuePair<float, string>>(), worstBare = new List<KeyValuePair<float, string>>();
+
+        static void Keep(List<KeyValuePair<float, string>> list, float score, Func<string> say)
+        {
+            if (list.Count >= 8 && score <= list[list.Count - 1].Key) return;
+            list.Add(new KeyValuePair<float, string>(score, say()));
+            list.Sort((a, b) => b.Key.CompareTo(a.Key));
+            if (list.Count > 8) list.RemoveAt(list.Count - 1);
+        }
+
+        void CheckStep()
+        {
+            if (holder == null) { checkAt = -1; return; }
+            Transform h = holder.transform;
+            int n = Mathf.Min(h.childCount, placedEntry.Count);
+            float budget = Time.realtimeSinceStartup + 0.004f;
+            while (checkAt < n && Time.realtimeSinceStartup < budget)
+            {
+                Transform c = h.GetChild(checkAt);
+                Entry e = entries[placedEntry[checkAt]];
+                checkAt++;
+                if (c == null) continue;
+                Vector3 want = h.TransformPoint(e.at), at = c.position;
+                float off = (at - want).magnitude;
+                if (off > 0.5f) { moved++; Keep(worstMoved, off, () => e.kind + " " + off.ToString("0.0", CultureInfo.InvariantCulture) + " m from " + Diag.V(want) + " to " + Diag.V(at)); }
+                bool standing = e.kind.StartsWith("tree:") || e.kind.StartsWith("fir:");
+                if (!standing && c.GetComponentInChildren<Rigidbody>(true) != null) bodies++;
+                float bottom, top;
+                if (standing) { bottom = at.y; top = at.y + 2f; }
+                else
+                {
+                    Renderer r = c.GetComponentInChildren<Renderer>();
+                    if (r == null) continue;
+                    Bounds b = r.bounds;
+                    bottom = b.min.y; top = b.max.y + 0.5f;
+                }
+                // down its middle from well above (a ray started under the ground's surface would miss it: surfaces
+                // only stop rays from their outside): the highest thing below its top that is not itself, and
+                // whether anything other than itself lies above its top (buried in the ground, or under something)
+                float ground = float.NaN, cover = float.NaN; string under = null, over = null;
+                foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(at.x, top + 60f, at.z), Vector3.down, top - bottom + 180f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.collider == null || hit.collider.transform.IsChildOf(c)) continue;
+                    float y = hit.point.y;
+                    if (y > top) { if (float.IsNaN(cover) || y < cover) { cover = y; over = hit.collider.name; } }
+                    else if (float.IsNaN(ground) || y > ground) { ground = y; under = hit.collider.name; }
+                }
+                if (!float.IsNaN(cover) && cover - top < 30f && !standing)
+                {
+                    buried++;
+                    float depth = cover - top;
+                    Keep(worstBuried, depth, () => e.kind + " at " + Diag.V(at) + " whole " + depth.ToString("0.0", CultureInfo.InvariantCulture) + " m under '" + over + "'");
+                    continue;
+                }
+                if (float.IsNaN(ground)) { bare++; Keep(worstBare, bare, () => e.kind + " at " + Diag.V(at)); continue; }
+                float gap = bottom - ground;
+                if (gap > 0.6f) { floating++; Keep(worstFloat, gap, () => e.kind + " at " + Diag.V(at) + " " + gap.ToString("0.0", CultureInfo.InvariantCulture) + " m above '" + under + "'"); }
+            }
+            if (checkAt < n) return;
+            checkAt = -1;
+            string msg = "dressing check: " + n + " copies; " + floating + " float 0.6 m or more above what is under them, " + buried + " rocks lie wholly under the ground or something else, " + moved + " moved since placed, " + bodies + " rocks carry a physics body, " + bare + " have nothing under them";
+            if (worstFloat.Count > 0) msg += "\n  floating worst: " + string.Join("; ", worstFloat.ConvertAll(kv => kv.Value));
+            if (worstBuried.Count > 0) msg += "\n  buried deepest: " + string.Join("; ", worstBuried.ConvertAll(kv => kv.Value));
+            if (worstMoved.Count > 0) msg += "\n  moved worst: " + string.Join("; ", worstMoved.ConvertAll(kv => kv.Value));
+            if (worstBare.Count > 0) msg += "\n  nothing under (some): " + string.Join("; ", worstBare.ConvertAll(kv => kv.Value));
+            if (floating + moved + bodies > 0) Diag.Warn(msg); else Diag.Event(msg);
+        }
+
         static float N(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
         static void Load()
@@ -213,6 +289,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("dresser");
             try
             {
                 if (Time.unscaledTime >= nextCheck)
@@ -232,6 +309,7 @@ namespace WinterWalk
                     }
                 }
                 if (next >= 0) Step();
+                else if (checkAt >= 0 && Time.unscaledTime >= checkFrom) CheckStep();
             }
             catch (Exception ex)
             {
@@ -325,16 +403,23 @@ namespace WinterWalk
             holder = new GameObject("Winter Dressing");
             holder.SetActive(false);      // nothing wakes until every copy is cleaned
             next = 0; made = 0; missing = 0;
+            placedEntry.Clear(); checkAt = -1;
             started = Time.realtimeSinceStartup;
         }
 
         void Step()
         {
             float budget = Time.realtimeSinceStartup + 0.012f;      // about 12 ms of copying per frame
-            while (next < entries.Count && Time.realtimeSinceStartup < budget) Copy(entries[next++]);
+            while (next < entries.Count && Time.realtimeSinceStartup < budget)
+            {
+                int before = made, index = next;
+                Copy(entries[next++]);
+                if (made > before) placedEntry.Add(index);
+            }
             if (next < entries.Count) return;
             next = -1;
             holder.SetActive(true);
+            if (Diag.On.Value) { checkAt = 0; checkFrom = Time.unscaledTime + 5f; floating = moved = bodies = bare = buried = 0; worstFloat.Clear(); worstMoved.Clear(); worstBuried.Clear(); worstBare.Clear(); }
             Plugin.L.LogInfo("Winter Walk: dressed the island with " + made + " copies (" + missing + " missing) in "
                 + (Time.realtimeSinceStartup - started).ToString("0.0", CultureInfo.InvariantCulture) + " s; "
                 + rocks.Count + " rock kinds, " + trees.Count + " tree kinds and " + firs.Count + " fir models to copy from");

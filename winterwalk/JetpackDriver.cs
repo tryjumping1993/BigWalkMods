@@ -124,6 +124,7 @@ namespace WinterWalk
 
         void LateUpdate()
         {
+            using var diag = Diag.Time("jetpack");
             try
             {
                 if (worn == null) return;
@@ -143,6 +144,7 @@ namespace WinterWalk
 
         void FixedUpdate()
         {
+            using var diag = Diag.Time("jetpack");
             try
             {
                 Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
@@ -196,6 +198,7 @@ namespace WinterWalk
                         v.x = across.x; v.z = across.z;
                     }
                 }
+                Diag.Touched("jetpack");
                 body.linearVelocity = v;
                 State = "jetpack firing";
             }

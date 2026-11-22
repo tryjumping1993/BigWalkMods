@@ -73,6 +73,7 @@ namespace WinterWalk
 
         void FixedUpdate()
         {
+            using var diag = Diag.Time("ski");
             try
             {
                 Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
@@ -107,6 +108,7 @@ namespace WinterWalk
                 {
                     if (!airborne) { airborne = true; airSince = Time.unscaledTime; }
                     velocity += Vector3.down * (9.81f * Time.fixedDeltaTime);
+                    Diag.Touched("ski");
                     flyer.rb.linearVelocity = velocity;
                     Speed = velocity.magnitude;
                     State = (Gear == 2 ? "boarding" : "skiing") + ": in the air";
@@ -157,6 +159,7 @@ namespace WinterWalk
                 velocity = velocity.sqrMagnitude > 1e-6f ? velocity.normalized * speed : Vector3.zero;
                 Speed = speed;
                 // keep to the snow: close the gap to the sheet a little each step
+                Diag.Touched("ski");
                 body.linearVelocity = velocity + Vector3.down * Mathf.Clamp(gap * 6f, -2f, 6f);
                 State = (board ? "boarding " : "skiing ") + speed.ToString("0.0") + " m/s";
             }

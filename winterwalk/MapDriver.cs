@@ -25,6 +25,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("map");
             if (Time.unscaledTime < nextLook && !Again) return;
             nextLook = Time.unscaledTime + 4f;
             try

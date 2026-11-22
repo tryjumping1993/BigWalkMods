@@ -5,7 +5,7 @@
 // smooth groove. Falling snow slowly fills every track in again.
 //
 // How: the snow's surface is a height field in millimetres over the whole island, kept only where something has
-// disturbed it (sparse 16 m tiles). A 64 m window of it round this player's camera lives in a texture, which the
+// disturbed it (sparse 16 m tiles, forgotten 100 m away). A 64 m window of it round this player's camera lives in a texture, which the
 // island's ground shader reads to shade the trench, its walls and the banks (BWM/Snow, "_BwmTrail..." globals).
 // Every player's PC works this out for itself from where it sees the other players, so nothing is sent; someone
 // who joins late does not see tracks made before they came.
@@ -29,6 +29,8 @@ namespace WinterWalk
         const float SlideSpeed = 4.2f;         // metres a second: faster than this is a slide, not a walk
         const float BodyHeight = 0.75f;        // a standing player's origin is this far above the ground (measured in game)
         public const float Reach = 22f;        // tracks are drawn in full this near the camera (and fade over 5 m)
+        const float Forget = 100f;             // tracks further than this from the camera are forgotten (and off the isle, all)
+        public static int Tiles;               // how many 16 m tiles of tracks are kept (for the debug log)
 
         // set from outside (the test companion: set?path=WinterWalk.SnowTrails.TestPattern&value=true) to draw a
         // walked line, a slid curve and a crossing in front of the camera
@@ -44,6 +46,7 @@ namespace WinterWalk
         int upload;                            // which way of sending the window to the texture works here (0 = untried)
         bool dirty, active, haveOrigin, toldGround, toldTrack, failed;
         int ox, oz;                            // the window's lowest texel, in world texels
+        Vector3 camAt;                         // the camera, as of this frame
         long cachedKey = long.MinValue;
         byte[] cachedTile;
 
@@ -248,6 +251,18 @@ namespace WinterWalk
             long key = relaxQueue[relaxQueue.Count - 1];
             relaxQueue.RemoveAt(relaxQueue.Count - 1);
             if (!tiles.TryGetValue(key, out byte[] tile)) return;
+            // far from this player: forget it (the window is 64 m across, so a tile this far off is not in it)
+            {
+                float cx = (((int)(key >> 32) << TileBits) + TileSide / 2) * Texel - camAt.x, cz = (((int)(uint)(key & 0xffffffffL) << TileBits) + TileSide / 2) * Texel - camAt.z;
+                if (cx * cx + cz * cz > Forget * Forget)
+                {
+                    tiles.Remove(key);
+                    relaxedAt.Remove(key);
+                    cachedKey = long.MinValue; cachedTile = null;
+                    Tiles = tiles.Count;
+                    return;
+                }
+            }
             int steps = (int)((Time.time - relaxedAt[key]) / SecondsPerStep);
             if (steps <= 0) return;
             relaxedAt[key] += steps * SecondsPerStep;
@@ -309,15 +324,19 @@ namespace WinterWalk
 
         void LateUpdate()
         {
+            using var diag = Diag.Time("tracks");
             try
             {
                 Camera cam = Camera.main;
                 if (cam == null) return;
                 Vector3 c = cam.transform.position;
+                camAt = c;
+                Tiles = tiles.Count;
                 bool near = Plugin.Tracks.Value && c.x > Dresser.X0 - 100f && c.x < Dresser.X1 + 100f && c.z > Dresser.Z0 - 100f && c.z < Dresser.Z1 + 100f;
                 if (!near)
                 {
                     if (active) { Shader.SetGlobalFloat("_BwmTrail", 0f); active = false; }
+                    if (tiles.Count > 0) { tiles.Clear(); relaxedAt.Clear(); relaxQueue.Clear(); cachedKey = long.MinValue; cachedTile = null; Tiles = 0; }
                     return;
                 }
                 if (texture == null)

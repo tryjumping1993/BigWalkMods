@@ -511,6 +511,7 @@ namespace WinterWalk
 
         void Update()
         {
+            using var diag = Diag.Time("train");
             try
             {
                 if (root == null)
