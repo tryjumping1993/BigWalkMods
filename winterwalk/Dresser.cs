@@ -58,10 +58,10 @@ namespace WinterWalk
         // point, or a tree's foot, more than 0.6 m above anything that is not itself) and against where it was put
         // (moved more than half a metre: something physical in it). The worst go to the debug log with places.
         readonly List<int> placedEntry = new List<int>();      // the entry each child of the holder was copied from
-        int checkAt = -1, floating, moved, bodies, bare, buried;
+        int checkAt = -1, floating, moved, bodies, bare, buried, inTunnel;
         float checkFrom;
         readonly List<KeyValuePair<float, string>> worstFloat = new List<KeyValuePair<float, string>>(), worstMoved = new List<KeyValuePair<float, string>>(),
-            worstBuried = new List<KeyValuePair<float, string>>(), worstBare = new List<KeyValuePair<float, string>>();
+            worstBuried = new List<KeyValuePair<float, string>>(), worstBare = new List<KeyValuePair<float, string>>(), worstTunnel = new List<KeyValuePair<float, string>>();
 
         static void Keep(List<KeyValuePair<float, string>> list, float score, Func<string> say)
         {
@@ -96,6 +96,18 @@ namespace WinterWalk
                     if (r == null) continue;
                     Bounds b = r.bounds;
                     bottom = b.min.y; top = b.max.y + 0.5f;
+                    // poking into a rail tunnel or the mine ("jagged ground in the tunnels"): its box, shrunk to
+                    // stay inside a roundish rock, against the tunnels' walls
+                    foreach (Collider wall in Physics.OverlapBox(b.center, b.extents * 0.7f, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                    {
+                        if (wall == null) continue;
+                        string wn = wall.name;
+                        if (wn != "Rail Tunnels" && wn != "Rail Portals" && !wn.StartsWith("Mine Walls") && wn != "Mine Sheds" && wn != "Mine Portals") continue;
+                        inTunnel++;
+                        float size = b.extents.magnitude * 2f;
+                        Keep(worstTunnel, size, () => e.kind + " (" + size.ToString("0.0", CultureInfo.InvariantCulture) + " m) at " + Diag.V(at) + " through '" + wn + "'");
+                        break;
+                    }
                 }
                 // down its middle from well above (a ray started under the ground's surface would miss it: surfaces
                 // only stop rays from their outside): the highest thing below its top that is not itself, and
@@ -121,12 +133,13 @@ namespace WinterWalk
             }
             if (checkAt < n) return;
             checkAt = -1;
-            string msg = "dressing check: " + n + " copies; " + floating + " float 0.6 m or more above what is under them, " + buried + " rocks lie wholly under the ground or something else, " + moved + " moved since placed, " + bodies + " rocks carry a physics body, " + bare + " have nothing under them";
+            string msg = "dressing check: " + n + " copies; " + floating + " float 0.6 m or more above what is under them, " + buried + " rocks lie wholly under the ground or something else, " + inTunnel + " rocks reach into a rail tunnel or the mine, " + moved + " moved since placed, " + bodies + " rocks carry a physics body, " + bare + " have nothing under them";
+            if (worstTunnel.Count > 0) msg += "\n  into tunnels, biggest: " + string.Join("; ", worstTunnel.ConvertAll(kv => kv.Value));
             if (worstFloat.Count > 0) msg += "\n  floating worst: " + string.Join("; ", worstFloat.ConvertAll(kv => kv.Value));
             if (worstBuried.Count > 0) msg += "\n  buried deepest: " + string.Join("; ", worstBuried.ConvertAll(kv => kv.Value));
             if (worstMoved.Count > 0) msg += "\n  moved worst: " + string.Join("; ", worstMoved.ConvertAll(kv => kv.Value));
             if (worstBare.Count > 0) msg += "\n  nothing under (some): " + string.Join("; ", worstBare.ConvertAll(kv => kv.Value));
-            if (floating + moved + bodies > 0) Diag.Warn(msg); else Diag.Event(msg);
+            if (floating + moved + bodies + inTunnel > 0) Diag.Warn(msg); else Diag.Event(msg);
         }
 
         static float N(string s) => float.Parse(s, CultureInfo.InvariantCulture);
@@ -419,7 +432,7 @@ namespace WinterWalk
             if (next < entries.Count) return;
             next = -1;
             holder.SetActive(true);
-            if (Diag.On.Value) { checkAt = 0; checkFrom = Time.unscaledTime + 5f; floating = moved = bodies = bare = buried = 0; worstFloat.Clear(); worstMoved.Clear(); worstBuried.Clear(); worstBare.Clear(); }
+            if (Diag.On.Value) { checkAt = 0; checkFrom = Time.unscaledTime + 5f; floating = moved = bodies = bare = buried = inTunnel = 0; worstFloat.Clear(); worstMoved.Clear(); worstBuried.Clear(); worstBare.Clear(); worstTunnel.Clear(); }
             Plugin.L.LogInfo("Winter Walk: dressed the island with " + made + " copies (" + missing + " missing) in "
                 + (Time.realtimeSinceStartup - started).ToString("0.0", CultureInfo.InvariantCulture) + " s; "
                 + rocks.Count + " rock kinds, " + trees.Count + " tree kinds and " + firs.Count + " fir models to copy from");
