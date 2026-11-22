@@ -16,7 +16,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
 | `build-all` / `list` | All puzzle definitions. |
 | `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save, capped at 30 fps (`BWM_FPS` overrides, 0 = no cap). Unattended, about 80 s. |
-| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `quit`; `game help` lists all. |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `'press?action=jump'` / `'press?action=crouch,moveY&ms=1500'` (pretends the game's input, Rewired, has those actions held: the test player jumps, crouches and walks as a player would), `player` (the local player's ground, grip, pose, jump and crouch state), `quit`; `game help` lists all. |
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
 | `log` | The puzzle-related lines of the last game run. |
@@ -271,6 +271,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 5. Items: `game 'move?name=VanillaItem&nx=..&ny=..&nz=..&x=..&y=..&z=..'` moves the item nearest (nx, ny, nz).
    Put it a few metres above a zone and let it fall in: an item placed directly inside a zone is not counted,
    because the zone only notices things entering.
+
+An idle test player falls asleep about 12 s after the walk loads (red screen); asleep it reports no ground and ignores
+`press`, so movement tests must start within those seconds of `play`.
 
 What this cannot do: pick things up or hang them on snap points, press buttons as a player, or anything
 with two players. Those go to

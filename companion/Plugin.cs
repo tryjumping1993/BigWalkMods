@@ -40,8 +40,72 @@ namespace BwmCompanion
             go.hideFlags = HideFlags.HideAndDontSave;
             go.AddComponent<Runner>();
             Application.runInBackground = true;      // keep answering while the window is not focused
+            InputFake.Install();
             Server.Start(Port);
             L.LogInfo("[BWM] Companion listening on http://127.0.0.1:" + Port);
+        }
+    }
+
+    // Pretend input: makes the game's input system (Rewired) report actions as pressed, so a test can jump, crouch and
+    // steer like a player without the window having the keyboard.  press?action=crouch,moveY&ms=1500  holds the
+    // crouch button and pushes the moveY axis to 1 (or &value=) for 1.5 s. Action names are those of `actions`.
+    internal static class InputFake
+    {
+        static readonly Dictionary<int, float> held = new Dictionary<int, float>();
+        static readonly Dictionary<int, int> downFrame = new Dictionary<int, int>(), upFrame = new Dictionary<int, int>();
+        internal static int Hooked, Asked;
+
+        internal static void Install()
+        {
+            var harmony = new HarmonyLib.Harmony("bwm.companion.input");
+            foreach (MethodInfo m in typeof(Rewired.Player).GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            {
+                ParameterInfo[] ps = m.GetParameters();
+                if (ps.Length != 1 || (ps[0].ParameterType != typeof(int) && ps[0].ParameterType != typeof(string))) continue;
+                string fix = null;
+                if (m.ReturnType == typeof(bool) && m.Name == "GetButton") fix = "Button";
+                else if (m.ReturnType == typeof(bool) && m.Name == "GetButtonDown") fix = "Down";
+                else if (m.ReturnType == typeof(bool) && m.Name == "GetButtonUp") fix = "Up";
+                else if (m.ReturnType == typeof(float) && (m.Name == "GetAxis" || m.Name == "GetAxisRaw")) fix = "Axis";
+                if (fix == null) continue;
+                fix += ps[0].ParameterType == typeof(int) ? "Int" : "Str";
+                try
+                {
+                    harmony.Patch(m, postfix: new HarmonyLib.HarmonyMethod(typeof(InputFake).GetMethod(fix, BindingFlags.Static | BindingFlags.NonPublic)));
+                    Hooked++;
+                }
+                catch (Exception e) { Plugin.L.LogWarning("[BWM] could not hook Rewired " + m.Name + ": " + e.Message); }
+            }
+            Plugin.L.LogInfo("[BWM] pretend input: " + Hooked + " Rewired methods hooked");
+        }
+
+        static int Id(string name) { try { return Rewired.ReInput.mapping.GetActionId(name); } catch (Exception) { return -1; } }
+        static bool IsHeld(int id) { Asked++; return held.TryGetValue(id, out float v) && v != 0f; }
+        static void ButtonInt(int __0, ref bool __result) { if (held.Count > 0 && IsHeld(__0)) __result = true; }
+        static void ButtonStr(string __0, ref bool __result) { if (held.Count > 0 && IsHeld(Id(__0))) __result = true; }
+        static void DownInt(int __0, ref bool __result) { if (downFrame.TryGetValue(__0, out int f) && f == Time.frameCount) __result = true; }
+        static void DownStr(string __0, ref bool __result) { if (downFrame.Count > 0) DownInt(Id(__0), ref __result); }
+        static void UpInt(int __0, ref bool __result) { if (upFrame.TryGetValue(__0, out int f) && f == Time.frameCount) __result = true; }
+        static void UpStr(string __0, ref bool __result) { if (upFrame.Count > 0) UpInt(Id(__0), ref __result); }
+        static void AxisInt(int __0, ref float __result) { if (held.Count > 0 && held.TryGetValue(__0, out float v)) { Asked++; __result = v; } }
+        static void AxisStr(string __0, ref float __result) { if (held.Count > 0) AxisInt(Id(__0), ref __result); }
+
+        internal static IEnumerator<string> Press(Request r)
+        {
+            var ids = new List<int>();
+            foreach (string name in r.Str("action", "").Split(','))
+            {
+                int id = Id(name.Trim());
+                if (id < 0) { yield return "ERROR no input action '" + name + "' (see /actions)"; yield break; }
+                ids.Add(id);
+            }
+            float value = r.Has("value") ? r.Num("value") : 1f;
+            float until = Time.unscaledTime + (r.Has("ms") ? r.Num("ms") : 200f) / 1000f;
+            int asked = Asked;
+            foreach (int id in ids) { held[id] = value; downFrame[id] = Time.frameCount + 1; }
+            while (Time.unscaledTime < until) yield return null;
+            foreach (int id in ids) { held.Remove(id); upFrame[id] = Time.frameCount + 1; }
+            yield return "pressed " + r.Str("action") + " (the game asked " + (Asked - asked) + " times)";
         }
     }
 
@@ -181,7 +245,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | sit?path=Full/Path/To/Seat (or ?stand) | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | crest[?kind=Level][&off=N|&on=N] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | sit?path=Full/Path/To/Seat (or ?stand) | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | player[?do=jump|dud] | press?action=jump[,moveY...][&value=1][&ms=200] | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -201,6 +265,8 @@ namespace BwmCompanion
                 case "crest": yield return CrestInputs(r); break;
                 case "menu": yield return Host.Menus(); break;
                 case "call": yield return Call(r); break;
+                case "player": yield return PlayerState(r); break;
+                case "press": { IEnumerator<string> e = InputFake.Press(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "env": yield return Env(); break;
                 case "terrain": yield return TerrainInfo(r); break;
                 case "global": Shader.SetGlobalFloat(r.Str("name"), r.Num("value")); yield return "set global " + r.Str("name") + " = " + F(r.Num("value")); break;
@@ -894,6 +960,65 @@ namespace BwmCompanion
         // The height of the ground itself at x, z (terrain or the island's land, not a tree, rock or cabin on it):
         // ground?x=..&z=..  ->  "ground: 12.3" or "ground: none". With &all=1, the highest thing a player could
         // stand on there, rocks included (much of the base game's island is rock, not terrain).
+        // The local player's movement state (ground, grip, pose, jump, crouch...), for "why can't I jump" questions:
+        // player  lists every plain value of the movement components;  player?do=jump  forces a jump first
+        static string PlayerState(Request r)
+        {
+            PlayerCharacter me = LocalCharacter();
+            if (me == null) return "ERROR not in a walk";
+            var sb = new StringBuilder();
+            string act = r.Str("do", "");
+            try
+            {
+                if (act == "jump") { me.jumper.ForceAJump(); sb.AppendLine("forced a jump"); }
+                else if (act == "onjump") { me.jumper.OnJump(); sb.AppendLine("called OnJump"); }
+                else if (act == "dud") { me.jumper.DoDudJump(); sb.AppendLine("did a dud jump"); }
+            }
+            catch (Exception e) { sb.AppendLine("ERROR " + act + ": " + e.Message); }
+            sb.AppendLine("position " + me.transform.position + " velocity " + (me.rb != null ? me.rb.linearVelocity.ToString() : "?"));
+            try
+            {
+                Rigidbody rb = me.rb;
+                if (act == "wake") { rb.WakeUp(); sb.AppendLine("woke the body"); }
+                sb.AppendLine("body: sleeping " + rb.IsSleeping() + " kinematic " + rb.isKinematic + " gravity " + rb.useGravity + " constraints " + rb.constraints + " collisions " + rb.detectCollisions + " position " + rb.position.ToString("F3") + " on " + PathOf(rb.transform) + " active " + rb.gameObject.activeInHierarchy);
+                Transform from = me.ground.castFrom;
+                if (from != null)
+                {
+                    sb.Append("cast from " + from.position.ToString("F3") + " mask " + me.ground.layerMask.value + ": ");
+                    foreach (RaycastHit hit in Physics.SphereCastAll(from.position, me.ground.radius, Vector3.down, me.ground.castLength, me.ground.layerMask.value, QueryTriggerInteraction.Ignore))
+                        if (hit.collider != null) sb.Append(PathOf(hit.collider.transform) + " at " + F(hit.distance) + "; ");
+                    sb.AppendLine();
+                    sb.Append("everything within 1.5 m below: ");
+                    foreach (RaycastHit hit in Physics.RaycastAll(from.position, Vector3.down, 1.5f, ~0, QueryTriggerInteraction.Collide))
+                        if (hit.collider != null) sb.Append(hit.collider.name + " (layer " + hit.collider.gameObject.layer + (hit.collider.isTrigger ? ", trigger" : "") + ") at " + F(hit.distance) + "; ");
+                    sb.AppendLine();
+                }
+            }
+            catch (Exception e) { sb.AppendLine("ERROR body: " + e.Message); }
+            try
+            {
+                Collider g = me.ground.groundCollider;
+                sb.AppendLine("ground collider: " + (g == null ? "none" : PathOf(g.transform) + " | layer " + g.gameObject.layer + " | material " + (g.sharedMaterial != null ? g.sharedMaterial.name : "none") + " | steep material " + me.ground.IsSteepMaterial(g)));
+                sb.AppendLine("grip " + F(me.ground.GetGroundGrip()) + " steepness " + F(me.ground.GetSteepness()) + " normal " + me.ground.normal + " still for sliding " + me.mover.IsStandingStillForSliding());
+                sb.AppendLine("pose: " + (me.poser.currentPose == null ? "none" : PathOf(me.poser.currentPose.transform)));
+            }
+            catch (Exception e) { sb.AppendLine("ERROR ground: " + e.Message); }
+            object[] parts = { me.ground, me.jumper, me.mover, me.croucher, me.grease, me.sitter, me.poser, me.sleeper, me.faller, me.platformer, me.sprinter, me.tunings };
+            foreach (object part in parts)
+            {
+                if (part == null) continue;
+                sb.Append(part.GetType().Name + ":");
+                foreach (PropertyInfo p in part.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    Type t = p.PropertyType;
+                    if (!(t.IsPrimitive || t.IsEnum || t == typeof(Vector3)) || p.Name.StartsWith("log") || p.Name.StartsWith("draw") || p.GetIndexParameters().Length > 0) continue;
+                    try { object v = p.GetValue(part); sb.Append(" " + p.Name + "=" + (v is float f ? F(f) : v)); } catch (Exception) { }
+                }
+                sb.AppendLine();
+            }
+            return sb.ToString();
+        }
+
         static string GroundHeight(Request r)
         {
             float best = float.MinValue;
