@@ -1797,8 +1797,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         // 7b. Scatter: what breaks the snow's surface at the height of a walker's eye (60 cm above it). Drift lumps
         //     and sharp-crested ridges lying with the wind, tussocks of dry grass, fallen sticks, stones and pebbles.
-        //     They are built into the pack as a few large meshes by district rather than as tens of thousands of
-        //     objects; none is solid; all cast shadows, which is most of what shows them at midday.
+        //     None is solid. Drifts are built into the pack as a few large meshes by district; the rest are a few
+        //     models drawn where the build's list says (see below).
         {
             var random = new System.Random(77031);
             float Rs(float lo, float hi) => lo + (hi - lo) * (float)random.NextDouble();
@@ -1806,8 +1806,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
             var lumpVerts = new Dictionary<int, List<Vector3>>();
             var lumpTris = new Dictionary<int, List<int>>();
             var lumpRims = new Dictionary<int, List<int>>();      // each drift's outer ring: its normals are the ground's, so no seam shows
-            var litter = new Dictionary<int, MeshBuilder>();
-            var grass = new Dictionary<int, MeshBuilder>();
+            // Tussocks, sticks and stones are not built into the pack one by one (that was 49 million vertices, kept
+            // twice in memory: 4.7 GB, and half of it video memory). The pack carries a few models of each, and
+            // WinterIsle.scatter beside the Winter Walk plugin lists where each stands; Winter Walk (Scatter.cs) draws the
+            // ones near the camera, instanced.
+            var scatterModels = new List<(string name, MeshBuilder mesh, bool grass)>();
+            var scatterPlaces = new List<(int model, Vector3 at, Quaternion turn, float scale)>();
+            Vector3 World(Vector2 p, float lift) => new Vector3(p.x, HeightAt(p) + lift, p.y);
             Vector3 On(Vector2 p, float lift) => new Vector3(p.x - root.x, HeightAt(p) + lift - root.y, p.y - root.z);
             Vector2 wind = new Vector2(0.8f, -0.6f), cross = new Vector2(0.6f, 0.8f);
             int lumps = 0, tufts = 0, sticks = 0, stones = 0;
@@ -1824,18 +1829,22 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     mb.Quad(from + d0 * thick, from + d1 * thick, to + d1 * thick * 0.55f, to + d0 * thick * 0.55f, wood * Rs(0.85f, 1.15f));
                 }
             }
-            void Stone(MeshBuilder mb, Vector2 at, float radius)
+            // The models. Stones: 1 m across, placed at their real size (6 to 34 cm); their crowns catch snow
+            const int StoneModels = 5, StickModels = 6, GrassHeights = 4;
+            int firstStone = scatterModels.Count;
+            for (int sv = 0; sv < StoneModels; sv++)
             {
-                float tall = radius * Rs(0.5f, 0.9f), spin = Rs(0f, 6.28f);
-                Vector3 foot = On(at, -radius * 0.15f), crown = foot + Vector3.up * tall + new Vector3(Rs(-0.3f, 0.3f), 0f, Rs(-0.3f, 0.3f)) * radius;
-                Color col = granite * Rs(0.8f, 1.15f);
+                var mb = new MeshBuilder();
+                float tall = Rs(0.5f, 0.9f), spin = Rs(0f, 6.28f);
+                Vector3 foot = new Vector3(0f, -0.15f, 0f), crown = foot + Vector3.up * tall + new Vector3(Rs(-0.3f, 0.3f), 0f, Rs(-0.3f, 0.3f));
+                Color col = granite * (0.8f + 0.35f * sv / (StoneModels - 1f));
                 const int sides = 9;      // (round: five-sided stones read as flat chips)
                 var rim = new Vector3[sides];
                 var shoulder = new Vector3[sides];
                 for (int sd = 0; sd < sides; sd++)
                 {
                     float sa = spin + sd * 2f * Mathf.PI / sides;
-                    rim[sd] = foot + new Vector3(Mathf.Cos(sa), 0f, Mathf.Sin(sa)) * radius * Rs(0.88f, 1.1f);
+                    rim[sd] = foot + new Vector3(Mathf.Cos(sa), 0f, Mathf.Sin(sa)) * Rs(0.88f, 1.1f);
                     shoulder[sd] = Vector3.Lerp(rim[sd], crown, 0.5f) + Vector3.up * tall * 0.32f;
                 }
                 for (int sd = 0; sd < sides; sd++)
@@ -1844,6 +1853,85 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     mb.Quad(rim[sd], rim[nxt], shoulder[nxt], shoulder[sd], col);
                     mb.Tri(shoulder[sd], crown, shoulder[nxt], col * 1.05f);
                 }
+                scatterModels.Add(("Stone " + sv, mb, false));
+            }
+            // Sticks: 1 m long along x, with no twig, one or two; placed at their real length between two points of ground
+            int firstStick = scatterModels.Count;
+            for (int sv = 0; sv < StickModels; sv++)
+            {
+                var mb = new MeshBuilder();
+                Vector3 a0 = new Vector3(-0.5f, 0f, 0f), a1 = new Vector3(0.5f, 0f, 0f);
+                float thick = Rs(0.017f, 0.03f);
+                Stick(mb, a0, a1, thick);
+                for (int tw = 0; tw < sv % 3; tw++)
+                {
+                    Vector3 fork = Vector3.Lerp(a0, a1, Rs(0.3f, 0.8f));
+                    Vector3 off = Quaternion.Euler(0f, Rs(25f, 60f) * (tw % 2 == 0 ? 1f : -1f), 0f) * Vector3.right;
+                    Stick(mb, fork, fork + (off + Vector3.up * Rs(0.1f, 0.5f)).normalized * Rs(0.2f, 0.4f), thick * 0.5f);
+                }
+                scatterModels.Add(("Stick " + sv, mb, false));
+            }
+            // Dry grass: a tussock standing through the snow, a spray of blades. Three kinds (stiff upright blades,
+            // arching grass, seed stalks) at four heights, placed at 0.7 to 1.3 times their size
+            int firstGrass = scatterModels.Count;
+            for (int gv = 0; gv < 3 * GrassHeights; gv++)
+            {
+                var gb = new MeshBuilder();
+                int kind = gv % 3;
+                float tallest = new[] { 0.2f, 0.34f, 0.48f, 0.62f }[gv / 3];
+                Vector3 foot = new Vector3(0f, -0.04f, 0f);
+                int blades = random.Next(24, 36);      // a full clump of thin blades, not a few flat ones
+                if (kind == 1)
+                {
+                    for (int bl = 0; bl < blades; bl++)
+                    {
+                        float a = Rs(0f, Mathf.PI * 2f), tall = tallest * Rs(0.4f, 0.9f);
+                        var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                        var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.008f, 0.016f);
+                        Vector3 root0 = foot + outward * Rs(0f, 0.08f);
+                        Vector3 bend = root0 + Vector3.up * tall * 0.75f + outward * tall * Rs(0.2f, 0.45f);
+                        Vector3 tip = bend + Vector3.down * tall * Rs(0.2f, 0.5f) + outward * tall * Rs(0.35f, 0.6f);
+                        Color blade = Color.Lerp(straw, dryStraw, Rs(0f, 1f));
+                        Color bleached = Color.Lerp(blade, new Color(0.92f, 0.86f, 0.7f), 0.45f);
+                        gb.TriColors(root0 - edge, root0 + edge, bend + edge * 0.6f, blade * 0.55f, blade * 0.55f, blade);
+                        gb.TriColors(root0 - edge, bend + edge * 0.6f, bend - edge * 0.6f, blade * 0.55f, blade, blade);
+                        gb.TriColors(bend - edge * 0.6f, bend + edge * 0.6f, tip, blade, blade, bleached);
+                    }
+                }
+                else if (kind == 2)
+                {
+                    int stalks = random.Next(8, 14);
+                    for (int bl = 0; bl < stalks; bl++)
+                    {
+                        float a = Rs(0f, Mathf.PI * 2f), tall = tallest * Rs(0.9f, 1.5f);
+                        var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                        var edge = new Vector3(-outward.z, 0f, outward.x) * 0.006f;
+                        Vector3 root0 = foot + outward * Rs(0f, 0.12f), tip = root0 + Vector3.up * tall + outward * tall * Rs(0.05f, 0.3f);
+                        Color stalk = Color.Lerp(straw, dryStraw, Rs(0f, 1f)) * 0.8f;
+                        gb.TriColors(root0 - edge, root0 + edge, tip, stalk * 0.6f, stalk * 0.6f, stalk);
+                        // a seed head: a slim pale tassel drooping from the top (a dark diamond read as a cut-out)
+                        Vector3 droopTo = tip + ((tip - root0).normalized * 0.04f + outward * 0.07f + Vector3.down * 0.05f), side = edge * 1.6f;
+                        Color seed = Color.Lerp(stalk, new Color(0.85f, 0.78f, 0.62f), 0.5f);
+                        gb.TriColors(tip - side, tip + side, droopTo, seed, seed, seed * 0.9f);
+                    }
+                }
+                else
+                {
+                    for (int bl = 0; bl < blades; bl++)
+                    {
+                        float a = Rs(0f, Mathf.PI * 2f), lean = Rs(0.15f, 1.3f), tall = tallest * Rs(0.35f, 1f);
+                        var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                        var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.006f, 0.014f);
+                        Vector3 root0 = foot + outward * Rs(0f, 0.1f), tip = root0 + Vector3.up * tall + outward * (tall * lean);
+                        Color blade = Color.Lerp(straw, dryStraw, Rs(0f, 1f));
+                        gb.TriColors(root0 - edge, root0 + edge, tip, blade * 0.55f, blade * 0.55f, Color.Lerp(blade, new Color(0.92f, 0.86f, 0.7f), 0.45f));      // dark at the root, bleached at the tip; drawn from both sides (Cull off)
+                    }
+                }
+                scatterModels.Add(("Grass " + gv, gb, true));
+            }
+            void PlaceStone(Vector2 at, float radius)
+            {
+                scatterPlaces.Add((firstStone + random.Next(StoneModels), World(at, 0f), Quaternion.Euler(0f, Rs(0f, 360f), 0f), radius));
             }
             for (float z = Z0 + 2f; z < Z1; z += 2f)
                 for (float x = X0 + 2f; x < X1; x += 2f)
@@ -1894,70 +1982,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
                             }
                         lumps++;
                     }
-                    if (!litter.TryGetValue(region, out MeshBuilder mb)) { mb = litter[region] = new MeshBuilder(); grass[region] = new MeshBuilder(); }
-                    MeshBuilder gb = grass[region];
                     float patch = Mathf.PerlinNoise(p.x * 0.05f + 5.9f, p.y * 0.05f + 77.3f);
                     // the wrack line: a band of driftwood and pebbles where the last high water left them
                     bool wrack = onSand && height[k] > 0.4f && height[k] < 0.8f;
                     float tuftChance = wrack ? 0.03f : (onSand ? 0.1f : 0.07f + 0.26f * Smooth((patch - 0.48f) / 0.2f) * (height[k] < 45f ? 1f : 0.3f)) * byPath;
                     if (roll2 < tuftChance)
                     {
-                        // dry grass: a few tussocks standing through the snow, each a spray of blades
+                        // dry grass: a few tussocks standing through the snow
                         int clumps = random.Next(2, 6);
                         for (int c = 0; c < clumps; c++)
                         {
                             Vector2 at = p + new Vector2(Rs(-0.9f, 0.9f), Rs(-0.9f, 0.9f));
-                            Vector3 foot = On(at, -0.04f);
-                            int blades = random.Next(20, 36);      // a full clump of thin blades, not a few flat ones
-                            float tallest = Rs(0.14f, 0.75f);
-                            int kind = random.Next(3);      // three kinds: stiff upright blades, arching grass, and seed stalks
-                            if (kind == 1)
-                            {
-                                for (int bl = 0; bl < blades; bl++)
-                                {
-                                    float a = Rs(0f, Mathf.PI * 2f), tall = tallest * Rs(0.4f, 0.9f);
-                                    var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                                    var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.008f, 0.016f);
-                                    Vector3 root0 = foot + outward * Rs(0f, 0.08f);
-                                    Vector3 bend = root0 + Vector3.up * tall * 0.75f + outward * tall * Rs(0.2f, 0.45f);
-                                    Vector3 tip = bend + Vector3.down * tall * Rs(0.2f, 0.5f) + outward * tall * Rs(0.35f, 0.6f);
-                                    Color blade = Color.Lerp(straw, dryStraw, Rs(0f, 1f));
-                                    Color bleached = Color.Lerp(blade, new Color(0.92f, 0.86f, 0.7f), 0.45f);
-                                    gb.TriColors(root0 - edge, root0 + edge, bend + edge * 0.6f, blade * 0.55f, blade * 0.55f, blade);
-                                    gb.TriColors(root0 - edge, bend + edge * 0.6f, bend - edge * 0.6f, blade * 0.55f, blade, blade);
-                                    gb.TriColors(bend - edge * 0.6f, bend + edge * 0.6f, tip, blade, blade, bleached);
-                                }
-                                tufts++;
-                                continue;
-                            }
-                            if (kind == 2)
-                            {
-                                int stalks = random.Next(6, 14);
-                                for (int bl = 0; bl < stalks; bl++)
-                                {
-                                    float a = Rs(0f, Mathf.PI * 2f), tall = tallest * Rs(0.9f, 1.5f);
-                                    var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                                    var edge = new Vector3(-outward.z, 0f, outward.x) * 0.006f;
-                                    Vector3 root0 = foot + outward * Rs(0f, 0.12f), tip = root0 + Vector3.up * tall + outward * tall * Rs(0.05f, 0.3f);
-                                    Color stalk = Color.Lerp(straw, dryStraw, Rs(0f, 1f)) * 0.8f;
-                                    gb.TriColors(root0 - edge, root0 + edge, tip, stalk * 0.6f, stalk * 0.6f, stalk);
-                                    // a seed head: a slim pale tassel drooping from the top (a dark diamond read as a cut-out)
-                                    Vector3 droopTo = tip + ((tip - root0).normalized * 0.04f + outward * 0.07f + Vector3.down * 0.05f), side = edge * 1.6f;
-                                    Color seed = Color.Lerp(stalk, new Color(0.85f, 0.78f, 0.62f), 0.5f);
-                                    gb.TriColors(tip - side, tip + side, droopTo, seed, seed, seed * 0.9f);
-                                }
-                                tufts++;
-                                continue;
-                            }
-                            for (int bl = 0; bl < blades; bl++)
-                            {
-                                float a = Rs(0f, Mathf.PI * 2f), lean = Rs(0.15f, 1.3f), tall = tallest * Rs(0.35f, 1f);
-                                var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                                var edge = new Vector3(-outward.z, 0f, outward.x) * Rs(0.006f, 0.014f);
-                                Vector3 root0 = foot + outward * Rs(0f, 0.1f), tip = root0 + Vector3.up * tall + outward * (tall * lean);
-                                Color blade = Color.Lerp(straw, dryStraw, Rs(0f, 1f));
-                                gb.TriColors(root0 - edge, root0 + edge, tip, blade * 0.55f, blade * 0.55f, Color.Lerp(blade, new Color(0.92f, 0.86f, 0.7f), 0.45f));      // dark at the root, bleached at the tip; drawn from both sides (Cull off)
-                            }
+                            scatterPlaces.Add((firstGrass + random.Next(3 * GrassHeights), World(at, 0f), Quaternion.Euler(0f, Rs(0f, 360f), 0f), Rs(0.7f, 1.3f)));
                             tufts++;
                         }
                     }
@@ -1965,31 +2001,27 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     {
                         // a fallen stick, half sunk, with a twig or two; its top takes the snow
                         // (each end lies on the ground where it is, so a stick never juts out of a slope or hovers over a dip)
-                        float a = Rs(0f, Mathf.PI * 2f), length = Rs(0.4f, 1.4f), thick = Rs(0.012f, 0.03f);
+                        float a = Rs(0f, Mathf.PI * 2f), length = Rs(0.4f, 1.4f);
                         var lie = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * length * 0.5f;
-                        Vector3 a0 = On(p - lie, thick * 0.2f), a1 = On(p + lie, thick * 0.2f + Rs(0f, 0.05f));
-                        Vector3 dir = (a1 - a0).normalized;
-                        Stick(mb, a0, a1, thick);
-                        int twigs = random.Next(0, 3);
-                        for (int tw = 0; tw < twigs; tw++)
-                        {
-                            Vector3 fork = Vector3.Lerp(a0, a1, Rs(0.3f, 0.8f));
-                            Vector3 off = Quaternion.Euler(0f, Rs(25f, 60f) * (tw % 2 == 0 ? 1f : -1f), 0f) * dir;
-                            Stick(mb, fork, fork + (off + Vector3.up * Rs(0.1f, 0.5f)).normalized * length * Rs(0.2f, 0.4f), thick * 0.5f);
-                        }
+                        Vector3 a0 = World(p - lie, 0.005f), a1 = World(p + lie, 0.005f + Rs(0f, 0.05f));
+                        Vector3 stickAlong = a1 - a0;
+                        var stickFlat = new Vector3(stickAlong.x, 0f, stickAlong.z);
+                        // (yaw then pitch, so a model's twigs stay on its upper side)
+                        Quaternion turn = Quaternion.LookRotation(stickFlat.normalized, Vector3.up) * Quaternion.Euler(0f, -90f, 0f) * Quaternion.Euler(0f, 0f, Mathf.Atan2(stickAlong.y, stickFlat.magnitude) * Mathf.Rad2Deg);
+                        scatterPlaces.Add((firstStick + random.Next(StickModels), (a0 + a1) * 0.5f, turn, stickAlong.magnitude));
                         sticks++;
                     }
                     else if (roll2 < tuftChance + (wrack ? 0.55f : onSand ? 0.2f : 0.085f * byPath))
                     {
                         // a stone's top showing, its crown catching snow
-                        Stone(mb, p, Rs(0.06f, 0.17f));      // small: anything bigger is the game's own textured rock
+                        PlaceStone(p, Rs(0.06f, 0.17f));      // small: anything bigger is the game's own textured rock
                         stones++;
                     }
                     else if (roll2 < tuftChance + (wrack ? 0.85f : onSand ? 0.32f : 0.105f * byPath))
                     {
                         // a patch of pebbles
                         int pebbles = random.Next(5, 12);
-                        for (int pb = 0; pb < pebbles; pb++) Stone(mb, p + new Vector2(Rs(-0.7f, 0.7f), Rs(-0.7f, 0.7f)), Rs(0.04f, 0.11f));
+                        for (int pb = 0; pb < pebbles; pb++) PlaceStone(p + new Vector2(Rs(-0.7f, 0.7f), Rs(-0.7f, 0.7f)), Rs(0.04f, 0.11f));
                         stones += pebbles;
                     }
                 }
@@ -2017,9 +2049,47 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Piece drifts = b.MeshPiece("Drifts " + kv.Key, lumpMesh, lumpMaterial, false);
                 drifts.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;      // they are the ground: no shadow of their own
             }
-            foreach (var kv in litter) if (kv.Value.VertexCount > 0) b.MeshPiece("Litter " + kv.Key, kv.Value.ToMesh(), litterMaterial, false);
-            foreach (var kv in grass) if (kv.Value.VertexCount > 0) b.MeshPiece("Grass " + kv.Key, kv.Value.ToMesh(), grassMaterial, false);
-            Debug.Log("[BWM] Winter Isle scatter: " + lumps + " drifts, " + tufts + " tussocks, " + sticks + " sticks, " + stones + " stones and pebbles, in " + lumpVerts.Count + " districts");
+            // The models ride in the pack switched off, as the firs' do ("Scatter Models"); their materials are set
+            // up for instancing, which keeps the shader's instanced variants in the pack. Nothing here casts a shadow:
+            // at their size it is not missed.
+            litterMaterial.enableInstancing = true; grassMaterial.enableInstancing = true;
+            var scatterHolder = new GameObject("Scatter Models");
+            scatterHolder.transform.SetParent(b.Root.transform, false);
+            scatterHolder.transform.localPosition = new Vector3(landing.x - root.x, -60f - root.y, landing.y - root.z);
+            scatterHolder.SetActive(false);
+            foreach (string guid in UnityEditor.AssetDatabase.FindAssets("t:Mesh", new[] { "Assets/Puzzles/WinterIsle/Meshes" }))
+            {
+                string oldMesh = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);      // the merged meshes of earlier builds
+                string oldName = System.IO.Path.GetFileNameWithoutExtension(oldMesh);
+                if (oldName.StartsWith("Grass ") || oldName.StartsWith("Litter ")) UnityEditor.AssetDatabase.DeleteAsset(oldMesh);
+            }
+            for (int sm = 0; sm < scatterModels.Count; sm++)
+            {
+                var go = new GameObject("Scatter Model " + scatterModels[sm].name);
+                go.transform.SetParent(scatterHolder.transform, false);
+                go.AddComponent<MeshFilter>().sharedMesh = b.SaveMesh("Scatter " + scatterModels[sm].name, scatterModels[sm].mesh.ToMesh());
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = scatterModels[sm].grass ? grassMaterial : litterMaterial;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            // WinterIsle.scatter: "BWSC", version, the models' names, then each place: model, position, turn, scale
+            string scatterFile = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.scatter"));
+            using (var w = new System.IO.BinaryWriter(System.IO.File.Create(scatterFile)))
+            {
+                w.Write(new[] { (byte)'B', (byte)'W', (byte)'S', (byte)'C' }); w.Write(1);
+                w.Write(scatterModels.Count);
+                foreach (var model in scatterModels) { w.Write(model.name); w.Write(model.grass); }
+                w.Write(scatterPlaces.Count);
+                foreach (var place in scatterPlaces)
+                {
+                    w.Write((byte)place.model);
+                    w.Write(place.at.x); w.Write(place.at.y); w.Write(place.at.z);
+                    w.Write((short)Mathf.RoundToInt(place.turn.x * 32767f)); w.Write((short)Mathf.RoundToInt(place.turn.y * 32767f));
+                    w.Write((short)Mathf.RoundToInt(place.turn.z * 32767f)); w.Write((short)Mathf.RoundToInt(place.turn.w * 32767f));
+                    w.Write(place.scale);
+                }
+            }
+            Debug.Log("[BWM] Winter Isle scatter: " + lumps + " drifts, " + tufts + " tussocks, " + sticks + " sticks, " + stones + " stones and pebbles; " + scatterModels.Count + " models and " + scatterPlaces.Count + " places written to " + scatterFile + "; drifts in " + lumpVerts.Count + " districts");
         }
 
         // 8. Ice: the lake, and the creek above and below it (sheets just over the beds players walk on)
@@ -2125,7 +2195,10 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 part.AddComponent<MeshFilter>().sharedMesh = l == 0 ? model.near : model.far;
                 var rend = part.AddComponent<MeshRenderer>();
                 rend.sharedMaterial = model.material;
-                lods[l] = new LOD(l == 0 ? 0.012f : 0.002f, new Renderer[] { rend });      // (the far version showed at mid distance as grey-green and bare)
+                // the far version from about 300 m (a 15 m fir at the game's Very High LOD bias, 1.5), gone past about
+                // 2.6 km: the near one's needle sprays cost most of the island's frame time (2026-11-22: 137 fps at the
+                // east lowland with the old 0.012 / 0.002, 149 at these; the far one now reads the same at that range)
+                lods[l] = new LOD(l == 0 ? 0.045f : 0.0075f, new Renderer[] { rend });
             }
             go.AddComponent<LODGroup>().SetLODs(lods);
             CapsuleCollider trunk = go.AddComponent<CapsuleCollider>();
@@ -2988,6 +3061,36 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         b.Empty("Debug Teleport", topAt.x - root.x, topAt.y - root.z, top + 2f - root.y, false);
         Sdk.Set(b.Puzzle, "debugTeleport", b.Root.transform.Find("Debug Teleport"));
+
+        // Meshes that are only drawn are kept on the graphics card alone. A mesh left "readable" also stays in main
+        // memory in the game, a second copy. Colliders and particle systems read theirs, so those stay as they are.
+        {
+            var read = new HashSet<Mesh>();
+            foreach (MeshCollider mc in b.Root.GetComponentsInChildren<MeshCollider>(true)) if (mc.sharedMesh != null) read.Add(mc.sharedMesh);
+            foreach (ParticleSystem ps in b.Root.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                if (ps.shape.mesh != null) read.Add(ps.shape.mesh);
+                var pr = ps.GetComponent<ParticleSystemRenderer>();
+                if (pr != null && pr.mesh != null) read.Add(pr.mesh);
+            }
+            int drawnOnly = 0; long drawnVertices = 0, readVertices = 0;
+            var seen = new HashSet<Mesh>();
+            foreach (MeshFilter mf in b.Root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Mesh m = mf.sharedMesh;
+                if (m == null || !seen.Add(m)) continue;
+                if (read.Contains(m)) { readVertices += m.vertexCount; continue; }
+                if (!UnityEditor.AssetDatabase.Contains(m) || !UnityEditor.AssetDatabase.GetAssetPath(m).StartsWith("Assets/Puzzles/WinterIsle/")) continue;      // ours only
+                var so = new UnityEditor.SerializedObject(m);
+                var readable = so.FindProperty("m_IsReadable");
+                if (readable == null) continue;
+                readable.boolValue = false;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                UnityEditor.EditorUtility.SetDirty(m);
+                drawnOnly++; drawnVertices += m.vertexCount;
+            }
+            Debug.Log("[BWM] Winter Isle meshes: " + drawnOnly + " only drawn (" + drawnVertices / 1000 + "k vertices, on the graphics card alone), colliders' and particles' " + readVertices / 1000 + "k vertices kept readable");
+        }
 
         int steep = 0, flat = 0, sandy = 0;
         for (int k = 0; k < count; k++)

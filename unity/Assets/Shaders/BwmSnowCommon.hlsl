@@ -52,7 +52,8 @@ BwmSnowDetail BwmSnowDetailOn(float3 positionWS, float viewDistance, float tile)
     float2 uv = (positionWS.xz + positionWS.y * float2(0.37, 0.61)) / tile;
     float3 windN = UnpackNormal(SAMPLE_TEXTURE2D(_BwmWindNormal, sampler_BwmWindNormal, uv));
     float3 windH = SAMPLE_TEXTURE2D(_BwmWindHeight, sampler_BwmWindHeight, uv).rgb;
-    float3 grainN = UnpackNormal(SAMPLE_TEXTURE2D(_BwmGrainNormal, sampler_BwmGrainNormal, uv * (tile / 1.6)));
+    // (the crust map spans 3.2 m: tools/snowtex.py)
+    float3 grainN = UnpackNormal(SAMPLE_TEXTURE2D(_BwmGrainNormal, sampler_BwmGrainNormal, uv * (tile / 3.2)));
     BwmSnowDetail d;
     d.tilt = (windN.xy + grainN.xy * saturate(1.0 - viewDistance / 10.0)) * _BwmSnowMaps;
     d.cavity = lerp(0.5, windH.g, _BwmSnowMaps);
@@ -114,7 +115,7 @@ float3 BwmSnowOn(float3 snowColor, float3 shadeColor, float3 positionWS, float3 
     float3 albedo = BwmSnowAlbedo(snowColor, positionWS, detail.cavity, detail.flats);
     float lit = BwmSnowLight(ns, sunDirection, detail.cavity, up) * sunShadow;
     float3 ambient = SampleSH(ns);
-    float3 color = lerp(BwmSnowShade(shadeColor, ambient) * occlusion, albedo * sunColor, lit);
+    float3 color = BwmSnowShade(shadeColor, ambient) * occlusion + albedo * sunColor * lit;      // sunlight adds to the sky's light
     color += (BwmSnowSheen(ns, v, sunDirection, detail.flats) + BwmSnowGlints(positionWS, ns, v, sunDirection, viewDistance, 70.0, 2.4, 22.0)) * up * sunColor * sunShadow;
     color += pow(1.0 - saturate(dot(ns, v)), 4.0) * 0.18 * (ambient + 0.1) * occlusion;
     return color;

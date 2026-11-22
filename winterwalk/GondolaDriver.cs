@@ -164,6 +164,10 @@ namespace WinterWalk
             return filled >= 5;
         }
 
+        // Stopped cabins and chairs are placed once, not every frame, and The Tree is asked four times a second
+        bool parked;
+        float nextOpenCheck;
+
         void Update()
         {
             using var diag = Diag.Time("gondola");
@@ -175,15 +179,23 @@ namespace WinterWalk
                     nextLook = Time.unscaledTime + 2f;
                     cabins.Clear();
                     treePlinths.Clear();
+                    parked = false; nextOpenCheck = 0f;
                     if (!Find()) return;
                 }
-                bool open;
-                if (isLift) { open = Open; Say(open ? "running" : "waiting for the gondola"); }
-                else
+                bool open = Open;
+                if (Time.unscaledTime >= nextOpenCheck)
                 {
-                    Open = open = ForceOpen || TreeComplete();
-                    if (ForceOpen) State = "running (forced open for testing)";
+                    nextOpenCheck = Time.unscaledTime + 0.25f;
+                    if (isLift) Say(open ? "running" : "waiting for the gondola");
+                    else
+                    {
+                        Open = open = ForceOpen || TreeComplete();
+                        if (ForceOpen) State = "running (forced open for testing)";
+                    }
                 }
+                if (open) parked = false;
+                else if (parked) return;
+                else parked = true;
                 if (!open && isLift)
                 {
                     // a stopped chairlift: the chairs hang still at their places along the cable

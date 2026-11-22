@@ -25,11 +25,11 @@ Shader "BWM/Snow"
         _WindStrength ("Wind-carved snow: relief", Range(0, 3)) = 1
         _GrainNormal ("Crust: normals", 2D) = "bump" {}
         _GrainHeight ("Crust: height (R), cavity (G)", 2D) = "gray" {}
-        _GrainTile ("Crust: tile (metres)", Float) = 1.6
+        _GrainTile ("Crust: tile (metres)", Float) = 3.2
         _GrainStrength ("Crust: relief", Range(0, 3)) = 1
         _TrackNormal ("Trodden snow: normals", 2D) = "bump" {}
         _TrackHeight ("Trodden snow: height (R), cavity (G)", 2D) = "gray" {}
-        _TrackTile ("Trodden snow: tile (metres)", Float) = 3
+        _TrackTile ("Trodden snow: tile (metres)", Float) = 6
         _SparkleScale ("Sparkle scale", Float) = 70
         _SparkleAmount ("Sparkle amount", Range(0, 4)) = 2.4
         _SparkleDistance ("Sparkle distance", Float) = 22
@@ -185,12 +185,12 @@ Shader "BWM/Snow"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
+            #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
 
             struct Attributes
@@ -441,12 +441,7 @@ Shader "BWM/Snow"
                     n = normalize(lerp(n, normalize(ground + float3(bn.x, 0, bn.y) * 1.2), earthy * (1.0 - rock)));
                 }
 
-                #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-                    float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
-                #else
-                    float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
-                #endif
-                Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
+                Light sun = BwmSun(positionWS);
 
                 // Light, shade, colour, sheen and glints are the island's shared snow (BwmSnowCommon.hlsl): the snow on
                 // rocks, trees and roofs is lit by the same functions
@@ -460,7 +455,7 @@ Shader "BWM/Snow"
                 float3 snowColor = lerp(lerp(lerp(snowAlbedo, pathAlbedo, path), earth, earthy), rockColor, rock);
                 float3 earthShade = earth * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
                 shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * lerp(float3(1, 1, 1), _ShadeColor.rgb, 0.35) * (ambient * 1.1 + 0.16), rock);      // rock in shade stays grey, not snow-blue
-                float3 color = lerp(shade, snowColor * sun.color, lit);
+                float3 color = shade + snowColor * sun.color * lit;      // sunlight adds to the sky's light: white in the sun, blue in shade (the user, 2026-11-22)
 
                 // Hollows between drifts are a touch bluer; so is every dip in the land, and crests catch more light
                 color = lerp(color, color * float3(0.90, 0.95, 1.0), saturate(0.55 - h0));

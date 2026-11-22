@@ -268,6 +268,9 @@ namespace BwmCompanion
                 case "player": yield return PlayerState(r); break;
                 case "press": { IEnumerator<string> e = InputFake.Press(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "env": yield return Env(); break;
+                case "render": yield return Render(r); break;
+                case "perf": { IEnumerator<string> e = Perf(r); while (e.MoveNext()) yield return e.Current; break; }
+                case "textures": yield return Textures(r); break;
                 case "terrain": yield return TerrainInfo(r); break;
                 case "global": Shader.SetGlobalFloat(r.Str("name"), r.Num("value")); yield return "set global " + r.Str("name") + " = " + F(r.Num("value")); break;
                 case "terrainset": yield return TerrainSet(r); break;
@@ -343,9 +346,13 @@ namespace BwmCompanion
             PlayerCharacter character = player.GetComponent<PlayerCharacter>();
             Rigidbody body = character != null ? character.rb : player.GetComponent<Rigidbody>();
             player.transform.position = target;
+            // &yaw=degrees (0 = +z, 90 = +x): which way the player faces
+            Quaternion facing = r.Has("yaw") ? Quaternion.Euler(0f, r.Num("yaw"), 0f) : player.transform.rotation;
+            if (r.Has("yaw")) player.transform.rotation = facing;
             if (body != null)
             {
                 body.position = target;
+                if (r.Has("yaw")) body.rotation = facing;
                 body.linearVelocity = Vector3.zero;
                 body.angularVelocity = Vector3.zero;
             }
@@ -444,6 +451,80 @@ namespace BwmCompanion
             if (m == null) return "ERROR " + type.Name + " has no " + r.Str("method") + "()";
             object result = m.Invoke(typed, null);
             return "called " + type.Name + "." + m.Name + "()" + (result != null ? " -> " + result : "");
+        }
+
+        // Loaded textures: textures?filter=Snow,Fir,CastIron lists those whose name holds any of the words (size, format,
+        // mips), and sums up the sizes of all the rest (the base game's) for comparison
+        static string Textures(Request r)
+        {
+            string[] words = r.Str("filter", "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            var sb = new StringBuilder();
+            var sizes = new List<int>();
+            int listed = 0;
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<Texture2D>()))
+            {
+                Texture2D t = o.TryCast<Texture2D>();
+                if (t == null || string.IsNullOrEmpty(t.name)) continue;
+                bool ours = words.Any(w => t.name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (ours) { listed++; sb.AppendLine("  " + t.name + " " + t.width + "x" + t.height + " " + t.format + " mips " + t.mipmapCount); }
+                else sizes.Add(Mathf.Max(t.width, t.height));
+            }
+            sizes.Sort();
+            int Count(int min) => sizes.Count(s => s >= min);
+            string spread = sizes.Count == 0 ? "none" : "median " + sizes[sizes.Count / 2] + ", 4096+ " + Count(4096) + ", 2048+ " + Count(2048) + ", 1024+ " + Count(1024) + ", 512+ " + Count(512) + " of " + sizes.Count;
+            return listed + " textures matching '" + r.Str("filter", "") + "':\n" + sb + "all other Texture2Ds, by their longer side: " + spread;
+        }
+
+        // The frame rate here, now: perf?s=3 waits s/2 seconds to settle, then measures s seconds of frames:
+        // "fps 120 (1% low 95, worst 14.2 ms) over 360 frames | camera ... | quality ..."
+        internal static IEnumerator<string> Perf(Request r)
+        {
+            float span = r.Has("s") ? r.Num("s") : 3f;
+            float settle = Time.unscaledTime + span * 0.5f;
+            while (Time.unscaledTime < settle) yield return null;
+            var times = new List<float>();
+            float end = Time.unscaledTime + span;
+            while (Time.unscaledTime < end) { yield return null; times.Add(Time.unscaledDeltaTime); }
+            if (times.Count == 0) { yield return "ERROR no frames"; yield break; }
+            float total = 0f; foreach (float t in times) total += t;
+            var sorted = new List<float>(times); sorted.Sort();
+            float p99 = sorted[Mathf.Clamp((int)(sorted.Count * 0.99f), 0, sorted.Count - 1)];
+            Camera cam = Camera.main;
+            string view = "no camera";
+            if (cam != null)
+            {
+                Vector3 f = cam.transform.forward;
+                view = "camera at " + V(cam.transform.position) + " facing " + F(Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg) + " pitch " + F(Mathf.Asin(Mathf.Clamp(f.y, -1f, 1f)) * Mathf.Rad2Deg);
+            }
+            yield return "fps " + F(times.Count / total) + " (1% low " + F(1f / p99) + ", worst " + F(sorted[sorted.Count - 1] * 1000f) + " ms) over " + times.Count + " frames | " + view + " | quality " + QualitySettings.names[QualitySettings.GetQualityLevel()];
+        }
+
+        // The graphics settings for testing what draws wrong where: render  lists the quality levels and the renderer's
+        // features;  render?quality=2  switches the quality level (as the game's settings would);
+        // render?feature=HBAO&on=0  switches one renderer feature off (1 on) until the next change of level
+        static string Render(Request r)
+        {
+            var sb = new StringBuilder();
+            if (r.Has("quality")) { QualitySettings.SetQualityLevel((int)r.Num("quality"), true); sb.AppendLine("quality level set to " + (int)r.Num("quality")); }
+            // render?awake=1: the local player never falls asleep (so the view holds still between screenshots)
+            if (r.Has("awake")) { PlayerCharacter me = LocalCharacter(); if (me != null && me.sleeper != null) { me.sleeper.preventSleeping = r.Num("awake") > 0.5f; me.sleeper.RecordAction(); sb.AppendLine("player kept awake: " + me.sleeper.preventSleeping); } }
+            int q = QualitySettings.GetQualityLevel();
+            string[] names = QualitySettings.names;
+            sb.AppendLine("quality: " + (q < names.Length ? names[q] : "?") + " (" + q + ") of " + string.Join(", ", names.Select((n, i) => i + " " + n)));
+            var urp = (QualitySettings.renderPipeline ?? UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline)?.TryCast<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>();
+            if (urp == null) return sb.Append("no URP asset").ToString();
+            UnityEngine.Rendering.Universal.ScriptableRendererData data = urp.scriptableRendererData;
+            sb.AppendLine("pipeline " + urp.name + ", renderer " + (data != null ? data.name : "none") + ", render scale " + F(urp.renderScale) + ", shadows " + F(urp.shadowDistance) + " m, soft " + urp.supportsSoftShadows + ", HDR " + urp.supportsHDR + ", MSAA " + urp.msaaSampleCount);
+            if (data == null) return sb.ToString();
+            var features = data.rendererFeatures;
+            for (int i = 0; i < features.Count; i++)
+            {
+                var f = features[i];
+                if (f == null) continue;
+                if (r.Has("feature") && f.name.IndexOf(r.Str("feature"), StringComparison.OrdinalIgnoreCase) >= 0) { f.SetActive(r.Num("on", 1f) > 0.5f); sb.AppendLine("set " + f.name + " " + (f.isActive ? "on" : "off")); }
+                sb.AppendLine("  feature " + f.name + " (" + f.GetIl2CppType().Name + ") " + (f.isActive ? "on" : "off"));
+            }
+            return sb.ToString();
         }
 
         // Which of Enviro's modules this game uses (sky, fog, weather, ...)
@@ -828,6 +909,14 @@ namespace BwmCompanion
         // /active?name=UnfurledMap&nx=..&ny=..&nz=..&on=1   (for looking at things the game keeps hidden)
         static string SetActive(Request r)
         {
+            // active?prefix=Grass%20&on=0 switches every object whose name starts with that (for measuring what costs)
+            if (r.Has("prefix"))
+            {
+                string pre = r.Str("prefix"); int n = 0; bool on = r.Num("on", 1f) > 0.5f;
+                foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>(true))
+                    if (t.name.StartsWith(pre, StringComparison.Ordinal)) { t.gameObject.SetActive(on); n++; }
+                return "switched " + n + " objects named '" + pre + "...' " + (on ? "on" : "off");
+            }
             var near = new Vector3(r.Num("nx"), r.Num("ny"), r.Num("nz"));
             Transform best = null; float bestD = float.MaxValue;
             foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>(true))

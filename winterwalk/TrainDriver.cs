@@ -69,6 +69,7 @@ namespace WinterWalk
         }
         sealed class Train
         {
+            public float PlacedAt = float.NaN, PlaceAgain;      // where its cars were last put, and when to put them again anyway
             public int Index; public Line Line; public Transform[] Cars;
             // the order
             public double T0; public float R0, V0, R1; public double DwellUntil; public int Phase;      // 0 running, 1 at a station, 2 held back
@@ -509,6 +510,8 @@ namespace WinterWalk
             InTunnel = inside;
         }
 
+        float nextOpenCheck, nextNext;
+
         void Update()
         {
             using var diag = Diag.Time("train");
@@ -525,7 +528,7 @@ namespace WinterWalk
                 BindRail();
                 double now = Mirror.NetworkTime.time;
                 bool host = IsHost;
-                Open = ForceOpen || TowerComplete();
+                if (Time.unscaledTime >= nextOpenCheck) { nextOpenCheck = Time.unscaledTime + 0.25f; Open = ForceOpen || TowerComplete(); }
                 if (host)
                 {
                     if (!laidOut) { LayOut(now, Open); wasOpen = Open; Publish(true); }
@@ -550,10 +553,12 @@ namespace WinterWalk
                 {
                     Train t = trains[i];
                     Eval(t, now, out float r, out float v);
-                    Place(t, r);
+                    // (a standing train is placed once: placing is dozens of calls into the game and moves colliders)
+                    if (r != t.PlacedAt || Time.unscaledTime >= t.PlaceAgain) { Place(t, r); t.PlacedAt = r; t.PlaceAgain = Time.unscaledTime + 2f; }
                     if (root == null) return;
-                    if (i == 0)
+                    if (i == 0 && Time.unscaledTime >= nextNext)
                     {
+                        nextNext = Time.unscaledTime + 0.5f;
                         int stop = -1;
                         for (int k = 0; k < t.Line.RingStops.Count; k++) if (Wrap(t.Line.RingStops[k] - r, t.Line.Ring) < 3f || Wrap(r - t.Line.RingStops[k], t.Line.Ring) < 3f) stop = k;
                         Next = "train 0 (" + t.Line.Name + ") " + (t.Phase == 1 ? "at " + (stop >= 0 ? t.Line.RingStopNames[stop] : "a station") + (t.DwellUntil < double.MaxValue * 0.5 ? ", leaving in " + Math.Max(0, t.DwellUntil - now).ToString("0") + " s" : ", waiting for the tower") : t.Phase == 2 ? "held back by the train ahead" : "running at " + v.ToString("0.0") + " m/s, " + r.ToString("0") + " m round");

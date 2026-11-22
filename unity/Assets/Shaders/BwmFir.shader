@@ -86,12 +86,12 @@ Shader "BWM/Fir"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
+            #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
 
             struct Attributes
@@ -176,18 +176,13 @@ Shader "BWM/Fir"
                         * smoothstep(0.6, 0.72, Noise3(positionWS * float3(5, 2.2, 5) + 3.1)) * (bark ? 1.0 : 0.0));      // (in small patches: a full strip read as a white stripe down the trunk)
                 if (core) snow = 0.75 * smoothstep(0.2, 0.6, geometric.y + (clumps - 0.5) * 0.4);      // (the distant version's crown takes snow too, or it reads dark green beside the snowy near trees)
 
-                #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-                    float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
-                #else
-                    float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
-                #endif
-                Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
+                Light sun = BwmSun(positionWS);
                 float ndl = dot(n, sun.direction);
                 float lit = saturate(ndl * 0.6 + 0.4) * sun.shadowAttenuation;
                 float through = spray ? saturate(-ndl) * _Translucency * (1.0 - snow) * sun.shadowAttenuation : 0.0;
                 float3 ambient = SampleSH(n);
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.14) * lerp(0.6, 1.0, depth);
-                float3 color = lerp(shade, albedo * sun.color, lit) + needles * sun.color * through;
+                float3 color = shade + albedo * sun.color * lit + needles * sun.color * through;      // sunlight adds to the sky's light
                 // the snow itself, lit as all the island's snow is (BwmSnowCommon); deep in the crown it is in shade
                 color = lerp(color, BwmSnowOn(_SnowColor.rgb, _SnowShade.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, lerp(0.6, 1.0, depth)), snow);
                 albedo = lerp(albedo, _SnowColor.rgb, snow);      // for the lamps

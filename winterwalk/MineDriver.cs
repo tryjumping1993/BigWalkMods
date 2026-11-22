@@ -308,6 +308,11 @@ namespace WinterWalk
             }
         }
 
+        // While the mine is closed the mantrips stand still: they are placed once, not every frame (each placing is
+        // several calls into the game and moves colliders), and the tower is asked four times a second
+        bool parked;
+        float nextOpenCheck;
+
         void Update()
         {
             using var diag = Diag.Time("mine");
@@ -322,15 +327,22 @@ namespace WinterWalk
                     trips.Clear();
                     plinths.Clear();
                     dressed = false;
+                    parked = false; nextOpenCheck = 0f;
                     if (!Find()) return;
                 }
                 if (!dressed && Time.unscaledTime >= nextDress) { nextDress = Time.unscaledTime + 10f; Dress(); }
-                Open = ForceOpen || TowerComplete();
-                if (ForceOpen) State = "open (forced open for testing)";
-                if (gates != null && gates.activeSelf == Open) gates.SetActive(!Open);
+                if (Time.unscaledTime >= nextOpenCheck)
+                {
+                    nextOpenCheck = Time.unscaledTime + 0.25f;
+                    Open = ForceOpen || TowerComplete();
+                    if (ForceOpen) State = "open (forced open for testing)";
+                    if (gates != null && gates.activeSelf == Open) gates.SetActive(!Open);
+                }
                 // closed: the mantrips stand where the clock's zero puts them
                 double now = Open ? Mirror.NetworkTime.time : 0.0;
-                for (int i = 0; i < trips.Count; i++)
+                bool place = Open || !parked;
+                parked = !Open;
+                for (int i = 0; place && i < trips.Count; i++)
                 {
                     if (trips[i] == null) { tripRoot = null; return; }
                     float t = (float)((now + (double)period * i / trips.Count) % period);

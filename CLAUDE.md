@@ -16,11 +16,12 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
 | `build-all` / `list` | All puzzle definitions. |
 | `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save, capped at 30 fps (`BWM_FPS` overrides, 0 = no cap). Unattended, about 80 s. |
-| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `'press?action=jump'` / `'press?action=crouch,moveY&ms=1500'` (pretends the game's input, Rewired, has those actions held: the test player jumps, crouches and walks as a player would), `player` (the local player's ground, grip, pose, jump and crouch state), `quit`; `game help` lists all. |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `'press?action=jump'` / `'press?action=crouch,moveY&ms=1500'` (pretends the game's input, Rewired, has those actions held: the test player jumps, crouches and walks as a player would), `player` (the local player's ground, grip, pose, jump and crouch state), `render` (quality levels and renderer features; `'render?quality=2'` switches level, `'render?feature=HBAO&on=0'` one feature, `'render?awake=1'` keeps the player from falling asleep so the view holds still), `quit`; `game help` lists all. |
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
-| `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. |
+| `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. `play` and `launch` tell Doorstop on the command line to load the dev profile, so they work even while a players' install sits in the game folder (a plain Steam start then runs the install). |
 | `log` | The puzzle-related lines of the last game run. |
 | `logs [n] [-Full]` | Winter Walk's debug log of the latest session (n = 2 the one before): the header, what became of the session before, warnings, snapshots, marks, slow frames, the last heartbeat. |
+| `release [<version>] [-Notes <file>]` | That zip (default the newest) as a release on the private GitHub repo, tagged `v<version>` at its commit: the user's own versioning. They copy it to Google Drive themselves. |
 | `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 0.9 GB) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
 | (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods\trailer\` (`-Music <wav> -MusicStart 2.4` lays the game's menu theme under it; `menu_theme.py` extracts that from the game). `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
@@ -40,6 +41,10 @@ code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-N
   its sky and light: near the island's box (kept in step with `WinterIslePuzzle.cs` by hand) it blends the
   game's sky system (Enviro) towards winter for that player, and back on the mainland. It also dresses the island
   with the game's rocks and plants (`Dresser.cs`) and keeps the tracks players leave in the snow (`SnowTrails.cs`).
+  The dressing (95,500 copies: 44,000 of our firs, 24,000 game rocks, 27,000 game plants and logs) is drawn by
+  distance: 64 m cells in three tiers, tier 0 within `NearFar` 600 m (big rocks, one tree in ten), tier 1 within
+  `NearMid` 500 m, tier 2 within `NearAll` 200 m (live statics on `Dresser`). With all of it on, the island ran
+  about 20 % slower than the base game, and our firs' near meshes were most of that.
 - `profile\` — the mod profile: BepInEx 6.0.788 (IL2CPP), the SDK mod, the companion and dev helpers
   (UnityExplorer hidden at startup, NoClip, SkipIntro). Builds export to `profile\BepInEx\plugins\BigPuzzleSDK\`.
 - `previews\<Name>-*.png` — editor renders of the last build. `shots\*.png` — screenshots from the real game.
@@ -86,8 +91,16 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **The island's ground** is a 3 m height grid (`height[]`, which paths, sites and the dressing work on) drawn as a
   mesh twice as fine: `HeightAt` is a smooth curve through the grid with crags on steep ground, and the mesh and
   its collider follow it exactly. Use `HeightAt` for anything placed on the ground. On top of it the build lays
-  scatter as merged meshes by district (drifts, tussocks, sticks, stones: section 7b), ice floes in the bays, and
-  the dressing's game rocks and plants. Players' eyes are only 60 cm above the ground, so what lies on the snow
+  drifts as merged meshes by district, the scatter (tussocks, sticks, stones: section 7b), ice floes in the bays, and
+  the dressing's game rocks and plants. The scatter is 23 small models in the pack ("Scatter Models", switched off)
+  and 385,000 places in `WinterIsle.scatter` beside the Winter Walk plugin; `winterwalk\Scatter.cs` draws the ones
+  near the camera instanced (`Graphics.DrawMeshInstanced`; grass within `Scatter.GrassNear` 70 m, sticks and stones
+  within `LitterNear` 50 m, shrinking away over the last 14 m; `Scatter.Off` for tests). A material drawn that way
+  needs `enableInstancing` set in the build, or the shader's instanced variants are left out of the pack. As merged
+  meshes the scatter was 49 million vertices: 4.4 GB of the game's memory and 2 GB of video memory.
+- **Meshes that are only drawn are not readable:** the island's build ends by clearing "readable" on every mesh of
+  its own that no collider or particle system uses, so the game keeps them on the graphics card alone (a readable
+  mesh is also kept in main memory). Other packs' meshes are left readable. Players' eyes are only 60 cm above the ground, so what lies on the snow
   matters more than the view from above suggests. The coast's line is `CoastFull` (points and inlets), sand lies
   only in bays, and dense woods are planted across the trails (`Land.Woods`).
 - **How good is it?** `tools\review\README.md`: matched screenshots of both islands judged by a fresh agent. The
@@ -150,7 +163,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   (High Shelf, Summit). `tools\railnet\graph\route.py` designed the loop (`tools\railnet\spline\route.py` is an
   alternative design); without the network file the old single line (`unity\Land\WinterIsle.rail`, from `tools\railroute.py`)
   is built. The build sorts each line into ground (benched: island step 3c), tunnel (stone portals with hoods over the
-  cut, `InCut`) and trestle, lays the stations, about six trains on the loop and two on the spur (a locomotive and two
+  cut, `InCut`; wherever the ground over a tunnel is under 2 m above its roof across the whole bore, the ground is cut
+  away there too and the stretch roofed as a stone snow gallery, `RailLine.Thin`: 488 m of it, since before that the
+  mountain's ground stood in the bore and blocked trains) and trestle, lays the stations, about six trains on the loop and two on the spur (a locomotive and two
   coaches with eight `PuzzleSeat`s each, a throttle lever in every car), and writes `WinterIsle.railline` beside the
   Winter Walk plugin (`LINE`, `P`, `S`, `TRAIN`, `L` lamp lines). `winterwalk\TrainDriver.cs` runs them at 9 m/s (the
   game's train runs at 3), five minutes at each station, once "Train Plinth 1".."5" hold gourds. **Only the host
@@ -221,8 +236,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Snow surface maps** are generated, not painted: `tools\snowtex.py` (Python with numpy, scipy and Pillow) writes
   tileable height fields and the normal, cavity and mask maps made from them into `unity\Assets\Textures\Snow\`
   (PNGs not committed; `bwm.ps1 build` regenerates them when the script is newer). `SnowWind` is the wind-carved
-  surface (2048 px over 12 m), `SnowGrain` the crust (1024 px over 1.6 m), `SnowTrack` trodden snow with boot
-  prints (1024 px over 3 m). `Kit.SetSnowMaps(material)` gives them to a material; `BWM/Snow` (ground) and
+  surface (2048 px over 12 m), `SnowGrain` the crust (2048 px over 3.2 m), `SnowTrack` trodden snow with boot
+  prints (2048 px over 6 m). Every texture of ours is 2048 or 4096 in game, as the base game's are (median 2048:
+  `game 'textures?filter=Snow,Fir,CastIron'` lists them beside the base game's spread). `Kit.SetSnowMaps(material)` gives them to a material; `BWM/Snow` (ground) and
   `BWM/SnowOverlay` (caps on the game's rocks) use them. Run it with `--preview <dir>` for shaded renders of each
   surface to look at before a build. Change the snow's look there, not with noise in the shader: shader value
   noise gave the blur and the evenly spaced bands the reviews complained of.
@@ -260,6 +276,15 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   `BwmSnowflake.shader` (particles) are the examples. The lit pass must be tagged
   `"LightMode" = "UniversalForwardOnly"`: the game renders deferred, and a pass tagged `UniversalForward`
   draws nothing there. A build fails on shader compile errors.
+- **Sun shadows in our shaders:** never URP's `_MAIN_LIGHT_SHADOWS*` / `_SHADOWS_SOFT*` multi_compiles. A pack only
+  carries the variants our pipeline asset keeps, the game's levels want others (no sun shadows on Very Low and Low,
+  soft Low on Medium, soft High on Very High; all Deferred+), and the nearest variant took everything outside the
+  shadow map as shade: the snow was blue except for a sunlit cream circle round the player above Low, which players
+  read as seeing through it. A lit pass includes `BwmSunShadowKeywords.hlsl` before Lighting.hlsl and
+  `BwmSunShadow.hlsl` after it, and takes the sun from `BwmSun(positionWS)`; Winter Walk sets `_BwmSunShadows` from
+  the quality level in use. (Unity includes a file once per pass, hence two files.) Sunlight adds to the sky's light
+  (`shade + albedo * sun.color * lit`), never replaces it: the user chose bright white snow in sun, blue in shade
+  (2026-11-22). Replacing made sunlit snow a dull sandy beige no brighter than shade.
 - The first build finds the nearest flat, clear ground to the spawn rooms that is not near another puzzle and
   remembers it in `Assets\Puzzles\<Name>\site.json`; edit that file, or override `FixedSite` / `Near` / `Yaw`.
 
@@ -278,6 +303,33 @@ textures and meshes), a shader check 25 s into a walk (for "see-through ground")
 copies (floating, buried, over nothing). F8 (`MarkKey`) marks a moment with a screenshot and both counts;
 `game 'set?path=WinterWalk.DiagDriver.TestMark&value=true'` does it without a keyboard. Players send
 `Send-Logs.cmd` (in the zip) output: one zip on their Desktop. Config `[Debug]` in `bwm.winterwalk.cfg`.
+
+## Measuring performance
+
+`tools\perf\measure.ps1 [-Island orig|winter|both]` does the whole comparison from the running game: each review
+viewpoint in turn (hour set, uncapped, Very High), then the process's memory and video memory (Windows' "GPU Process
+Memory" counters); `tools\perf\walk.ps1 -Route "x,z;x,z" [-Sprint] [-Start "x,y,z"]` walks the test player there
+with the game's own input (forward, sprint, jump; it only turns by teleporting in place) and reports distance, frame
+times and where it got stuck (it walks straight at each point, so trees and rocks stop it often). Both append to
+`logs\perf-measure.log`. For the base game alone, move the `.puzzlepack` files out of the profile for one run.
+On 2026-11-22: base game 9.4 GB private, 8.3 GB in RAM, 5.6 GB video memory, 153-158 fps; with the island before
+the scatter change 16.1 / 12.0 / 8.5 GB and 147 fps on the island; after it 11.7 / 9.7 / 6.4 GB and 148.5 fps (the
+island's pack 221 MB, from 856). The slowest viewpoint (w1, 109-117 fps) looks at the plaza: the dressing is 14 fps
+of it, the rest is the plaza's puzzles.
+
+**Winter Walk's own time** (the heartbeat's "Winter Walk x ms/frame") was 0.45 ms and is 0.2: every method of a
+game type called from the plugin, even `Vector2.Distance`, `Mathf.Sqrt` or a `Vector3` constructor, is a call into
+the game, so loops use plain floats and `System.Math`; stopped trains, cabins and mantrips are placed once, not every
+frame; towers are asked four times a second; the weather runs five times a second.
+
+`game 'perf?s=5'` waits s/2 seconds, then measures s seconds of frames (mean fps, 1 % low, worst frame, where the
+camera looks). `teleport?x=..&y=..&z=..&yaw=..` faces the player; `active?prefix=Grass%20&on=0` switches every object
+whose name starts so (to see what something costs); `Dresser.TestHide` 1/2/3 hides our firs / the game's plants /
+rocks. Measure uncapped (`set?path=UnityEngine.Application.targetFrameRate&value=-1`, then back to 30), at Very High
+(`render?quality=4`), and **set the hour (`time?hour=13`) before every reading**: a game day is 15 real minutes, and
+without it readings drifted by 15 fps as the sun and the night came round. This PC tops out at about 163 fps. The
+review viewpoints (`tools\review\review-viewpoints.txt`, twelve on each island) are the comparison set; on
+2026-11-22, warmed and in two passes, the base game averaged 153.7 fps and the island 142.9 before the fir LOD change.
 
 ## Testing
 
@@ -350,20 +402,19 @@ each time, and do not commit broken or half-built states.
 - Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
   material on the test island and causeway does not. Cause unknown.
 - `ClearGround` leaves dark flat patches where some boulders were.
-- Releases are private (user, 2026-11-21): the repo stays private, and the players' zip goes in the user's Google Drive
-  (`D:\My Drive\Big Christmas Walk\`, synced by Drive for desktop); the user shares it by link. Never make the repo
-  public.
+- Releases are private (user, 2026-11-21): the repo stays private. Each players' zip becomes a release on the private
+  GitHub repo (`bwm.ps1 release`; the first, `v2026.11.21-d565e2a`); the user copies it to their Google Drive
+  (`D:\My Drive\Big Christmas Walk\`) and shares it by link as they see fit. Never make the repo public.
 - Nothing has been tested with two players.
 - Found by the debug log on 2026-11-21, not yet fixed:
   - The "BWM Test" save loads the player into the game's spawn room at (-242, 37, -485) with no collider beneath (not
     even terrain within 500 m) and holds them there, off the ground, unable to jump. Suspect the dev profile's
     SkipIntro (players' installs do not have it): try without it.
-  - Memory: 16 GB private, 11-12 GB in RAM in a walk; 55 million mesh vertices, most in the island's "Grass N"
-    scatter meshes (about a million vertices each, readable, so kept twice; `WinterIslePuzzle.cs` section 7b).
-  - Drawing: the island's dressing is ~201,000 renderers (rocks, firs, plants; 196,000 cast shadows); seen from the
-    summit, 162,000 of them are over 1 km away. Unity reports every renderer in the world as visible (`isVisible` is
-    no guide), so how many are really drawn is not measured. The user finds it slow looking at the mountain (not
-    reproduced at the 30 fps cap on this PC) and suggests fog that hides it until within about 50 m.
+  - Memory: fixed 2026-11-22 (the scatter drawn instanced, drawn-only meshes not readable: see "Measuring
+    performance"). What is left over the base game (2.3 GB private, 0.8 GB video memory) is mostly the dressing's
+    95,500 copies (283,000 game objects), the colliders' meshes and our textures.
+  - Drawing: fixed 2026-11-22 by drawing the dressing by distance (see `winterwalk\`) and moving our firs' far LOD to
+    about 300 m. Unity reports every renderer as visible (`isVisible` is no guide); measure frame rates instead.
   - Dressing: 27 copies float 0.6 m or more over what is under them (some over the sea or a tunnel cut), 25 stand
     over open sea with nothing under them (near -1817, -2497), 2,749 rocks lie wholly under the ground.
   - Jagged spikes at the rail tunnels' mouths (a tester's screenshot, 2026-11-21): snow-shaded, one-sided triangles
@@ -374,7 +425,8 @@ each time, and do not commit broken or half-built states.
     on steep ground). Separately, 72 dressing rocks reach
     into the rail tunnels or the mine (the biggest 47-59 m granite cliffs through "Mine Walls", e.g. -940, 13, -1158;
     by their boxes, so some may be near misses).
-  - Seeing through our shaders (the snow most) on quality settings above Low, with a large slowdown (the user,
-    2026-11-21). Every level renders Deferred+ (no depth priming), so the difference is another per-level setting:
-    the debug log writes the full pipeline settings and renderer features at each walk and on every change of
-    graphics settings; compare a Low session with a Medium one. Slowness only shows uncapped (not at the 30 fps cap).
+  - Fixed 2026-11-22: seeing through our snow above Low (the shadow variants: see "Sun shadows in our shaders"), the
+    slowdown above Low (the island's grass and litter scatter, about a million vertices a district, cast shadows into
+    four cascades; now they cast none: uncapped 162-163 fps at Low, Medium and Very High at the summit on this PC's
+    RTX 4090, so friends' weaker GPUs are the real test), and ground in the train tunnels (snow galleries; a probe
+    from inside every third tunnel point, `look` along the bore at 2.5 m, found them clear).

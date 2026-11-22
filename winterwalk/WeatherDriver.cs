@@ -18,6 +18,8 @@ namespace WinterWalk
     {
         public WeatherDriver(IntPtr ptr) : base(ptr) { }
 
+        public static float Night;           // 0 day .. 1 night: how far the island's lights are lit
+        public static float ForceNight = -1f;      // for tests: 0..1 holds the lights there, -1 lets go
         public static float Blizzard;        // 0 none .. 1 full
         public static float Mist;            // 0..1: how much the fog is thickened by the hour
         public static float Cloud;           // 0..1: extra cloud by the hour
@@ -58,11 +60,15 @@ namespace WinterWalk
             return strength;
         }
 
+        float nextWeather;
+
         void Update()
         {
             using var diag = Diag.Time("weather");
             try
             {
+                if (Time.unscaledTime < nextWeather) return;      // five times a second: the weather turns slowly
+                nextWeather = Time.unscaledTime + 0.2f;
                 Enviro.EnviroManager env = Enviro.EnviroManager.instance;
                 if (env == null || env.Time == null) { State = "no sky"; return; }
                 float hour = env.Time.Settings.timeOfDay;
@@ -78,6 +84,11 @@ namespace WinterWalk
                 Blizzard = ForceBlizzard >= 0f ? Mathf.Clamp01(ForceBlizzard) : BlizzardAt(clock);
                 Gloom = Mathf.Clamp01(Blizzard * 0.75f + Mist * 0.15f);
                 Shader.SetGlobalFloat("_BwmBlizzard", Blizzard);
+                // how far the island's lights are lit: up through dusk (17 to 19 h), down through dawn (5.5 to 7.5 h), and
+                // half lit in a blizzard's gloom. The light strings, the fog's glow and the lights' pools on the snow read it.
+                float lit = ForceNight >= 0f ? Mathf.Clamp01(ForceNight) : Mathf.Max(Mathf.Max(Smooth((hour - 17f) / 2f), 1f - Smooth((hour - 5.5f) / 2f)), Blizzard * 0.5f);
+                Night = lit;
+                Shader.SetGlobalFloat("_BwmNight", lit);
 
                 // the driving snow: on the island only (it follows the camera as the snowfall does), not underground
                 if (Time.unscaledTime >= nextLook && (snowfall == null || blizzardSnow == null))

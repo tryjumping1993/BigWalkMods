@@ -18,7 +18,7 @@ Shader "BWM/SnowOverlay"
         _WindTile ("Wind-carved snow: tile (metres)", Float) = 5
         _GrainNormal ("Crust: normals", 2D) = "bump" {}
         _GrainHeight ("Crust: height (R), cavity (G)", 2D) = "gray" {}
-        _GrainTile ("Crust: tile (metres)", Float) = 1.6
+        _GrainTile ("Crust: tile (metres)", Float) = 3.2
         _AlphaTex ("Cut-out source (foliage)", 2D) = "white" {}
         _Cutoff ("Cut-out threshold", Range(0, 1)) = 0
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull (0 off for leaves, 2 back for solids)", Float) = 2
@@ -78,10 +78,10 @@ Shader "BWM/SnowOverlay"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
+            #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
 
             struct Attributes
@@ -140,12 +140,7 @@ Shader "BWM/SnowOverlay"
                 cover = smoothstep(0.38, 0.62, cover + (Noise3(positionWS * 14.0) - 0.5) * 0.2 + (detail.cavity - 0.5) * 0.3 + grainN.x * 0.15);
                 if (cover < 0.01) discard;
 
-                #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-                    float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
-                #else
-                    float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
-                #endif
-                Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
+                Light sun = BwmSun(positionWS);
                 // lit as all the island's snow is (BwmSnowCommon); the cap is thinner, so a little darker, at its edge
                 float3 color = BwmSnowOn(_SnowColor.rgb, _ShadeColor.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, 1.0)
                     * lerp(0.86, 1.0, cover);

@@ -731,7 +731,9 @@ namespace WinterWalk
                 + " | gondola " + GondolaDriver.State
                 + " | dinosaurs " + DinoDriver.State + (DinoDriver.Last.Length > 0 ? " (last: " + DinoDriver.Last + ")" : "")
                 + " | weather " + WeatherDriver.State + (WeatherDriver.Blizzard > 0.01f ? ", blizzard " + WeatherDriver.Blizzard.ToString("0.00", CultureInfo.InvariantCulture) : "")
-                + " | snow tracks " + SnowTrails.Tiles + " tiles";
+                + " | snow tracks " + SnowTrails.Tiles + " tiles"
+                + " | dressing " + Dresser.Shown + " of " + Dresser.Made + " shown"
+                + " | scatter " + Scatter.State;
         }
 
         // ---- the heartbeat ----

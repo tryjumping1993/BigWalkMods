@@ -36,6 +36,7 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<DiagDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
+            ClassInjector.RegisterTypeInIl2Cpp<Scatter>();
             ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
             ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
@@ -54,6 +55,7 @@ namespace WinterWalk
             go.AddComponent<DiagDriver>();
             go.AddComponent<SkyDriver>();
             go.AddComponent<Dresser>();
+            go.AddComponent<Scatter>();
             go.AddComponent<SnowTrails>();
             go.AddComponent<SkiDriver>();
             go.AddComponent<GondolaDriver>();
@@ -111,9 +113,31 @@ namespace WinterWalk
 
         static float Smooth(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
 
+        // Our shaders' sun shadows (unity/Assets/Shaders/BwmSunShadow.hlsl) follow the quality level in use: on where it
+        // draws sun shadows, off (all in sun) where it does not, as on Low
+        static int shadowCheckFrame = -1000;
+        static float sunShadows = -1f;
+        static void SunShadows()
+        {
+            if (Time.frameCount - shadowCheckFrame < 30) return;
+            shadowCheckFrame = Time.frameCount;
+            float on = 0f;
+            try
+            {
+                var urp = (QualitySettings.renderPipeline ?? UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline)?.TryCast<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>();
+                on = urp != null && urp.supportsMainLightShadows && urp.shadowDistance > 0f ? 1f : 0f;
+            }
+            catch (Exception) { on = 0f; }
+            if (on == sunShadows) return;
+            sunShadows = on;
+            Shader.SetGlobalFloat("_BwmSunShadows", on);
+            Plugin.L.LogInfo("Winter Walk: sun shadows " + (on > 0f ? "on" : "off") + " in our shaders (quality level " + QualitySettings.GetQualityLevel() + ")");
+        }
+
         void LateUpdate()
         {
             using var diag = Diag.Time("sky");
+            SunShadows();
             try
             {
                 Enviro.EnviroManager env = Enviro.EnviroManager.instance;

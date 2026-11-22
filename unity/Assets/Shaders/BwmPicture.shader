@@ -63,12 +63,12 @@ Shader "BWM/Picture"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
+            #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSunShadow.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tangentOS : TANGENT; float2 uv : TEXCOORD0; half4 color : COLOR; };
             struct Varyings
@@ -115,15 +115,10 @@ Shader "BWM/Picture"
                 float3 v = normalize(GetWorldSpaceViewDir(i.positionWS));
                 float power = exp2(2.0 + gloss * 9.0);      // tighter highlights on glossier things
                 float shine = _Shine * gloss * gloss;
-                #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-                    float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(i.positionWS));
-                #else
-                    float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
-                #endif
-                Light sun = GetMainLight(shadowCoord, i.positionWS, half4(1, 1, 1, 1));
+                Light sun = BwmSun(i.positionWS);
                 float lit = saturate(dot(n, sun.direction) * 0.65 + 0.35) * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
-                float3 outdoors = lerp(albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16), albedo * sun.color, lit);
+                float3 outdoors = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16) + albedo * sun.color * lit;      // sunlight adds to the sky's light
                 outdoors += sun.color * shine * pow(saturate(dot(n, normalize(sun.direction + v))), power) * sun.shadowAttenuation;
                 // the room: a warm light from above and in front, and a little from everywhere
                 float3 room = normalize(TransformObjectToWorldDir(_RoomDir.xyz));

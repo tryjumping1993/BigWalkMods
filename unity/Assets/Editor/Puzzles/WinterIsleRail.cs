@@ -34,6 +34,7 @@ public sealed class RailLine
     public readonly List<string> Names = new List<string>();
     public int[] Kind = new int[0];          // 0 on the ground (benched), 1 tunnel, 2 trestle
     public float[] Inside = new float[0];    // in a tunnel: metres from its nearest mouth
+    public bool[] Thin = new bool[0];        // in a tunnel under too little ground: the ground is cut away and it is roofed in stone
     public int Trains;
     public int N => P.Count;
     public int W(int i) => Closed ? ((i % N) + N) % N : Mathf.Clamp(i, 0, N - 1);
@@ -188,15 +189,40 @@ public static class WinterIsleRail
             }
             // the ground is left out over each tunnel's first 14 m (the portal's stone hood covers the hole)
             foreach (var (mouth, dir) in Mouths(l))
-                for (int k = 0; k < 4; k++)
+                for (int k = 0; k < 4; k++) Cut(l, l.W(mouth + dir * k));
+            // ...and wherever the ground over a tunnel is too thin to clear its roof across the whole bore: the classing
+            // above keeps a tunnel going while the ground over its middle is 7.5 m up and folds dips shorter than 28 m into
+            // it, so on a hillside or in a dip the ground ran through the bore and blocked the line (players, 2026-11-21).
+            // Those stretches are roofed in stone like the portals' hoods (a snow gallery), one point beyond each end.
+            l.Thin = new bool[n];
+            var thin = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                if (l.Kind[i] != 1) continue;
+                Vector2 c = l.Flat(i), along = (l.Flat(i + 1) - l.Flat(i - 1)).normalized, side = new Vector2(along.y, -along.x);
+                float lowest = float.MaxValue;
+                for (float s = -TunnelHalf - 1f; s <= TunnelHalf + 1.01f; s += 1.3f)
                 {
-                    int j = l.W(mouth + dir * k);
-                    Vector2 c = l.Flat(j), along = (l.Flat(j + 1) - l.Flat(j - 1)).normalized, side = new Vector2(along.y, -along.x);
-                    for (float a = -2f; a <= 2.01f; a += 1f)
-                        for (float s = -TunnelHalf - 1f; s <= TunnelHalf + 1.01f; s += 0.75f)
-                            cutCells.Add(CutKey(c + along * a + side * s));
+                    float g = ground(c + side * s);
+                    lowest = Mathf.Min(lowest, float.IsNaN(g) ? -6f : g);
                 }
+                thin[i] = lowest - l.P[i].y < TunnelHigh + CoverNeeded;
+            }
+            for (int i = 0; i < n; i++)
+                if (thin[i]) for (int d = -1; d <= 1; d++) { int j = l.W(i + d); if (l.Kind[j] == 1) l.Thin[j] = true; }
+            for (int i = 0; i < n; i++) if (l.Thin[i]) Cut(l, i);
         }
+    }
+    // Ground a tunnel needs over its roof, across the whole bore, before it is left alone (the mesh between grid
+    // points and the crags on steep ground can stand about a metre off the grid's own heights)
+    const float CoverNeeded = 2f;
+    // leave the ground out round point j of a line, across the bore and a metre beyond (a stone hood covers it)
+    static void Cut(RailLine l, int j)
+    {
+        Vector2 c = l.Flat(j), along = (l.Flat(j + 1) - l.Flat(j - 1)).normalized, side = new Vector2(along.y, -along.x);
+        for (float a = -2f; a <= 2.01f; a += 1f)
+            for (float s = -TunnelHalf - 1f; s <= TunnelHalf + 1.01f; s += 0.75f)
+                cutCells.Add(CutKey(c + along * a + side * s));
     }
     // each tunnel mouth: its first point inside, and which way the tunnel runs from it
     static IEnumerable<(int mouth, int dir)> Mouths(RailLine l)
@@ -287,7 +313,7 @@ public static class WinterIsleRail
         var red = new Color(0.68f, 0.1f, 0.08f); var green = new Color(0.1f, 0.33f, 0.18f); var gold = new Color(0.95f, 0.72f, 0.2f); var cream = new Color(0.9f, 0.86f, 0.76f);
         Vector3 L(Vector3 w) => w - root;
         float Ground(Vector2 p) { float h = heightAt(p); return float.IsNaN(h) ? -6f : h; }
-        int bents = 0, tunnelPoints = 0, portals = 0, stations = 0;
+        int bents = 0, tunnelPoints = 0, portals = 0, stations = 0, galleries = 0;
         var lampsAt = new List<Vector3>();
         var markers = new GameObject("Rail Stations");
         markers.transform.SetParent(b.Root.transform, false);
@@ -406,6 +432,28 @@ public static class WinterIsleRail
                 Kit.LightString(b, "Rail Portal Lights " + (portals + 1), new List<Vector3> { L(pl), L(pr) }, 0.4f, 0.4f, false, false, 700 + portals);
                 portals++;
             }
+            // snow galleries where the ground over a tunnel is thin (Classify cut it away there): a stone roof over the bore
+            // and a wall each side up to the ground on that side, so the hole in the hillside is closed and nothing stands in
+            // the bore (the portals' own hoods cover each tunnel's first 16 m)
+            for (int i = 0; i < l.N - (l.Closed ? 0 : 1); i++)
+            {
+                int i1 = l.W(i + 1);
+                if (!(l.Thin[i] || l.Thin[i1]) || l.Kind[i] != 1 || l.Kind[i1] != 1 || Mathf.Min(l.Inside[i], l.Inside[i1]) < 16f) continue;
+                Vector3 a = l.P[i], z = l.P[i1], mid = (a + z) * 0.5f;
+                Vector3 f = new Vector3(z.x - a.x, 0f, z.z - a.z).normalized, r = Vector3.Cross(Vector3.up, f).normalized;
+                float roofLow = Mathf.Max(a.y, z.y) + TunnelHigh + 0.2f, roofTop = roofLow + 1.3f;
+                float baseY = Mathf.Min(a.y, z.y) - 0.6f, half = (z - a).magnitude * 0.5f + 0.15f;
+                foreach (int sx in new[] { -1, 1 })
+                {
+                    float top = roofTop;
+                    for (float s = TunnelHalf - 1f; s <= TunnelHalf + 3.51f; s += 1.5f)
+                        foreach (Vector3 q in new[] { a, mid, z })
+                            top = Mathf.Max(top, Ground(new Vector2(q.x + r.x * s * sx, q.z + r.z * s * sx)) + 0.4f);
+                    OBox(portal, L(new Vector3(mid.x, (baseY + top) * 0.5f, mid.z) + r * (sx * (TunnelHalf + 1.9f))), r, Vector3.up, f, 1.6f, (top - baseY) * 0.5f, half, stone * 0.9f);
+                }
+                OBox(portal, L(new Vector3(mid.x, (roofLow + roofTop) * 0.5f, mid.z)), r, Vector3.up, f, TunnelHalf + 3.5f, (roofTop - roofLow) * 0.5f, half, stone * 0.86f);
+                galleries++;
+            }
             // stations: a platform beside each track (each side of a single track), a shelter on each, lamps and lights,
             // ramps at the platforms' ends
             for (int s = 0; s < l.Stops.Count; s++)
@@ -483,7 +531,7 @@ public static class WinterIsleRail
             int tun = 0, tre = 0; for (int i = 0; i < l.N; i++) { if (l.Kind[i] == 1) tun++; else if (l.Kind[i] == 2) tre++; }
             report.Append(" ").Append(l.Name).Append(" (").Append(l.Closed ? "loop" : "open").Append(") ").Append(l.N * 4).Append(" m, ").Append(l.Stops.Count).Append(" stations (").Append(string.Join(", ", l.Names)).Append("), ").Append(tun * 4).Append(" m in tunnel, ").Append(tre * 4).Append(" m on trestles, ").Append(l.Trains).Append(" trains;");
         }
-        Debug.Log(report.Append(" ").Append(portals / 2).Append(" tunnels, ").Append(bents).Append(" trestle bents").ToString());
+        Debug.Log(report.Append(" ").Append(portals / 2).Append(" tunnels, ").Append(galleries * 4).Append(" m of snow gallery where the ground over a tunnel is thin, ").Append(bents).Append(" trestle bents").ToString());
     }
 
     // The trains: a red locomotive and two open green coaches each, built facing +z with their middle at the origin

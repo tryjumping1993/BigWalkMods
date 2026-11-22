@@ -71,15 +71,145 @@ namespace WinterWalk
             if (list.Count > 8) list.RemoveAt(list.Count - 1);
         }
 
+        // ---- what is drawn, by distance ----
+        // The copies cost about 6 ms a frame with all of them on (2026-11-22: 84 fps at the east lowland on this PC,
+        // 163 without them; the base game draws its trees through its terrains, far cheaper a tree). So they are
+        // grouped in 64 m cells, each in three tiers: tier 0 within 600 m (big rocks, one tree in ten: the groves
+        // and cliffs keep their outline from across the island), tier 1 within 500 m (middling rocks, two more trees
+        // in ten), tier 2 within 200 m (the rest: small rocks, bushes, most trees). The cells are switched a few a
+        // frame as the camera moves; the island's fog hides most of the thinning.
+        const float CellSize = 64f;
+        public static float NearFar = 600f, NearMid = 500f, NearAll = 200f;      // live settings (the companion can set them: set?path=WinterWalk.Dresser.NearAll&value=200)
+        sealed class Cell { public Vector2 centre; public readonly GameObject[] tier = new GameObject[3]; public readonly bool[] on = { true, true, true }; public readonly int[] count = new int[3]; }
+        readonly Dictionary<long, Cell> cellAt = new Dictionary<long, Cell>();
+        readonly List<Cell> cells = new List<Cell>();
+        readonly List<Transform> copies = new List<Transform>();      // each made copy, beside placedEntry
+        bool culling;
+        int cullCursor;
+        public static int Shown, Made;      // copies switched on now, and in all (for the debug log)
+        public static string Tiers = "";
+
+        // Small copies (bushes, logs, stones under 4 m) cast no shadow: above the game's Low setting every shadow caster in
+        // reach is culled and drawn again for each of four cascades, and theirs are hardly seen (live: SmallShadows)
+        public static bool SmallShadows;
+        bool smallShadowsApplied;
+        readonly List<bool> small = new List<bool>();      // beside copies
+
+        static float SizeOf(GameObject copy)      // the mesh's size: an inactive renderer has no bounds
+        {
+            MeshFilter mf = copy.GetComponentInChildren<MeshFilter>(true);
+            return mf != null && mf.sharedMesh != null ? mf.sharedMesh.bounds.size.magnitude * Mathf.Abs(mf.transform.lossyScale.x) : 1f;
+        }
+        static bool IsSmall(Entry e, float size) => e.kind.StartsWith("fir:") ? false : e.kind.StartsWith("tree:") ? size < 3f : size < 4f;
+
+        // For measuring (the companion: set?path=WinterWalk.Dresser.TestHide&value=1): 1 hides the firs, 2 the game's
+        // plants and logs, 3 the rocks; 0 shows them all again
+        public static int TestHide;
+        int testHidden;
+        static readonly string[] hideKinds = { "", "fir:", "tree:", "rock" };
+        void ApplyTestHide()
+        {
+            for (int i = 0; i < copies.Count && i < placedEntry.Count; i++)
+            {
+                if (copies[i] == null) continue;
+                string kind = entries[placedEntry[i]].kind;
+                bool hide = TestHide > 0 && TestHide < 4 && kind.StartsWith(hideKinds[TestHide]);
+                bool was = testHidden > 0 && testHidden < 4 && kind.StartsWith(hideKinds[testHidden]);
+                if (hide != was) copies[i].gameObject.SetActive(!hide);
+            }
+            testHidden = TestHide;
+        }
+
+        void ApplySmallShadows(bool on)
+        {
+            var mode = on ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+            for (int i = 0; i < copies.Count; i++)
+            {
+                if (!small[i] || copies[i] == null) continue;
+                foreach (Component c in copies[i].GetComponentsInChildren(Il2CppType.Of<Renderer>(), true))
+                {
+                    Renderer r = c.TryCast<Renderer>();
+                    if (r != null && !r.name.Contains("Impostor")) r.shadowCastingMode = mode;
+                }
+            }
+            smallShadowsApplied = on;
+        }
+
+        // Which tier a copy goes in, from its kind and size
+        static int TierOf(Entry e, int index, float size)
+        {
+            if (e.kind.StartsWith("tree:") || e.kind.StartsWith("fir:"))
+            {
+                if (size < 3f) return 2;
+                uint h = (uint)index * 2654435761u;
+                int d = (int)((h >> 16) % 10);
+                return d == 0 ? 0 : d <= 2 ? 1 : 2;
+            }
+            return size >= 12f ? 0 : size >= 4f ? 1 : 2;
+        }
+
+        Transform GroupFor(Entry e, int tier)
+        {
+            int cx = Mathf.FloorToInt(e.at.x / CellSize), cz = Mathf.FloorToInt(e.at.z / CellSize);
+            long key = ((long)cx << 32) ^ (uint)cz;
+            if (!cellAt.TryGetValue(key, out Cell c))
+            {
+                c = new Cell { centre = new Vector2((cx + 0.5f) * CellSize, (cz + 0.5f) * CellSize) };
+                cellAt[key] = c; cells.Add(c);
+            }
+            if (c.tier[tier] == null)
+            {
+                c.tier[tier] = new GameObject("cell " + cx + " " + cz + " tier " + tier);
+                c.tier[tier].transform.SetParent(holder.transform, false);
+            }
+            c.count[tier]++;
+            return c.tier[tier].transform;
+        }
+
+        // A few cells a frame: each tier on or off by the camera's distance to the cell (to its near edge, roughly)
+        void Cull()
+        {
+            Camera cam = Camera.main;
+            if (cam == null || cells.Count == 0) return;
+            Vector3 p = cam.transform.position;
+            int toggles = 0;
+            for (int k = 0; k < 240 && toggles < 12; k++)
+            {
+                Cell c = cells[cullCursor];
+                cullCursor = (cullCursor + 1) % cells.Count;
+                // (plain arithmetic: Vector2.Distance is a call into the game, 240 of them a frame)
+                float ex = p.x - c.centre.x, ez = p.z - c.centre.y;
+                float d = (float)Math.Sqrt(ex * ex + ez * ez) - CellSize * 0.7f;
+                for (int t = 0; t < 3; t++)
+                {
+                    bool want = d < (t == 0 ? NearFar : t == 1 ? NearMid : NearAll);
+                    if (want == c.on[t] || c.tier[t] == null) continue;
+                    c.on[t] = want;
+                    c.tier[t].SetActive(want);
+                    Shown += want ? c.count[t] : -c.count[t];
+                    toggles++;
+                }
+            }
+        }
+
+        void StartCulling()
+        {
+            culling = true; cullCursor = 0;
+            int[] per = new int[3];
+            foreach (Cell c in cells) for (int t = 0; t < 3; t++) per[t] += c.count[t];
+            Tiers = per[0] + " within " + NearFar + " m, " + per[1] + " within " + NearMid + " m, " + per[2] + " within " + NearAll + " m, in " + cells.Count + " cells";
+            Plugin.L.LogInfo("Winter Walk: dressing drawn by distance: " + Tiers);
+        }
+
         void CheckStep()
         {
             if (holder == null) { checkAt = -1; return; }
             Transform h = holder.transform;
-            int n = Mathf.Min(h.childCount, placedEntry.Count);
+            int n = Mathf.Min(copies.Count, placedEntry.Count);
             float budget = Time.realtimeSinceStartup + 0.004f;
             while (checkAt < n && Time.realtimeSinceStartup < budget)
             {
-                Transform c = h.GetChild(checkAt);
+                Transform c = copies[checkAt];
                 Entry e = entries[placedEntry[checkAt]];
                 checkAt++;
                 if (c == null) continue;
@@ -140,6 +270,7 @@ namespace WinterWalk
             if (worstMoved.Count > 0) msg += "\n  moved worst: " + string.Join("; ", worstMoved.ConvertAll(kv => kv.Value));
             if (worstBare.Count > 0) msg += "\n  nothing under (some): " + string.Join("; ", worstBare.ConvertAll(kv => kv.Value));
             if (floating + moved + bodies + inTunnel > 0) Diag.Warn(msg); else Diag.Event(msg);
+            StartCulling();
         }
 
         static float N(string s) => float.Parse(s, CultureInfo.InvariantCulture);
@@ -272,6 +403,17 @@ namespace WinterWalk
             copy.transform.localPosition = e.at;
             copy.transform.localRotation = e.turn;
             copy.transform.localScale = Vector3.one * e.scale;
+            float size = SizeOf(copy);
+            bool isSmall = IsSmall(e, size);
+            copy.transform.SetParent(GroupFor(e, TierOf(e, made, size)), false);      // its cell and tier (all at the origin, like the holder)
+            copies.Add(copy.transform);
+            small.Add(isSmall);
+            if (isSmall && !SmallShadows)
+                foreach (Component c in copy.GetComponentsInChildren(Il2CppType.Of<Renderer>(), true))
+                {
+                    Renderer r = c.TryCast<Renderer>();
+                    if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                }
             if (fir) { copy.SetActive(true); made++; return; }      // our own firs: snow is in their shader
             foreach (Component c in copy.GetComponentsInChildren(Il2CppType.Of<Renderer>(), true))
             {
@@ -322,7 +464,8 @@ namespace WinterWalk
                     }
                 }
                 if (next >= 0) Step();
-                else if (checkAt >= 0 && Time.unscaledTime >= checkFrom) CheckStep();
+                else if (checkAt >= 0) { if (Time.unscaledTime >= checkFrom) CheckStep(); }
+                else if (culling) { Cull(); if (SmallShadows != smallShadowsApplied) ApplySmallShadows(SmallShadows); if (TestHide != testHidden) ApplyTestHide(); }
             }
             catch (Exception ex)
             {
@@ -417,6 +560,7 @@ namespace WinterWalk
             holder.SetActive(false);      // nothing wakes until every copy is cleaned
             next = 0; made = 0; missing = 0;
             placedEntry.Clear(); checkAt = -1;
+            cells.Clear(); cellAt.Clear(); copies.Clear(); small.Clear(); culling = false; Shown = 0; Made = 0; smallShadowsApplied = SmallShadows;
             started = Time.realtimeSinceStartup;
         }
 
@@ -432,7 +576,10 @@ namespace WinterWalk
             if (next < entries.Count) return;
             next = -1;
             holder.SetActive(true);
+            Shown = Made = made;
+            // the debug log's check wants every copy there (rocks on rocks); drawing by distance starts after it
             if (Diag.On.Value) { checkAt = 0; checkFrom = Time.unscaledTime + 5f; floating = moved = bodies = bare = buried = inTunnel = 0; worstFloat.Clear(); worstMoved.Clear(); worstBuried.Clear(); worstBare.Clear(); worstTunnel.Clear(); }
+            else StartCulling();
             Plugin.L.LogInfo("Winter Walk: dressed the island with " + made + " copies (" + missing + " missing) in "
                 + (Time.realtimeSinceStartup - started).ToString("0.0", CultureInfo.InvariantCulture) + " s; "
                 + rocks.Count + " rock kinds, " + trees.Count + " tree kinds and " + firs.Count + " fir models to copy from");

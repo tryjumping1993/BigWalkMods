@@ -6,10 +6,12 @@ Writes into unity/Assets/Textures/Snow/ (not committed; tools/bwm.ps1 regenerate
 older than this script):
     SnowWind_N.png   2048 px over 12 m   normal map: wind-carved surface (sastrugi, ripples, clumps, undulation)
     SnowWind_H.png   2048 px over 12 m   R height, G cavity (0 trough .. 0.5 level .. 1 crest), B scoured flats
-    SnowGrain_N.png  1024 px over 1.6 m  normal map: crust and grains, for the last few metres
-    SnowGrain_H.png  1024 px over 1.6 m  R height, G cavity
-    SnowTrack_N.png  1024 px over 3 m    normal map: trodden snow (packed, lumpy, covered in boot prints)
-    SnowTrack_H.png  1024 px over 3 m    R height, G cavity
+    SnowGrain_N.png  2048 px over 3.2 m  normal map: crust and grains, for the last few metres
+    SnowGrain_H.png  2048 px over 3.2 m  R height, G cavity
+    SnowTrack_N.png  2048 px over 6 m    normal map: trodden snow (packed, lumpy, covered in boot prints)
+    SnowTrack_H.png  2048 px over 6 m    R height, G cavity
+(Grain and track were 1024 px over half the size until 2026-11-22: the same sharpness, now as large as the base game's
+textures and repeating half as often.)
 
 How it is done, as snow materials usually are (one height field, every other map derived from it):
 - every noise is made by spectral synthesis (shaped white noise through an FFT), so each map tiles exactly;
@@ -138,7 +140,7 @@ def wind_surface(n=2048, size=12.0, seed=1224):
     return f, height, ripple_patch
 
 
-def track_surface(n=1024, size=3.0, seed=77):
+def track_surface(n=2048, size=6.0, seed=77):
     """Trodden snow: packed and lumpy, covered in boot prints going both ways, newer ones over older."""
     f = Field(n, size, seed)
     step = size / n
@@ -168,7 +170,7 @@ def track_surface(n=1024, size=3.0, seed=77):
     return f, height
 
 
-def grain_surface(n=1024, size=1.6, seed=2512):
+def grain_surface(n=2048, size=3.2, seed=2512):
     f = Field(n, size, seed)
     crust = f.band(0.018, 0.16, 1.5)                       # a soft crust, gently lumpy
     grains = f.lumps(250.0, 0.004, 0.5)                    # loose grains lying on it, here and there

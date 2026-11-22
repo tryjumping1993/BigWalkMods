@@ -544,6 +544,8 @@ namespace WinterWalk
             go.SetActive(wanted);
         }
 
+        float nextState;
+
         void Update()
         {
             using var diag = Diag.Time("dinosaurs");
@@ -565,7 +567,7 @@ namespace WinterWalk
                 {
                     Vector3 mp = me.transform.position;
                     if (Time.unscaledTime >= nextTowerCheck) { nextTowerCheck = Time.unscaledTime + 1f; CheckTowers(mp); }
-                    float n = MeasureNoise(me);
+                    float n = Night ? MeasureNoise(me) : 0f;      // by day nobody is listening
                     noiseAccum += n * dt;
                     Noise = Mathf.Lerp(Noise, n, Mathf.Clamp01(dt * 2f));
                     if (Time.unscaledTime >= nextReport)
@@ -615,11 +617,15 @@ namespace WinterWalk
                 int outNow = 0;
                 for (int i = 0; i < dinos.Count; i++)
                 {
-                    Show(dinos[i], i, now, dt);
-                    SetOut(dinos[i], Night || dinos[i].mode != 0);
+                    // (one out of sight by day is not moved: it is placed again before it is shown)
+                    bool wanted = Night || dinos[i].mode != 0;
+                    if (wanted || dinos[i].root.gameObject.activeSelf) Show(dinos[i], i, now, dt);
+                    SetOut(dinos[i], wanted);
                     if (dinos[i].root.gameObject.activeSelf) outNow++;
                     if (dinos[i].mode == 1) chasing++;
                 }
+                if (Time.unscaledTime < nextState) return;
+                nextState = Time.unscaledTime + 0.5f;
                 State = dinos.Count + " dinosaurs, " + outNow + " out (" + (Night ? "night" : "day") + "), " + chasing + " chasing" + (Peaceful ? " (peaceful)" : "") + (Present ? "" : " (no DinoControl: this PC runs them alone)");
             }
             catch (Exception e)

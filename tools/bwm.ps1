@@ -3,16 +3,18 @@
 #   tools\bwm.ps1 build-all | list | dump-world | setup
 #   tools\bwm.ps1 launch        start the game with mods (a normal Steam launch stays vanilla)
 #   tools\bwm.ps1 package [<version>]   the players' download and installer (tools\install\Package.ps1)
+#   tools\bwm.ps1 release [<version>] [-Notes <file>]   that zip as a private GitHub release
 #   tools\bwm.ps1 log           the mod loader's lines about puzzles from the last game run
 #   tools\bwm.ps1 logs [n] [-Full]   Winter Walk's debug log of the latest session (n = 2 the one before...)
 # Unity commands run the editor headless and print only the framework's own "[BWM]" lines; the full Unity log
 # is logs\unity-<command>.log. Exit code 0 means the command succeeded.
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('build', 'build-all', 'list', 'dump-world', 'part-metrics', 'survey', 'setup', 'launch', 'log', 'logs', 'companion', 'game', 'play', 'package')]
+    [ValidateSet('build', 'build-all', 'list', 'dump-world', 'part-metrics', 'survey', 'setup', 'launch', 'log', 'logs', 'companion', 'game', 'play', 'package', 'release')]
     [string]$Command,
     [Parameter(Position = 1)][string]$Puzzle,
     [switch]$Full,
+    [string]$Notes,
     [switch]$Resite,
     [switch]$NoPreview,
     [switch]$NoExport,
@@ -26,6 +28,13 @@ $HubApp = 'shell:AppsFolder\UnityTechnologies.UnityHub_2vrhnee42bhxm!UnityHub'
 # Settings for this machine only (not committed), e.g.  $env:BWM_AFFINITY = 'FFFFFFCF'
 $local = Join-Path $Repo 'bwm.local.ps1'
 if (Test-Path $local) { . $local }
+
+# Steam's arguments for a modded start: Doorstop is told on the command line to load the dev profile, so it does
+# even when a players' install (tools\install) has put its own BepInEx in the game folder
+$SteamGameArgs = @('-applaunch', '1478500', '--doorstop-enabled', 'true',
+    '--doorstop-target-assembly', (Join-Path $Repo 'profile\BepInEx\core\BepInEx.Unity.IL2CPP.dll'),
+    '--doorstop-clr-runtime-coreclr-path', (Join-Path $Repo 'profile\dotnet\coreclr.dll'),
+    '--doorstop-clr-corlib-dir', (Join-Path $Repo 'profile\dotnet'))
 
 # Optional, for a machine with a faulty CPU core: BWM_AFFINITY is a hex mask of the logical CPUs Unity and the game
 # may use (FFFFFFCF leaves out CPUs 4 and 5); processes they start inherit it. Unset, nothing changes.
@@ -135,7 +144,7 @@ switch ($Command) {
     'setup' { $out = Invoke-BwmUnity 'SetupProject' @() }
     'launch' {
         if (Get-Process 'Big Walk' -ErrorAction SilentlyContinue) { Set-BwmAffinity (Get-Process 'Big Walk' | Select-Object -First 1); Write-Output 'Big Walk is already running. In game: Ctrl+F2 reloads puzzles, Ctrl+F1 teleports to the dev puzzle.'; exit 0 }
-        Start-Process -FilePath 'C:\Program Files (x86)\Steam\steam.exe' -ArgumentList '-applaunch', '1478500', '--doorstop-enabled', 'true'
+        Start-Process -FilePath 'C:\Program Files (x86)\Steam\steam.exe' -ArgumentList $SteamGameArgs
         # keep the game off a faulty core (BWM_AFFINITY), as play does: Steam starts it, so wait for its process.
         # (2026-11-21: a launch without this crashed with a one-bit-wrong code address after a hardware error on CPU 4)
         if ($env:BWM_AFFINITY) {
@@ -158,7 +167,7 @@ switch ($Command) {
     'play' {
         # Starts the game with mods (if it is not running) and hosts a walk on the dedicated 'BWM Test' save
         if (-not (Get-Process 'Big Walk' -ErrorAction SilentlyContinue)) {
-            Start-Process -FilePath 'C:\Program Files (x86)\Steam\steam.exe' -ArgumentList '-applaunch', '1478500', '--doorstop-enabled', 'true'
+            Start-Process -FilePath 'C:\Program Files (x86)\Steam\steam.exe' -ArgumentList $SteamGameArgs
         }
         $deadline = (Get-Date).AddSeconds(180); $state = ''; $pinned = $false
         while ((Get-Date) -lt $deadline) {
@@ -183,6 +192,19 @@ switch ($Command) {
         $cmd = if ($Puzzle) { $Puzzle } else { 'help' }
         try { (Invoke-WebRequest -Uri ("http://127.0.0.1:17361/" + $cmd) -UseBasicParsing -TimeoutSec 200).Content; exit 0 }
         catch { Write-Output ("The companion did not answer (" + $_.Exception.Message + "). Is the game running with mods?"); exit 1 }
+    }
+    'release' {
+        # A players' zip as a release on the private GitHub repo, for the user's own versioning (they copy it to Google
+        # Drive themselves): bwm.ps1 release [<version>] [-Notes <file>]; without a version, the newest zip
+        $dist = 'Z:\Temp\claude\BigWalkMods\dist'
+        $zip = if ($Puzzle) { Join-Path $dist ("BigChristmasWalk-" + $Puzzle + ".zip") } else { (Get-ChildItem -Path $dist -Filter 'BigChristmasWalk-*.zip' | Sort-Object LastWriteTime | Select-Object -Last 1).FullName }
+        if (-not $zip -or -not (Test-Path $zip)) { Write-Output "No players' zip to release (bwm.ps1 package first)."; exit 1 }
+        $version = [IO.Path]::GetFileNameWithoutExtension($zip).Substring('BigChristmasWalk-'.Length)
+        $commit = (& git -C $Repo rev-parse ($version.Split('-')[-1])).Trim()
+        if ($LASTEXITCODE -ne 0) { Write-Output "The zip's commit ($version) is not in this repo."; exit 1 }
+        $noteArgs = if ($Notes) { @('--notes-file', $Notes) } else { @('--notes', ("Players' download, built from " + $version + ". Unzip, run Install.cmd; see README.txt inside.")) }
+        & gh release create ("v" + $version) $zip --repo tryjumping1993/BigWalkMods --target $commit --title ("Big Christmas Walk " + $version) @noteArgs
+        exit $LASTEXITCODE
     }
     'package' {
         # The players' zip with its installer (tools\install\README.txt is what they read)

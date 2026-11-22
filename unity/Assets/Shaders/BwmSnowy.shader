@@ -62,12 +62,13 @@ Shader "BWM/Snowy"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_instancing      // the island's grass, sticks and stones are drawn instanced (winterwalk/Scatter.cs)
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
-            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
+            #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
 
             struct Attributes
@@ -75,6 +76,7 @@ Shader "BWM/Snowy"
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 half4 color : COLOR;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -89,6 +91,7 @@ Shader "BWM/Snowy"
             Varyings Vert(Attributes v)
             {
                 Varyings o;
+                UNITY_SETUP_INSTANCE_ID(v);
                 VertexPositionInputs p = GetVertexPositionInputs(v.positionOS.xyz);
                 o.positionCS = p.positionCS;
                 o.positionWS = p.positionWS;
@@ -113,18 +116,13 @@ Shader "BWM/Snowy"
                 float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + ragged);
                 float3 albedo = i.color.rgb * _Tint.rgb;
 
-                #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-                    float4 shadowCoord = ComputeScreenPos(TransformWorldToHClip(positionWS));
-                #else
-                    float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
-                #endif
-                Light sun = GetMainLight(shadowCoord, positionWS, half4(1, 1, 1, 1));
+                Light sun = BwmSun(positionWS);
                 float towards = dot(n, sun.direction);
                 float wrap = saturate(max(towards, -towards * _Through) * 0.65 + 0.35);      // a blade of grass is lit from behind too
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
                 float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
-                float3 color = lerp(shade, albedo * sun.color, lit);
+                float3 color = shade + albedo * sun.color * lit;      // sunlight adds to the sky's light
                 // the snow itself, lit as all the island's snow is (BwmSnowCommon)
                 color = lerp(color, BwmSnowOn(_SnowColor.rgb, _SnowShade.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, 1.0), snow);
                 albedo = lerp(albedo, _SnowColor.rgb, snow);      // for the lamps
@@ -160,16 +158,18 @@ Shader "BWM/Snowy"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             float3 _LightDirection;
             float3 _LightPosition;
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
 
             float4 Vert(Attributes v) : SV_POSITION
             {
+                UNITY_SETUP_INSTANCE_ID(v);
                 float3 positionWS = TransformObjectToWorld(v.positionOS.xyz);
                 float3 normalWS = TransformObjectToWorldNormal(v.normalOS);
                 #if _CASTING_PUNCTUAL_LIGHT_SHADOW
@@ -200,7 +200,9 @@ Shader "BWM/Snowy"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            float4 Vert(float4 positionOS : POSITION) : SV_POSITION { return TransformObjectToHClip(positionOS.xyz); }
+            #pragma multi_compile_instancing
+            struct Attributes { float4 positionOS : POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            float4 Vert(Attributes v) : SV_POSITION { UNITY_SETUP_INSTANCE_ID(v); return TransformObjectToHClip(v.positionOS.xyz); }
             half4 Frag(float4 positionCS : SV_POSITION) : SV_Target { return positionCS.z; }
             ENDHLSL
         }
@@ -214,13 +216,15 @@ Shader "BWM/Snowy"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; };
 
             Varyings Vert(Attributes v)
             {
                 Varyings o;
+                UNITY_SETUP_INSTANCE_ID(v);
                 o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 return o;
