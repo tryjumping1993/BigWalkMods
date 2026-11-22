@@ -65,7 +65,7 @@ namespace WinterWalk
             PlayerChecks = cfg.Bind("Debug", "PlayerChecks", true, "Watch the player's movement and write a snapshot when it looks stuck (floating, jump or crouch doing nothing).");
             HeartbeatSeconds = cfg.Bind("Debug", "HeartbeatSeconds", 10f, "How often the debug log notes the frame rate, memory and the player's state.");
             SlowFrameMs = cfg.Bind("Debug", "SlowFrameMs", 150f, "A frame longer than this (milliseconds) is logged as a hitch.");
-            LowFps = cfg.Bind("Debug", "LowFps", 24f, "When the frame rate stays under this, the log counts what is being drawn (at most every 3 minutes).");
+            LowFps = cfg.Bind("Debug", "LowFps", 24f, "When the frame rate stays under this, the log counts what is being drawn (once a session; F8 counts again).");
             MarkKey = cfg.Bind("Debug", "MarkKey", "F8", "Press in game to mark a moment in the log (with a screenshot) when something is wrong.");
             // A PC with a faulty CPU core (the dev PC's logical CPUs 4 and 5 log machine-check errors, and the game
             // crashed on that core with corrupted addresses): keep the whole game off it, however it was started
@@ -777,10 +777,11 @@ namespace WinterWalk
             string aff = Diag.Affinity();
             if (aff != affinity) { if (affinity.Length > 0) Diag.Event("CPU affinity now " + aff); affinity = aff; }
 
-            // a frame rate that stays low: count what is drawn and where the camera looks
-            if (pc != null && fps < Diag.LowFps.Value && frames > 0 && now >= nextCensus && Time.frameCount > 600)
+            // a frame rate that stays low: count what is drawn and where the camera looks (once a session: the count
+            // itself takes about a second; F8 counts again whenever wanted)
+            if (pc != null && fps < Diag.LowFps.Value && frames > 0 && nextCensus == 0f && Time.frameCount > 600)
             {
-                nextCensus = now + 180f;
+                nextCensus = now;
                 Diag.Write("[perf] the frame rate is " + fps.ToString("0", CultureInfo.InvariantCulture) + "; camera " + Camera() + "\n" + Census.Drawn());
             }
             // memory past each 2 GB step: the biggest textures and meshes
@@ -842,6 +843,7 @@ namespace WinterWalk
         // this GPU runs it and how many renderers wear it. (For "the ground is see-through on my PC".)
         internal static string Shaders()
         {
+            var sw = Stopwatch.StartNew();
             var sb = new StringBuilder("how this PC draws: quality ");
             int q = QualitySettings.GetQualityLevel();
             try { sb.Append(QualitySettings.names[q]); } catch (Exception) { sb.Append(q); }
@@ -871,6 +873,7 @@ namespace WinterWalk
             sb.Append("; our shaders:");
             foreach (var kv in shaders) sb.Append(' ').Append(kv.Key).Append(kv.Value[1] == 1 ? "" : " NOT SUPPORTED").Append(" (").Append(kv.Value[0]).Append(" renderers, ").Append(kv.Value[2]).Append(" passes);");
             if (bad.Count > 0) sb.Append(" PROBLEMS: ").Append(string.Join(", ", bad));
+            sb.Append(" (checked in ").Append(sw.ElapsedMilliseconds).Append(" ms)");
             return sb.ToString();
         }
 

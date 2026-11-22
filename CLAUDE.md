@@ -360,9 +360,10 @@ each time, and do not commit broken or half-built states.
     SkipIntro (players' installs do not have it): try without it.
   - Memory: 16 GB private, 11-12 GB in RAM in a walk; 55 million mesh vertices, most in the island's "Grass N"
     scatter meshes (about a million vertices each, readable, so kept twice; `WinterIslePuzzle.cs` section 7b).
-  - Drawing: all ~200,000 dressing renderers (rocks, firs, plants; 196,000 casting shadows) count as visible from
-    anywhere, even the mainland 1 km away: nothing culls them by distance. The user suggests fog that hides the
-    mountain until within about 50 m.
+  - Drawing: the island's dressing is ~201,000 renderers (rocks, firs, plants; 196,000 cast shadows); seen from the
+    summit, 162,000 of them are over 1 km away. Unity reports every renderer in the world as visible (`isVisible` is
+    no guide), so how many are really drawn is not measured. The user finds it slow looking at the mountain (not
+    reproduced at the 30 fps cap on this PC) and suggests fog that hides it until within about 50 m.
   - Dressing: 27 copies float 0.6 m or more over what is under them (some over the sea or a tunnel cut), 25 stand
     over open sea with nothing under them (near -1817, -2497), 2,749 rocks lie wholly under the ground.
   - Friends report seeing through the snow/floor everywhere; the shader check in their debug logs should say why.
