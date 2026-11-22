@@ -756,7 +756,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
     }
 
     // The island's tiny lights. The mountain is strung like a Christmas tree: one string winds down it from the summit
-    // in a spiral, a turn every 42 m of height, a bulb about every 6 m; and both sides of the railway carry bulbs
+    // in a spiral, a turn every 42 m of height, a bulb about every 6 m, except across the ski face, where the strings
+    // line both edges of each run instead; and both sides of the railway carry bulbs
     // wherever it runs in the open. Each bulb is a bead on a short stake (BWM/TinyLight draws all of them as one mesh;
     // at night they are lit, and never smaller than a pixel or two, so the strings show from across the island). The
     // light they throw on the snow is baked into a map of the island the ground's shader adds at night, so the
@@ -805,7 +806,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 {
                     Vector2 p = Peak + dir * found;
                     lastRadius = found;
-                    if ((p - last).magnitude >= Spacing && !WinterIsleMine.InCut(p) && !WinterIsleRail.InCut(p))
+                    // (not across the ski face: there the strings follow the runs, below)
+                    if ((p - last).magnitude >= Spacing && SkiFace(p) < 0.2f && !WinterIsleMine.InCut(p) && !WinterIsleRail.InCut(p))
                     {
                         float g = heightAt(p);
                         if (g > 2f) { Bulb(new Vector3(p.x, g + 0.8f, p.y), 0.8f); onMountain++; }
@@ -813,6 +815,63 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     }
                 }
                 theta += 1.5f / Mathf.Max(lastRadius, 30f);      // about a metre and a half of string a step
+            }
+        }
+
+        // the ski face: both edges of each of its three runs are lit from under the summit to the finish, and the cat
+        // track across between them (the user, 2026-11-22: strings across the slope looked awkward; they follow the runs)
+        int onPistes = 0;
+        {
+            const float Spacing = 6f, Out = 1.5f;      // a bulb every 6 m, 1.5 m outside the run's edge
+            bool InsideAnother(Vector2 q, int run, float along)
+            {
+                for (int r2 = 0; r2 < 3; r2++)
+                {
+                    if (r2 == run) continue;
+                    Vector2 c2 = RunCentre(r2, along, out float h2);
+                    if ((q - c2).magnitude < h2 + Out * 0.5f) return true;
+                }
+                return false;
+            }
+            void Place(Vector2 q)
+            {
+                if (WinterIsleMine.InCut(q) || WinterIsleRail.InCut(q)) return;
+                float g = heightAt(q);
+                if (float.IsNaN(g) || g < 2f) return;
+                Bulb(new Vector3(q.x, g + 0.8f, q.y), 0.8f);
+                onPistes++;
+            }
+            for (int run = 0; run < 3; run++)
+            {
+                var lastEdge = new[] { new Vector2(1e9f, 0f), new Vector2(1e9f, 0f) };
+                for (float along = 60f; along <= SkiRadius - 110f; along += 1f)
+                {
+                    Vector2 c = RunCentre(run, along, out float half);
+                    Vector2 t = (RunCentre(run, along + 1f, out _) - c).normalized;
+                    var across = new Vector2(-t.y, t.x);
+                    for (int side = 0; side < 2; side++)
+                    {
+                        Vector2 q = c + across * ((side == 0 ? 1f : -1f) * (half + Out));
+                        if ((q - lastEdge[side]).magnitude < Spacing) continue;
+                        lastEdge[side] = q;
+                        if (!InsideAnother(q, run, along)) Place(q);
+                    }
+                }
+            }
+            // the cat track: a level lane at CatTrackAlong from the left run to the right one, 4.5 m either side of its middle
+            for (int side = 0; side < 2; side++)
+            {
+                float along = CatTrackAlong + (side == 0 ? 4.5f : -4.5f);
+                float from = SkiBearing - RunOffset(0, along), to = SkiBearing - RunOffset(2, along);
+                int steps = Mathf.CeilToInt(Mathf.Abs(to - from) * along / Spacing);
+                for (int k = 0; k <= steps; k++)
+                {
+                    float angle = Mathf.Lerp(from, to, (float)k / steps);
+                    Vector2 q = Peak + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * along;
+                    bool inRun = false;
+                    for (int r = 0; r < 3; r++) { Vector2 c = RunCentre(r, along, out float h); if ((q - c).magnitude < h + Out) inRun = true; }
+                    if (!inRun) Place(q);
+                }
             }
         }
 
@@ -886,7 +945,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         ground.SetTexture("_GlowMap", UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(poolPath));
         ground.SetVector("_GlowBox", new Vector4(X0, Z0, 1f / (X1 - X0), 1f / (Z1 - Z0)));
         UnityEditor.EditorUtility.SetDirty(ground);
-        Debug.Log("[BWM] Winter Isle tiny lights: " + onMountain + " on the mountain's spiral, " + onRail + " along the railway; their light on the snow baked into a " + W + " x " + H + " map");
+        Debug.Log("[BWM] Winter Isle tiny lights: " + onMountain + " on the mountain's spiral, " + onPistes + " along the ski runs and the cat track, " + onRail + " along the railway; their light on the snow baked into a " + W + " x " + H + " map");
     }
 
     public override void Build(PuzzleBuilder b)

@@ -151,7 +151,8 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   and `walk` first, or the idle player is asleep and the view blurred.
 - **The island's lights at night** (the user's design, 2026-11-22): the mountain is strung like a Christmas tree. The
   island's `Garlands` winds one string of bulbs down it from the summit in a spiral (a turn every 42 m of height, a
-  bulb every 6 m: 5,500) and puts bulbs both sides of the open railway (1,800), in runs of red, green, red, green,
+  bulb every 6 m), except across the ski face, where bulbs line both edges of each of the three runs and the cat
+  track instead (the user: strings across the slope looked awkward), and puts bulbs both sides of the open railway, in runs of red, green, red, green,
   gold. All are one mesh drawn by `BWM/TinyLight` (squares turned to the camera, never under a pixel or two, so
   the strings show from across the island); the light they throw on the snow is a map of the island baked by the
   build (`LightPools.png`, each bulb's colour spread 4 m) that the ground's shader adds at night (`_GlowMap`,
