@@ -431,6 +431,13 @@ public sealed class WinterIslePuzzle : PuzzleDef
         new Vector3(-500f, -860f, 17.69f), new Vector3(-605f, -816f, 16.28f), new Vector3(-761f, -890f, 21.21f), new Vector3(-520f, -960f, 21.21f),
         new Vector3(-583f, -756f, 13.89f), new Vector3(-640f, -770f, 11.40f), new Vector3(-520f, -790f, 14.87f), new Vector3(-780f, -800f, 19.80f),
         new Vector3(-710f, -1250f, 21.93f), new Vector3(-1777.426f, -1573.016f, 7.07f),
+        // ...and where they stood from 2026-11-21 until the final layout (2026-11-22: puzzle-specs\layout-final.json), each
+        // old site (radius from its old footprint) that the new sites do not cover, plus Lookouts' removed Far West beacon
+        new Vector3(-690f, -720f, 10.63f), new Vector3(-876f, -2172f, 21.21f), new Vector3(-1014f, -2130f, 21.21f), new Vector3(-1129.486f, -1783.964f, 7.07f),
+        new Vector3(-1460f, -650f, 21.40f), new Vector3(-2976f, -2268f, 13.89f), new Vector3(-2975f, -1565f, 25.46f), new Vector3(-1008f, -1632f, 16.28f),
+        new Vector3(-1010f, -1280f, 17.03f), new Vector3(-612f, -846f, 19.80f), new Vector3(-760f, -730f, 14.21f), new Vector3(-1809.807f, -1493.246f, 7.07f),
+        new Vector3(-1152f, -1434f, 16.97f), new Vector3(-2420f, -1610f, 22.20f), new Vector3(-750f, -1030f, 16.28f), new Vector3(-1272f, -1260f, 19.85f),
+        new Vector3(-1428f, -774f, 14.87f), new Vector3(-714f, -1246f, 21.93f), new Vector3(-2750f, -2120f, 7f),
     };
 
     static readonly Color PackedSnow = new Color(0.8f, 0.85f, 0.93f);
@@ -731,11 +738,29 @@ public sealed class WinterIslePuzzle : PuzzleDef
         {
             (Plaza, 24f, 150f), (Plaza + new Vector2(120f, 40f), 18f, 110f), (Plaza + new Vector2(-110f, -90f), 18f, 110f), (Plaza + new Vector2(60f, -150f), 16f, 100f),
             (ShorePoint + (Plaza - ShorePoint).normalized * 60f, 14f, 90f), (Lake, 14f, 100f), (GondolaBottom, 22f, 90f),
-            (new Vector2(-520f, -900f), 16f, 110f), (new Vector2(-760f, -1120f), 16f, 120f), (new Vector2(-880f, -1250f), 16f, 110f), (new Vector2(-640f, -1270f), 16f, 100f),
-            (new Vector2(-860f, -660f), 16f, 100f), (new Vector2(-1040f, -960f), 18f, 110f),
             (PisteFinish(out _, out _), 26f, 140f), (SkiLiftBottom, 20f, 100f), (SkiLiftTop, 20f, 110f), (Summit, 26f, 170f),
         };
         if (WinterIsleMine.Stations.Count > 0) places.Add((WinterIsleMine.Tower, 20f, 110f));
+        // ...and over the puzzles, which all carry lights: one bloom over each group of sites within 160 m of each other,
+        // unless a bloom above already hangs within 120 m (so they follow the puzzles wherever they are moved)
+        {
+            var groups = new List<(Vector2 sum, int n)>();
+            foreach (Vector3 site in b.OtherSites)
+            {
+                var siteAt = new Vector2(site.x, site.y);
+                if (siteAt.x < X0 || siteAt.x > X1 || siteAt.y < Z0 || siteAt.y > Z1 || float.IsNaN(heightAt(siteAt)) || heightAt(siteAt) < 0.5f) continue;      // only those on the island
+                int gi = groups.FindIndex(q => (q.sum / q.n - siteAt).magnitude < 160f);
+                if (gi < 0) groups.Add((siteAt, 1)); else groups[gi] = (groups[gi].sum + siteAt, groups[gi].n + 1);
+            }
+            int fixedPlaces = places.Count;
+            foreach (var (groupSum, groupCount) in groups)
+            {
+                Vector2 groupAt = groupSum / groupCount;
+                bool nearBloom = false;
+                for (int fp = 0; fp < fixedPlaces; fp++) if ((places[fp].at - groupAt).magnitude < 120f) nearBloom = true;
+                if (!nearBloom) places.Add((groupAt, 16f, groupCount > 1 ? 120f : 100f));
+            }
+        }
         for (int i = 0; i < places.Count; i++)
         {
             float h = heightAt(places[i].at);
@@ -1547,6 +1572,20 @@ public sealed class WinterIslePuzzle : PuzzleDef
         // the gondola's stations, the summit, and a corridor under the cable, kept clear of trees and rocks
         structures.Add((Summit, SummitRadius + 1f));
         structures.Add((GondolaBottom, 14f));
+        // Radio Silence's posts in and beside the gorge: kept clear of trees, rocks and scatter but never levelled (its
+        // spec forbids levelling the gorge, so they are not ExtraSites)
+        foreach (Vector3 post in new RadioSilencePuzzle().KeepClearSites) structures.Add((new Vector2(post.x, post.y), post.z + 1f));
+        // the racks beside Big Air's start hut and Slalom's hut (step 13), and Big Air's hut itself (not a site)
+        {
+            Vector2 airMid = RunCentre(2, 1030f, out float airHalf);
+            Vector2 airDown = (RunCentre(2, 1031f, out _) - RunCentre(2, 1029f, out _)).normalized, airRight = new Vector2(airDown.y, -airDown.x);
+            structures.Add((airMid + airRight * (airHalf + 3f), 8f));
+            structures.Add((airMid + airRight * (airHalf + 5f), 5f));
+            Vector2 slMid = RunCentre(0, 600f, out float slHalf);
+            Vector2 slDown = (RunCentre(0, 606f, out _) - slMid).normalized, slAcross = new Vector2(slDown.y, -slDown.x);
+            Vector2 slHut = Vector2.Dot(new Vector2(-1798.5f, -1521f) - slMid, slAcross) >= 0f ? slAcross : -slAcross;
+            structures.Add((slMid + slHut * (slHalf + 5f), 8f));
+        }
         for (int station = 0; station < WinterIsleMine.Stations.Count; station++)
             structures.Add((WinterIsleMine.Stations[station], (station == 0 ? WinterIsleMine.TowerStationRadius : WinterIsleMine.StationRadius) + 1f));
         for (float t = 0f; t <= 1f; t += 0.004f) structures.Add((Vector2.Lerp(GondolaBottom, GondolaTop, t), 10f));      // a lift line cut through the forest
@@ -1663,6 +1702,12 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Vector2 p = Plaza + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * d;
             int k = Cell_(p);
             if (!(height[k] > 1.5f) || Slope(k) > 0.14f || PathDistance(p) > 16f || !Free(p, -6f)) continue;
+            // ...and wholly off every puzzle's site and Radio Silence's posts (Free lets a cabin come within r - 3 of a
+            // site's centre, and two stood inside Radio Silence's footprint: 7 m covers the biggest cabin's corner)
+            bool offSites = true;
+            foreach (Vector3 site in b.OtherSites) if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 7f) offSites = false;
+            foreach (Vector3 post in new RadioSilencePuzzle().KeepClearSites) if ((p - new Vector2(post.x, post.y)).magnitude < post.z + 7f) offSites = false;
+            if (!offSites) continue;
             bool apart = true;
             foreach (var c in cabins) if ((c.at - p).magnitude < 17f) apart = false;
             if (!apart) continue;
@@ -2846,7 +2891,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
             var flags = new MeshBuilder();
             var white = new Color(0.94f, 0.96f, 1f);
             int kickers = 0;
-            foreach (var (parkAlong, offset, lip, length, width) in new[] { (985f, -0.25f, 1.0f, 6f, 4f), (1035f, 0.25f, 1.4f, 7f, 4.5f), (1075f, -0.2f, 0.8f, 5f, 3.5f) })
+            // (only the top one now: the two below, at 1035 and 1075, stood on Big Air's in-run lanes: BigAir.impl.md)
+            foreach (var (parkAlong, offset, lip, length, width) in new[] { (985f, -0.25f, 1.0f, 6f, 4f) })
             {
                 Vector2 parkMid = RunCentre(2, parkAlong, out float half);
                 Vector2 down = (RunCentre(2, parkAlong + 6f, out _) - parkMid).normalized, across = new Vector2(down.y, -down.x);
@@ -3033,6 +3079,20 @@ public sealed class WinterIslePuzzle : PuzzleDef
             Vector2 liftDir = (SkiLiftTop - SkiLiftBottom).normalized;
             Racks(SkiLiftBottom - liftDir * 13f, -liftDir, 1);
             Racks(SkiLiftTop + liftDir * 12f, liftDir, 2);
+            // Big Air's start hut (run 2, along 1030, on the run's right): a pair 3 m off the run's edge, 5 m up and down
+            // the run from the hut, so a lobby can retry without riding the lift (BigAir.impl.md)
+            {
+                Vector2 airMid = RunCentre(2, 1030f, out float airHalf);
+                Vector2 airDown = (RunCentre(2, 1031f, out _) - RunCentre(2, 1029f, out _)).normalized, airRight = new Vector2(airDown.y, -airDown.x);
+                Racks(airMid + airRight * (airHalf + 3f), -airRight, 3);
+            }
+            // Slalom's hut (run 0, along 600, on the hut's side): the same, for the Row Clock's retries (Slalom.impl.md)
+            {
+                Vector2 slMid = RunCentre(0, 600f, out float slHalf);
+                Vector2 slDown = (RunCentre(0, 606f, out _) - slMid).normalized, slAcross = new Vector2(slDown.y, -slDown.x);
+                Vector2 slHut = Vector2.Dot(new Vector2(-1798.5f, -1521f) - slMid, slAcross) >= 0f ? slAcross : -slAcross;
+                Racks(slMid + slHut * (slHalf + 5f), -slHut, 4);
+            }
             b.MeshPiece("Gear Racks", rackMesh.ToMesh(), gear, false);
 
             // piste furniture: orange marker poles down both edges of every run, slalom gates down the middle run

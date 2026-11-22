@@ -258,6 +258,7 @@ namespace BwmCompanion
                 case "find": yield return Find(r); break;
                 case "mat": yield return Materials(r); break;
                 case "active": yield return SetActive(r); break;
+                case "comp": yield return Components(r); break;
                 case "inspect": yield return InspectFirst(r); break;
                 case "actions": yield return InputActions(); break;
                 case "treemat": yield return TreeMaterials(r); break;
@@ -907,6 +908,90 @@ namespace BwmCompanion
 
         // Switches on or off the object (active or not) whose name is exactly ?name=, the nearest to (nx, ny, nz):
         // /active?name=UnfurledMap&nx=..&ny=..&nz=..&on=1   (for looking at things the game keeps hidden)
+        // comp?list=1 counts the components on every puzzle's objects by type (behaviours, renderers, colliders);
+        // comp?type=PuzzleDisplay&on=0 switches every enabled Behaviour of that type under the puzzles off (on=1 back on),
+        // to measure what each costs a frame. Only objects under a puzzle (a PuzzleSDK root) are touched.
+        static readonly System.Collections.Generic.List<Behaviour> compOff = new System.Collections.Generic.List<Behaviour>();
+        static readonly System.Collections.Generic.List<Renderer> rendOff = new System.Collections.Generic.List<Renderer>();
+        static readonly System.Collections.Generic.List<Collider> collOff = new System.Collections.Generic.List<Collider>();
+        static readonly System.Collections.Generic.List<GameObject> goOff = new System.Collections.Generic.List<GameObject>();
+        static string Components(Request r)
+        {
+            var roots = new System.Collections.Generic.HashSet<IntPtr>();
+            foreach (PuzzleSDK p in Puzzles()) roots.Add(p.transform.root.Pointer);
+            if (r.Has("type"))
+            {
+                string type = r.Str("type"); bool on = r.Num("on", 0f) > 0.5f; int n = 0;
+                if (on)
+                {
+                    foreach (Behaviour b in compOff) if (b != null) { b.enabled = true; n++; }
+                    foreach (Renderer x in rendOff) if (x != null) { x.enabled = true; n++; }
+                    foreach (Collider x in collOff) if (x != null) { x.enabled = true; n++; }
+                    foreach (GameObject g in goOff) if (g != null) { g.SetActive(true); n++; }
+                    compOff.Clear(); rendOff.Clear(); collOff.Clear(); goOff.Clear();
+                    return "switched " + n + " back on";
+                }
+                if (type == "Renderer" || type == "Collider")
+                {
+                    foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(type == "Renderer" ? Il2CppInterop.Runtime.Il2CppType.Of<Renderer>() : Il2CppInterop.Runtime.Il2CppType.Of<Collider>(), true))
+                    {
+                        Component c = o != null ? o.TryCast<Component>() : null;
+                        if (c == null || !roots.Contains(c.transform.root.Pointer)) continue;
+                        Renderer rr = c.TryCast<Renderer>(); Collider cc = c.TryCast<Collider>();
+                        if (rr != null && rr.enabled) { rr.enabled = false; rendOff.Add(rr); n++; }
+                        if (cc != null && cc.enabled) { cc.enabled = false; collOff.Add(cc); n++; }
+                    }
+                    return "switched " + n + " " + type + "s off";
+                }
+                if (r.Has("go"))
+                {
+                    // deactivate the objects that carry this component (OnDisable: off any manager's list)
+                    foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(Il2CppInterop.Runtime.Il2CppType.Of<Component>(), true))
+                    {
+                        Component c = o != null ? o.TryCast<Component>() : null;
+                        if (c == null || c.GetIl2CppType().Name != type || !roots.Contains(c.transform.root.Pointer) || !c.gameObject.activeSelf) continue;
+                        c.gameObject.SetActive(false); goOff.Add(c.gameObject); n++;
+                    }
+                    return "deactivated " + n + " objects with a " + type;
+                }
+                if (type == "Bodies")
+                {
+                    int awake = 0, kin = 0, total = 0;
+                    foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(Il2CppInterop.Runtime.Il2CppType.Of<Rigidbody>(), true))
+                    {
+                        Rigidbody b = o != null ? o.TryCast<Rigidbody>() : null;
+                        if (b == null || !roots.Contains(b.transform.root.Pointer)) continue;
+                        total++; if (b.isKinematic) kin++; else if (!b.IsSleeping()) awake++;
+                        if (r.Has("sleep") && !b.isKinematic) b.Sleep();
+                    }
+                    return total + " rigidbodies on the puzzles: " + kin + " kinematic, " + awake + " awake (not kinematic)";
+                }
+                foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(Il2CppInterop.Runtime.Il2CppType.Of<Behaviour>(), true))
+                {
+                    Behaviour b = o != null ? o.TryCast<Behaviour>() : null;
+                    if (b == null || !b.enabled || !roots.Contains(b.transform.root.Pointer)) continue;
+                    string bn = b.GetIl2CppType().Name;
+                    // type=* every behaviour; type=range:A:L those whose type name starts A..L (for bisecting)
+                    if (type == "*") { }
+                    else if (type.StartsWith("range:")) { string[] ab = type.Split(':'); char f0 = char.ToUpperInvariant(bn[0]); if (f0 < ab[1][0] || f0 > ab[2][0]) continue; }
+                    else if (bn != type) continue;
+                    b.enabled = false; compOff.Add(b); n++;
+                }
+                return "switched " + n + " " + type + " off";
+            }
+            var counts = new System.Collections.Generic.Dictionary<string, int>();
+            foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(Il2CppInterop.Runtime.Il2CppType.Of<Component>(), true))
+            {
+                Component c = o != null ? o.TryCast<Component>() : null;
+                if (c == null || !roots.Contains(c.transform.root.Pointer)) continue;
+                string k = c.GetIl2CppType().Name;
+                counts[k] = counts.TryGetValue(k, out int v) ? v + 1 : 1;
+            }
+            var sb = new StringBuilder();
+            foreach (var kv in counts.OrderByDescending(kv => kv.Value)) sb.AppendLine(kv.Value + " " + kv.Key);
+            return sb.ToString();
+        }
+
         static string SetActive(Request r)
         {
             // active?prefix=Grass%20&on=0 switches every object whose name starts with that (for measuring what costs)

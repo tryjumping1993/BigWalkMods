@@ -101,7 +101,14 @@ function Update-BwmPizzeriaArt {
 function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     if (-not (Test-Path $Unity)) { Write-Output "Unity editor not found at $Unity"; return 2 }
     if ($Method -like 'Build*') { Update-BwmSnowMaps; Update-BwmTreeMaps; Update-BwmPizzeriaArt }
-    if (Get-Process Unity -ErrorAction SilentlyContinue) { Write-Output 'A Unity editor is already running; close it first (two editors cannot open one project).'; return 2 }
+    # (a build lane, BWM_LANE set, is its own copy of the project, so another editor on another copy is no conflict;
+    # the check below still catches a second editor on this copy, by its project path in the command line)
+    if ($env:BWM_LANE) {
+        $mine = (Join-Path $Repo 'unity').ToLowerInvariant()
+        $busy = Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine.ToLowerInvariant().Contains($mine) }
+        if ($busy) { Write-Output 'A Unity editor already has this lane''s project open.'; return 2 }
+    }
+    elseif (Get-Process Unity -ErrorAction SilentlyContinue) { Write-Output 'A Unity editor is already running; close it first (two editors cannot open one project).'; return 2 }
     # The editor only finds its licence through Unity Hub's licensing service, so the Hub must be running and signed in.
     if (-not (Get-Process 'Unity.Licensing.Client' -ErrorAction SilentlyContinue)) {
         Start-Process $HubApp
@@ -110,6 +117,11 @@ function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
         Start-Sleep -Seconds 3
     }
     $env:UPM_CACHE_ROOT = 'Z:\Unity\cache\upm'      # keep Unity's package cache off C:
+    # Unity's temporary files (the SDK exports each pack through %TEMP%\DefaultCompany\unity\PuzzleExportTemp): on Z:,
+    # one folder per build lane, or lanes exporting at the same moment overwrite each other's bundle
+    $tmp = Join-Path 'Z:\Temp\claude\BigWalkMods\unity-temp' $(if ($env:BWM_LANE) { 'lane' + $env:BWM_LANE } else { 'main' })
+    New-Item -ItemType Directory -Force $tmp | Out-Null
+    $env:TEMP = $tmp; $env:TMP = $tmp
     New-Item -ItemType Directory -Force (Join-Path $Repo 'logs') | Out-Null
     $log = Join-Path $Repo "logs\unity-$Command.log"
     $unityArgs = @('-batchmode', '-projectPath', (Join-Path $Repo 'unity'), '-executeMethod', "Bwm.Cli.$Method", '-logFile', $log) + $Extra

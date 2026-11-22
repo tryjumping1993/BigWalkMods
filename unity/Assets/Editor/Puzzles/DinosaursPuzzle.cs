@@ -25,7 +25,7 @@ public sealed class DinosaursPuzzle : PuzzleDef
         (new Vector2(-1450f, -1230f), 45f, 2),      // the central ridge
         (new Vector2(-1150f, -1600f), 50f, 1),      // the forest between the runs and the east lowland
         (new Vector2(-1700f, -2350f), 45f, 0),      // the south shore, between South Shore and Seal Point
-        (new Vector2(-1180f, -2200f), 45f, 2),      // the slopes above South Shore
+        (new Vector2(-1255f, -2150f), 45f, 2),      // the slopes above South Shore (moved from -1180, -2200 on 2026-11-22: Bell Ringers' churchyard came within 39 m of its edge; now 98 m from every site)
         (new Vector2(-1560f, -930f), 40f, 1),       // the north flank above North Shore
         (new Vector2(-2860f, -1420f), 40f, 0),      // the far west, by Cirque Gate
     };

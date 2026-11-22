@@ -69,6 +69,15 @@ namespace Bwm
 
         // Only the SDK's Glass, Timer and Progress Bar keep a scale; the game draws every other part at its own size
         public Piece Scaled(float x, float y, float z) { Go.transform.localScale = new Vector3(x, y, z); return this; }
+        // A Glass part sized in metres: 'width' across and 'height' up, facing the way its yaw turns it, 4 cm thick for
+        // collisions (the prefab is a 10 m plane, tilted upright on its root, with a flat collider)
+        public Piece Pane(float width, float height)
+        {
+            Go.transform.localScale = new Vector3(width / 10f, 0.18683f, height / 10f);
+            BoxCollider box = Go.GetComponent<BoxCollider>();
+            if (box != null) box.size = new Vector3(10f, 0.04f / 0.18683f, 10f);
+            return this;
+        }
     }
 
     public sealed class PuzzleBuilder
@@ -128,7 +137,9 @@ namespace Bwm
             if (asset == null) throw new Exception("SDK prefab not found: " + path);
             var go = (GameObject)PrefabUtility.InstantiatePrefab(asset, Root.transform);
             go.transform.position = Place(x, z, height, onGround);
-            go.transform.rotation = Root.transform.rotation * Quaternion.Euler(0f, yaw, 0f);
+            // (keeping the prefab's own turn: Glass is a plane stood upright by a 90 degree tilt on its root, and with only
+            // the yaw every window lay flat, a sheet across the room; no other SDK part has a turn on its root)
+            go.transform.rotation = Root.transform.rotation * Quaternion.Euler(0f, yaw, 0f) * asset.transform.localRotation;
             return new Piece(go);
         }
 

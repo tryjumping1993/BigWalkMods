@@ -680,6 +680,45 @@ namespace WinterWalk
                 }
                 return s.Length > 0 ? s.ToString() : "nothing";
             });
+            // From well above (a ray that starts under a surface misses it): what is really under the player, and the
+            // island's ground piece there (switched on? its collider on?). A tester glided "off the ground" over island
+            // ground that this PC finds solid (2026-11-22); this tells "standing under the surface" from "no ground".
+            Part("from 5 m above: ", () =>
+            {
+                Vector3 at = pc.transform.position;
+                var s = new StringBuilder();
+                Transform self = pc.transform.root;
+                int n = 0;
+                foreach (RaycastHit hit in Physics.RaycastAll(at + Vector3.up * 5f, Vector3.down, 12f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.collider == null || hit.collider.transform.root == self || n++ > 5) continue;
+                    s.Append(Path(hit.collider.transform)).Append(" ").Append((hit.point.y - at.y).ToString("+0.00;-0.00", CultureInfo.InvariantCulture)).Append(" m; ");
+                }
+                if (s.Length == 0) s.Append("nothing within 7 m below the player; ");
+                GameObject isle = GameObject.Find("WinterIsle");
+                if (isle != null)
+                {
+                    Transform best = null; float bestD = float.MaxValue;
+                    for (int i = 0; i < isle.transform.childCount; i++)
+                    {
+                        Transform c = isle.transform.GetChild(i);
+                        if (!c.name.StartsWith("Island ")) continue;
+                        MeshCollider mc = c.GetComponent<MeshCollider>();
+                        if (mc == null) continue;
+                        Bounds b = mc.bounds;
+                        float d = b.SqrDistance(at);
+                        if (d < bestD) { bestD = d; best = c; }
+                    }
+                    if (best != null)
+                    {
+                        MeshCollider mc = best.GetComponent<MeshCollider>();
+                        s.Append("nearest ground piece ").Append(best.name).Append(": active ").Append(best.gameObject.activeInHierarchy)
+                         .Append(", collider ").Append(mc.enabled ? "on" : "OFF").Append(", mesh ").Append(mc.sharedMesh != null ? mc.sharedMesh.vertexCount + " vertices" : "NONE")
+                         .Append(", ").Append(Mathf.Sqrt(bestD).ToString("0.0", CultureInfo.InvariantCulture)).Append(" m from its box");
+                    }
+                }
+                return s.ToString();
+            });
             Part("Winter Walk moving the player: ", () => Diag.Touches(10f));
             Part("Winter Walk: ", () => DriverStates());
             Part("camera: ", () => Camera());
@@ -733,7 +772,9 @@ namespace WinterWalk
                 + " | weather " + WeatherDriver.State + (WeatherDriver.Blizzard > 0.01f ? ", blizzard " + WeatherDriver.Blizzard.ToString("0.00", CultureInfo.InvariantCulture) : "")
                 + " | snow tracks " + SnowTrails.Tiles + " tiles"
                 + " | dressing " + Dresser.Shown + " of " + Dresser.Made + " shown"
-                + " | scatter " + Scatter.State;
+                + " | scatter " + Scatter.State
+                + " | unstuck " + Unstuck.State
+                + " | puzzles " + PuzzleSleep.State;
         }
 
         // ---- the heartbeat ----

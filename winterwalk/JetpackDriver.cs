@@ -10,6 +10,12 @@
 // to the others. Other players' jetpacks are not shown on their backs yet (nothing tells one PC what another wears).
 // The jump button is read from Rewired, the game's input system, by the action whose name has "jump" in it; if no
 // such action is found it falls back to the space bar.
+//
+// Calm Air: a jetpack does not fire while the player is inside an empty object whose name starts "Calm Air" (an
+// oriented box: the object's position, rotation and lossy scale as the box's size, like MineDriver's "Indoors ..."
+// rooms). Puzzles put one over their whole area (IsleKit.CalmAir) so nobody flies over their walls or fences. The
+// boxes are found once when the world is up and again when a pack reload destroys them; the per-frame test is plain
+// arithmetic on cached floats. Each PC runs only its own player's jetpack, so nothing is networked.
 using System;
 using UnityEngine;
 
@@ -29,6 +35,10 @@ namespace WinterWalk
         public static float Fuel;               // seconds left
         public static bool TestFire;            // for testing without a controller: fire as if jump were held in the air
         public static string State = "not loaded";
+        // Calm Air (for tests: get InCalmAir / CalmBoxes; set RescanCalm true to find the boxes again now)
+        public static bool InCalmAir;
+        public static int CalmBoxes;
+        public static bool RescanCalm;
         // where the jetpack sits: on the back of the round body the player sees ("localBottom_mesh", which bobs and swings
         // as they move, so the jetpack follows it every frame instead of hanging from the player's origin, where it cut
         // through the body), 'Back' metres behind its middle and 'Up' above; and its size (all can be set live)
@@ -40,6 +50,95 @@ namespace WinterWalk
         float nextLook;
         int jumpAction = -2;                    // Rewired action id; -1 when none was found (space bar instead)
         bool wasHeld, armed, firing;
+
+        // Calm Air boxes: per box its centre and three half-axis vectors (rotation times half the scale), as floats
+        readonly System.Collections.Generic.List<Transform> calm = new System.Collections.Generic.List<Transform>();
+        float[] calmBox = new float[0];         // 12 per box: cx cy cz, ax ay az, bx by bz, ux uy uz
+        float nextCalmCheck, nextCalmScan;
+        bool calmScanned;
+        GameObject calmSentinel;                // the jetpack model seen at the last scan: a pack reload replaces it
+
+        void ScanCalm()
+        {
+            using var diag = Diag.Time("jetpack calm scan");
+            calm.Clear();
+            try
+            {
+                var boxes = new System.Collections.Generic.List<float>();
+                // (only the puzzles' own top-level objects, where IsleKit.CalmAir puts its boxes, and one level under
+                // them: searching every transform in the world took 180-290 ms, a hitch each time a jetpack went on)
+                var found = new System.Collections.Generic.List<Transform>();
+                foreach (BigPuzzleSDK.PuzzleSDK sdk in UnityEngine.Object.FindObjectsOfType<BigPuzzleSDK.PuzzleSDK>())
+                {
+                    if (sdk == null) continue;
+                    Transform root = sdk.transform.root;
+                    for (int i = 0; i < root.childCount; i++)
+                    {
+                        Transform c1 = root.GetChild(i);
+                        found.Add(c1);
+                        for (int j = 0; j < c1.childCount; j++) found.Add(c1.GetChild(j));
+                    }
+                }
+                foreach (Transform t in found)
+                {
+                    if (t == null || !t.name.StartsWith("Calm Air")) continue;
+                    Vector3 c = t.position;
+                    Vector3 a = t.TransformPoint(new Vector3(0.5f, 0f, 0f)) - c;
+                    Vector3 b = t.TransformPoint(new Vector3(0f, 0.5f, 0f)) - c;
+                    Vector3 u = t.TransformPoint(new Vector3(0f, 0f, 0.5f)) - c;
+                    calm.Add(t);
+                    boxes.Add(c.x); boxes.Add(c.y); boxes.Add(c.z);
+                    boxes.Add(a.x); boxes.Add(a.y); boxes.Add(a.z);
+                    boxes.Add(b.x); boxes.Add(b.y); boxes.Add(b.z);
+                    boxes.Add(u.x); boxes.Add(u.y); boxes.Add(u.z);
+                }
+                calmBox = boxes.ToArray();
+                if (calm.Count != CalmBoxes || !calmScanned) Plugin.L.LogInfo("Winter Walk: jetpack: " + calm.Count + " Calm Air boxes");
+            }
+            catch (Exception e)
+            {
+                calm.Clear();
+                calmBox = new float[0];
+                Plugin.L.LogWarning("Winter Walk: jetpack: Calm Air scan failed: " + e.GetType().Name + ": " + e.Message);
+            }
+            CalmBoxes = calm.Count;
+            calmScanned = true;
+            calmSentinel = model;
+            nextCalmScan = Time.unscaledTime + 30f;
+        }
+
+        // Keeps the boxes current: scan once the world is up, again when one of them (or the jetpack model, which every
+        // pack reload replaces) is destroyed, and every 30 s while none are known
+        void KeepCalm()
+        {
+            if (RescanCalm) { RescanCalm = false; ScanCalm(); return; }
+            if (Time.unscaledTime < nextCalmCheck) return;
+            nextCalmCheck = Time.unscaledTime + 2f;
+            bool rescan = !calmScanned || (calm.Count == 0 && Time.unscaledTime >= nextCalmScan) || (model != null && calmSentinel != model);
+            for (int i = 0; !rescan && i < calm.Count; i++)
+                if (calm[i] == null) rescan = true;
+            if (rescan) ScanCalm();
+        }
+
+        // Whether a point is inside any Calm Air box: |d . axis| <= axis . axis for each half axis (plain arithmetic)
+        bool Calm(Vector3 p)
+        {
+            float[] k = calmBox;
+            for (int i = 0; i + 11 < k.Length; i += 12)
+            {
+                float dx = p.x - k[i], dy = p.y - k[i + 1], dz = p.z - k[i + 2];
+                bool inside = true;
+                for (int j = 3; j < 12 && inside; j += 3)
+                {
+                    float ax = k[i + j], ay = k[i + j + 1], az = k[i + j + 2];
+                    float along = dx * ax + dy * ay + dz * az, len = ax * ax + ay * ay + az * az;
+                    if (along < 0f) along = -along;
+                    inside = along <= len;
+                }
+                if (inside) return true;
+            }
+            return false;
+        }
 
         void Find()
         {
@@ -160,7 +259,7 @@ namespace WinterWalk
                 foreach (Vector3 present in presents)
                     if ((present - p).sqrMagnitude < 2.6f * 2.6f) { Worn = true; Fuel = Tank; }
                 Wear(t);
-                if (!Worn) { State = "no jetpack"; return; }
+                if (!Worn) { State = "no jetpack"; InCalmAir = false; return; }
 
                 bool held = JumpHeld() || TestFire;
                 float gap = 99f;
@@ -173,11 +272,14 @@ namespace WinterWalk
                 if (grounded && !TestFire) { armed = false; firing = false; }
                 else if (!held) armed = true;      // let go after the jump (or walked off an edge): the next press fires
                 firing = (armed || TestFire) && held;      // (no fuel: it never runs out)
+                KeepCalm();
+                InCalmAir = calmBox.Length > 0 && Calm(p);
+                if (InCalmAir) firing = false;             // Calm Air: no thrust over a puzzle (TestFire included)
                 if (flame != null && flame.activeSelf != firing) flame.SetActive(firing);
                 wasHeld = held;
                 if (!firing)
                 {
-                    State = "jetpack on" + (grounded ? "" : armed ? ", ready to fire" : "");
+                    State = InCalmAir ? "jetpack: calm air" : "jetpack on" + (grounded ? "" : armed ? ", ready to fire" : "");
                     return;
                 }
                 PlayerCharacter pc = me.GetComponent<PlayerCharacter>();

@@ -94,6 +94,19 @@ public static class IsleKit
         return group;
     }
 
+    // Calm Air over a puzzle: an empty named "Calm Air <name>" at (cx, cz), turned by 'yaw' (as parts are, about the
+    // root), its scale the box's size (x across, y up, z forward), its bottom 'baseHeight' above the ground (or the
+    // root's level with onGround false), so its centre is size.y / 2 higher. Winter Walk's jetpacks do not fire inside
+    // it (JetpackDriver). No collider, no renderer. Start it a few metres under the ground so nobody slips in under it,
+    // and make it tall: falling in from above with no thrust still works, so walls must stand well inside its edges.
+    public static Piece CalmAir(PuzzleBuilder b, string name, float cx, float cz, Vector3 size, float yaw = 0f, float baseHeight = 0f, bool onGround = true)
+    {
+        Piece box = b.Empty("Calm Air " + name, cx, cz, baseHeight + size.y / 2f, onGround);
+        box.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, yaw, 0f);
+        box.Transform.localScale = size;
+        return box;
+    }
+
     // A Presence Sensor box (players standing in it, unless set otherwise) at (x, z), 'size' across and 2.6 m tall
     public static Piece Sensor(PuzzleBuilder b, string name, float x, float z, Vector3 size, float baseHeight = 0f, bool onGround = true)
     {

@@ -27,6 +27,11 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods\trailer\` (`-Music <wav> -MusicStart 2.4` lays the game's menu theme under it; `menu_theme.py` extracts that from the game). `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
 | `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
 
+**Build lanes:** several Unity editors can build at once from full copies of the checkout (robocopy the repo, keeping
+`unity\Library`, to `Z:\Temp\claude\BigWalkMods\lanes\laneN`), each run with `$env:BWM_LANE = 'N'` (bwm.ps1 then
+allows other editors, and gives each lane its own Unity temp folder on Z:); copy each built puzzle's folder, code,
+previews and pack back. Unity batch builds mostly use one core, so three lanes barely load this PC.
+
 Build output is only the framework's `[BWM]` lines; the full Unity log is `logs\unity-<command>.log`. Exit
 code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-NoExport`, `-AllowIssues`.
 
@@ -134,6 +139,15 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   saves meshes by piece name, and a second "Piste Sheet" asset replaces the first). The ski lift (lodge to the bench
   at the tree line) is a second `GondolaDriver`, set up by `ConfigureLift`, and opens with the gondola; its state is
   `GondolaDriver.LiftState`. Other players' gear is not shown.
+- **Scripts in PuzzleScripts run inside the game (IL2CPP):** engine methods the game never calls are stripped, so
+  `GetComponentsInChildren<T>(bool)` / `GetComponentInChildren<T>(bool)` throw MissingMethodException there
+  (GlassBoothTileReset failed every frame, ConsoleShuffle never dealt). Walk children with `BwmFind`
+  (`GetChild`, `GetComponent<T>`). Check each new script's log lines in the game (`puzzle-capture.ps1` collects them).
+- **Calm Air:** a jetpack does not fire inside an empty named "Calm Air ..." (an oriented box: position, rotation,
+  scale). Every walled puzzle puts one over its area (`IsleKit.CalmAir`), so nobody flies over walls or fences.
+  Thrust is cut, not momentum. `JetpackDriver.CalmBoxes` says how many are known.
+- **Getting unstuck** (`winterwalk\Unstuck.cs`): a player pushing to move or jump for 3 s without moving, on ground
+  too steep to use or held up off it, is set down on the game's last safe position or the nearest open spot.
 - **Jetpacks** (`winterwalk\JetpackDriver.cs`): walking up to one of the opened presents under The Tree ("Jetpack
   Present...") straps a jetpack on (it never runs out of fuel); jump, let go, press jump again in the air and it fires
   while held. Jump is read from Rewired (the game's input) by the action named with "jump", else the space bar.
@@ -273,6 +287,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   `PuzzleSDK.Win` or to `GameObject.SetActive` (`piece.On(..., target.Go, "SetActive", true)`). `SnowmanPuzzle.cs`
   is the example. In the game each item's real prop is a root object named `VanillaItem`; the object with the
   item's own name is only a marker.
+- **Glass** is a 10 m plane stood upright by a 90 degree tilt on its prefab's root: `Part` keeps that tilt, and
+  `.Pane(width, height)` sizes a pane in metres (4 cm thick). Before 2026-11-22 `Part` kept only the yaw and every
+  window lay flat as a sheet across its room (the "thin dark grid lines" on the Glass Booth's pad were its wire).
 - Only Glass, Timer and Progress Bar can be scaled. Lamps start off. Ordinary walls do not block voices: put
   them under a parent with `PuzzleSoundProof`.
 - A `Puzzle`-type puzzle needs one Gourd Vice (or Box), one Pillow and a Start Switch. The SDK's checks run
@@ -281,8 +298,11 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   piece with `b.AddCustomScript(piece, "ClassName")` and set its `[SerializeField]` fields with `Sdk.Set`. The
   SDK exports the folder as `WinterWalkScripts.dll` beside the packs, and the game loads it as a plugin.
   `SnowfallFollow.cs` is the working example. A changed script needs a game restart (`game quit`, then
-  `play`), not a reload. Only the host should change shared state (the SDK's `Synced*` variables); that part
-  is not exercised yet.
+  `play`), not a reload. Only the host should change shared state (the SDK's `Synced*` variables). No enum-typed
+  `const` and no enum-typed default parameter in these scripts: the SDK's DLL writer cannot resolve the enum and
+  silently leaves `WinterWalkScripts.dll` out of the export ("Could not write WinterWalkScripts.dll" in the build
+  log), so every script is missing in the game. `BlindWatch.cs` keeps players without a blindfold out of a box
+  (BlindCarols, BlindSculptor).
 - Our own shaders live in `unity\Assets\Shaders\` and are used through `b.ShaderMaterial("BWM/Name", "File")`,
   which resets the material to the shader's defaults on every build. `BwmSnow.shader` (ground) and
   `BwmSnowflake.shader` (particles) are the examples. The lit pass must be tagged
@@ -332,6 +352,22 @@ the scatter change 16.1 / 12.0 / 8.5 GB and 147 fps on the island; after it 11.7
 island's pack 221 MB, from 856). The slowest viewpoint (w1, 109-117 fps) looks at the plaza: the dressing is 14 fps
 of it, the rest is the plaza's puzzles.
 
+**The puzzle sleeper** (`winterwalk\PuzzleSleep.cs`, 2026-11-22): every one of the SDK's puzzle components runs an
+Update every frame wherever the players are, and through Il2CppInterop each call is dear: the 29 redesigned puzzles
+carried 2,667 of them and cost about 3 ms a frame from anywhere (base island 118 fps, Winter Isle 111; with the
+puzzles switched off 150-163). The sleeper switches a component off (`Behaviour.enabled`: only its Update stops;
+it is still drawn, solid, and keeps its state) while no player in the walk is within `PuzzleSleep.Range` (200 m)
+and its puzzle is not running. Measured in one session: sleeper on 162.7 / 152.2 fps (base / isle), off 125.6 /
+119.5, and the 1% lows 141 / 126 against 58 / 62. Never slept: PuzzleSDK, radio dead and reverb zones, sim-press
+switches, terrain holes, gourd vices, plinths, boxes, pillows, tower buttons. `PuzzleSleep.Off` wakes everything
+for tests. Found with the companion's `comp` command: `comp?list=1` counts components on the puzzles by type,
+`comp?type=T&on=0` switches a type off (`*` all behaviours, `range:A:F` by first letter, `Renderer`/`Collider`,
+`go=1` deactivates their objects), `comp?type=x&on=1` puts everything back. Puzzle designs should still keep
+their SDK part count down: a running puzzle, and every puzzle near a player, pays in full.
+
+Measuring needs a quiet PC: another game or emulator running (the user's Sonic build, 2026-11-22) took about a
+third off every reading, base game included, and readings drifted down while it ran.
+
 **Winter Walk's own time** (the heartbeat's "Winter Walk x ms/frame") was 0.45 ms and is 0.2: every method of a
 game type called from the plugin, even `Vector2.Distance`, `Mathf.Sqrt` or a `Vector3` constructor, is a call into
 the game, so loops use plain floats and `System.Math`; stopped trains, cabins and mantrips are placed once, not every
@@ -347,6 +383,11 @@ review viewpoints (`tools\review\review-viewpoints.txt`, twelve on each island) 
 2026-11-22, warmed and in two passes, the base game averaged 153.7 fps and the island 142.9 before the fir LOD change.
 
 ## Testing
+
+`tools\review\puzzle-capture.ps1 [-Names A,B]` captures every island puzzle from the running game into
+`shots\puzzles\`: an aerial and four eye-level views, a view while running, and its start/stop/win results with the
+game's log lines from that time. The redesign specs of 2026-11-22 (each puzzle's roles, wiring, anti-cheese table)
+are in `Z:\Temp\claude\BigWalkMods\puzzle-specs\<Name>.md` with `<Name>.impl.md` beside them.
 
 1. `bwm.ps1 build <Puzzle>` and Read `previews\<Puzzle>-*.png`.
 2. `bwm.ps1 play` (once), then after each rebuild `bwm.ps1 game reload`.
@@ -414,13 +455,22 @@ each time, and do not commit broken or half-built states.
 
 ## Known open problems
 
-- Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
+- (Probably fixed 2026-11-22: the flat Glass sheet, see Glass above.) Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
   material on the test island and causeway does not. Cause unknown.
 - `ClearGround` leaves dark flat patches where some boulders were.
 - Releases are private (user, 2026-11-21): the repo stays private. Each players' zip becomes a release on the private
   GitHub repo (`bwm.ps1 release`; the first, `v2026.11.21-d565e2a`); the user copies it to their Google Drive
   (`D:\My Drive\Big Christmas Walk\`) and shares it by link as they see fit. Never make the repo public.
 - Nothing has been tested with two players.
+- A tester's log (2026-11-22, RTX 5070 laptop, 2560x1600, quality level 5): they walked from the mainland onto the isle
+  and round the plaza and mine station M9 (about -580..-500, -850..-750). (1) There they were often "OFF THE GROUND"
+  while walking: the game's ground check and the debug log's rays found nothing under them (at -516, 13, -779 not
+  even the terrain 23 m down), so jump did nothing; what holds them up there is not yet known (check with `ground`
+  and `look` in the game). (2) At (-518, 11, -847) they wedged against a small "rock-pointy" dressing rock (grip 0,
+  too steep to jump) for over two minutes and quit. `winterwalk\Unstuck.cs` now sets a player who pushes to move
+  or jump for `Unstuck.StuckSeconds` (3) without moving, on ground too steep to use or held up off it, back on the
+  game's own `lastSafePosition` or the nearest open level spot (`Unstuck.TestRescue` for tests). (3) Their fps was
+  35-47 round the plaza and M9, 54-84 elsewhere on the isle and on the mainland.
 - Found by the debug log on 2026-11-21, not yet fixed:
   - The "BWM Test" save loads the player into the game's spawn room at (-242, 37, -485) with no collider beneath (not
     even terrain within 500 m) and holds them there, off the ground, unable to jump. Suspect the dev profile's

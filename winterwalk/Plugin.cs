@@ -37,6 +37,8 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
             ClassInjector.RegisterTypeInIl2Cpp<Scatter>();
+            ClassInjector.RegisterTypeInIl2Cpp<Unstuck>();
+            ClassInjector.RegisterTypeInIl2Cpp<PuzzleSleep>();
             ClassInjector.RegisterTypeInIl2Cpp<SnowTrails>();
             ClassInjector.RegisterTypeInIl2Cpp<SkiDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<GondolaDriver>();
@@ -56,6 +58,8 @@ namespace WinterWalk
             go.AddComponent<SkyDriver>();
             go.AddComponent<Dresser>();
             go.AddComponent<Scatter>();
+            go.AddComponent<Unstuck>();
+            go.AddComponent<PuzzleSleep>();
             go.AddComponent<SnowTrails>();
             go.AddComponent<SkiDriver>();
             go.AddComponent<GondolaDriver>();
