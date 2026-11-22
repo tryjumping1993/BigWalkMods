@@ -321,8 +321,11 @@ copies (floating, buried, over nothing). F8 (`MarkKey`) marks a moment with a sc
 `tools\perf\measure.ps1 [-Island orig|winter|both]` does the whole comparison from the running game: each review
 viewpoint in turn (hour set, uncapped, Very High), then the process's memory and video memory (Windows' "GPU Process
 Memory" counters); `tools\perf\walk.ps1 -Route "x,z;x,z" [-Sprint] [-Start "x,y,z"]` walks the test player there
-with the game's own input (forward, sprint, jump; it only turns by teleporting in place) and reports distance, frame
-times and where it got stuck (it walks straight at each point, so trees and rocks stop it often). Both append to
+with the game's own input and reports distance, pace, frame times and where it got stuck. It teleports only at the
+start: a teleported player is seated (`isSittingLocal`) and forward input does nothing until a jump stands them up
+(`sit?stand` does not). It turns with the look stick (`stickLookX`, about 40 degrees a second at full tilt). It walks
+straight at each point, so the dense woods stop it: give it routes over open ground or along paths. Measured
+2026-11-22: 1.8 m/s walking, 3.6 m/s sprinting on clear stretches (the game's 2 and 3.5). Both append to
 `logs\perf-measure.log`. For the base game alone, move the `.puzzlepack` files out of the profile for one run.
 On 2026-11-22: base game 9.4 GB private, 8.3 GB in RAM, 5.6 GB video memory, 153-158 fps; with the island before
 the scatter change 16.1 / 12.0 / 8.5 GB and 147 fps on the island; after it 11.7 / 9.7 / 6.4 GB and 148.5 fps (the
