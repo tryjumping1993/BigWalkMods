@@ -1,7 +1,10 @@
 # Big Christmas Walk trailer: turns the frames capture.py shot (shots\trailer\f00001.png ...) into MP4s.
 #   powershell -ExecutionPolicy Bypass -File tools\trailer\encode.ps1 [-FramesDir dir] [-OutDir dir] [-Crf 22]
+#     [-Music menu-theme.wav -MusicStart 2.4]   (the menu theme: tools\trailer\menu_theme.py extracts it from the game)
 # Writes <OutDir>\big-christmas-walk-trailer.mp4 (1920x1080) and big-christmas-walk-trailer-720p.mp4 (1280x720):
-# H.264 (high profile), yuv420p, 30 fps, lanczos scaling, +faststart, no audio track, nothing drawn over the frames.
+# H.264 (high profile), yuv420p, 30 fps, lanczos scaling, +faststart, nothing drawn over the frames. With -Music <wav>
+# (only the game's own music: no generated audio goes in a trailer) it is laid under the picture from
+# -MusicStart seconds in, faded in over 1.5 s and out over the last 4 s, AAC 160 kb/s; without it there is no audio.
 # The 1080p file is held under -MaxMB (14 MB) whatever the length: a constant-quality encode (CRF) capped by a peak
 # rate, and encoded again at a higher CRF if it still comes out over. ffmpeg runs off the faulty CPU cores
 # ($env:BWM_AFFINITY, else FFFFFFCF: not logical CPUs 4 and 5) at below-normal priority, with few threads.
@@ -13,6 +16,8 @@ param(
     [double]$MaxMB = 14.0,
     [int]$Fps = 30,
     [int]$Threads = 8,
+    [string]$Music = '',
+    [double]$MusicStart = 0,
     [string]$Ffmpeg = 'Z:\Tools\ffmpeg\ffmpeg-9.0.1-essentials_build\bin\ffmpeg.exe'
 )
 $ErrorActionPreference = 'Stop'
@@ -50,6 +55,7 @@ function Invoke-Ffmpeg([string]$arguments) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Ffmpeg
     $psi.Arguments = $arguments
+    if ($Music -and -not (Test-Path -LiteralPath $Music)) { throw "no music file $Music" }
     $psi.UseShellExecute = $false
     $p = [System.Diagnostics.Process]::Start($psi)
     try {
@@ -63,9 +69,15 @@ function Invoke-Ffmpeg([string]$arguments) {
 function Encode-Trailer([int]$width, [int]$height, [int]$crf, [string]$maxrate, [string]$bufsize, [string]$out) {
     $pattern = Join-Path $FramesDir 'f%05d.png'
     $vf = "scale=${width}:${height}:flags=lanczos,format=yuv420p"
-    $arguments = ('-hide_banner -loglevel warning -stats -y -framerate {0} -start_number {1} -i "{2}" -vf "{3}" ' +
+    $audioIn = ''; $audioOut = '-an'
+    if ($Music) {
+        $fadeAt = [Math]::Max(0, $seconds - 4).ToString([Globalization.CultureInfo]::InvariantCulture)
+        $audioIn = ('-ss {0} -t {1} -i "{2}"' -f $MusicStart.ToString([Globalization.CultureInfo]::InvariantCulture), $seconds.ToString([Globalization.CultureInfo]::InvariantCulture), $Music)
+        $audioOut = ('-map 0:v -map 1:a -af "afade=t=in:st=0:d=1.5,afade=t=out:st={0}:d=4" -c:a aac -b:a 160k -ar 48000 -shortest' -f $fadeAt)
+    }
+    $arguments = ('-hide_banner -loglevel warning -stats -y -framerate {0} -start_number {1} -i "{2}" {10} -vf "{3}" ' +
         '-c:v libx264 -preset slow -profile:v high -crf {4} -maxrate {5} -bufsize {6} -g {7} -r {0} -pix_fmt yuv420p ' +
-        '-threads {8} -an -movflags +faststart "{9}"') -f $Fps, $first, $pattern, $vf, $crf, $maxrate, $bufsize, ($Fps * 2), $Threads, $out
+        '-threads {8} {11} -movflags +faststart "{9}"') -f $Fps, $first, $pattern, $vf, $crf, $maxrate, $bufsize, ($Fps * 2), $Threads, $out, $audioIn, $audioOut
     Write-Host ("encoding {0}x{1} at CRF {2} (peak {3}) -> {4}" -f $width, $height, $crf, $maxrate, $out)
     Invoke-Ffmpeg $arguments
 }
@@ -78,6 +90,7 @@ function Describe([string]$file) {
 # 1080p, held under MaxMB: the peak rate is set so the whole length fits, with room for the container
 $limit = [long]($MaxMB * 1000 * 1000)
 $kbps = [int][Math]::Floor($limit * 8 / 1000 / [Math]::Max($seconds, 1) * 0.9)
+if ($Music) { $kbps -= 170 }      # room for the music track
 $kbps = [Math]::Min($kbps, 12000)
 $out1080 = Join-Path $OutDir "$Name.mp4"
 $crf1080 = $Crf

@@ -22,7 +22,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `log` | The puzzle-related lines of the last game run. |
 | `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 0.9 GB) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
-| (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods	railer\`. `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
+| (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods\trailer\` (`-Music <wav> -MusicStart 2.4` lays the game's menu theme under it; `menu_theme.py` extracts that from the game). `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
 | `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
 
 Build output is only the framework's `[BWM]` lines; the full Unity log is `logs\unity-<command>.log`. Exit

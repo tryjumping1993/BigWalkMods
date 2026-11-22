@@ -408,3 +408,12 @@ and finished assets for the puzzles.
 - **Gondola slower, dinosaurs at night (user, 2026-11-21):** the gondola's cable speed down a third (28 to 18.75 m/s, about
   105 s to the summit) after the trailer showed it too fast; the dinosaurs come out only from 19 h to 6 h. Seen in the game:
   none out at 13 h, all eight at 22 h, a night chase ending at dawn, cabins at 19 m/s.
+- **Players' download, and trailer 2 (user, 2026-11-21):** `bwm.ps1 package` builds the zip friends install (about 0.9 GB:
+  BepInEx, its .NET runtime, the SDK, the packs and Winter Walk, with the licence texts of everything shipped);
+  `Install.cmd` finds Big Walk through Steam, records what it copies and backs up what it replaces; `Uninstall.cmd` puts
+  the game back exactly. Tested on a fake game folder and on this PC's game (booted through Steam, 35 packs, then
+  uninstalled with the dev setup restored byte for byte). An audit of the whole history before going public found no
+  secrets or game files; making this repo public would expose the author's email, the restaurant's street number and
+  internal notes, so a separate public releases repo was suggested. Not tried: a friend's PC, two players. The trailer
+  was shot again with the slower gondola and Big Walk's own menu theme under it (`tools/trailer/menu_theme.py` extracts
+  it; `encode.ps1 -Music`); published at the same link as the first.
