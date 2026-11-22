@@ -325,5 +325,7 @@ each time, and do not commit broken or half-built states.
 - Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
   material on the test island and causeway does not. Cause unknown.
 - `ClearGround` leaves dark flat patches where some boulders were.
-- The players' zip has nowhere to live yet: the repo is private, and it is about 0.9 GB.
+- Releases are private (user, 2026-11-21): the repo stays private, and the players' zip goes in the user's Google Drive
+  (`D:\My Drive\Big Christmas Walk\`, synced by Drive for desktop); the user shares it by link. Never make the repo
+  public.
 - Nothing has been tested with two players.
