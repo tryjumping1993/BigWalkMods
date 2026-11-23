@@ -423,6 +423,9 @@ namespace WinterWalk
             if (checkAt < n) return;
             checkAt = -1;
             string msg = "dressing check: " + n + " copies; " + floating + " float 0.6 m or more above what is under them, " + buried + " rocks lie wholly under the ground or something else, " + inTunnel + " rocks reach into a rail tunnel or the mine, " + moved + " moved since placed, " + bodies + " rocks carry a physics body, " + bare + " have nothing under them (" + bareStanding + " of them trees or firs)";
+            // (normal checks find 1,100 to 1,800 over nothing; one made while physics queries find nothing, which happens
+            // some seconds after a dressing, finds 10,000 to 76,000: see CheckDelay)
+            if (bare > 5000) msg += "\n  NOT TRUSTWORTHY: physics queries were finding nothing during the check (they do for a while some seconds after a dressing), so these counts are wrong";
             if (worstTunnel.Count > 0) msg += "\n  into tunnels, biggest: " + string.Join("; ", worstTunnel.ConvertAll(kv => kv.Value));
             if (worstFloat.Count > 0) msg += "\n  floating worst: " + string.Join("; ", worstFloat.ConvertAll(kv => kv.Value));
             if (worstBuried.Count > 0) msg += "\n  buried deepest: " + string.Join("; ", worstBuried.ConvertAll(kv => kv.Value));
