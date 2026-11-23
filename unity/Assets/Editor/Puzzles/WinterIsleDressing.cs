@@ -143,8 +143,13 @@ public static class WinterIsleDressing
         float h = k.size.y * scale;
         float bottom = (k.centre.y - k.size.y / 2f) * scale;
         float y = ground - sink * h - bottom;
+        float yaw = R(0f, 360f), pitch = R(-tilt, tilt), roll = R(-tilt, tilt);
+        // No ground here (a rock of a cluster off the island's edge): no rock. A rock written with no height is a collider
+        // at a NaN position in the game, and while one is switched on every physics query in the world finds nothing
+        // (players "falling" on solid ground; 24 such rocks, found 2026-11-23).
+        if (float.IsNaN(y) || float.IsInfinity(y)) return float.NaN;
         output.Append(kind).Append('\t').Append(F(p.x)).Append('\t').Append(F(y)).Append('\t').Append(F(p.y)).Append('\t')
-            .Append(F(R(0f, 360f))).Append('\t').Append(F(R(-tilt, tilt))).Append('\t').Append(F(R(-tilt, tilt))).Append('\t')
+            .Append(F(yaw)).Append('\t').Append(F(pitch)).Append('\t').Append(F(roll)).Append('\t')
             .Append(F(scale)).Append('\t').Append(F(snow)).Append('\n');
         solids.Add((p, diameter * 0.45f));
         if (block) land.Block(p, diameter * 0.55f + 2f);

@@ -1547,6 +1547,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         foreach (int end in trailEnds) if (end >= 0 && !targets.Contains(end)) { targets.Add(end); trails++; }
         // Each route is found from the whole network laid so far, so it branches off the nearest path instead of
         // running all the way back to the plaza beside the others (which made the paths spokes of a wheel)
+        List<Vector2> landingRoute = null;
         var network = new List<int> { start };
         var onNetwork = new bool[count];
         onNetwork[start] = true;
@@ -1581,6 +1582,51 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             routed++;
             routes.Add((route, isTrail));
+            if (target == landingCell) landingRoute = route;
+        }
+        // 4a. The way up from the landing is a graded lane (players, 2026-11-23: "can't climb the first hill to get onto
+        //     the island after the bridge"). The search allows a step of 1.5 m between cells 3 m apart (27 degrees), the
+        //     bank behind the landing beach stood 10 m high at 35 to 45 degrees, and the trodden track up it is a metre
+        //     wide. So along that route the ground is cut down to a grade of one in five (11 degrees), 5 m wide, with
+        //     banks that lie back from it; only ever cut, never filled, and never the railway's bed or a levelled flat.
+        if (landingRoute != null && landingRoute.Count > 2)
+        {
+            const float MaxGrade = 0.2f, HalfWidth = 2.5f;
+            int n = landingRoute.Count;
+            var lane = new float[n];
+            float steepest = 0f, deepest = 0f, length = 0f;
+            for (int i = 0; i < n; i++) { float h = height[Cell_(landingRoute[i])]; lane[i] = float.IsNaN(h) ? 0.6f : Mathf.Max(h, 0.6f); }
+            for (int i = 1; i < n; i++)
+            {
+                float ds = (landingRoute[i] - landingRoute[i - 1]).magnitude;
+                length += ds;
+                if (ds > 0.01f) steepest = Mathf.Max(steepest, Mathf.Abs(lane[i] - lane[i - 1]) / Mathf.Max(ds, Cell * 0.25f));
+            }
+            var natural = (float[])lane.Clone();
+            for (int i = 1; i < n; i++) lane[i] = Mathf.Min(lane[i], lane[i - 1] + MaxGrade * (landingRoute[i] - landingRoute[i - 1]).magnitude);
+            for (int i = n - 2; i >= 0; i--) lane[i] = Mathf.Min(lane[i], lane[i + 1] + MaxGrade * (landingRoute[i + 1] - landingRoute[i]).magnitude);
+            for (int i = 0; i < n; i++) deepest = Mathf.Max(deepest, natural[i] - lane[i]);
+            int cut = 0, kept = 0;
+            for (int k = 0; k < count; k++)
+            {
+                if (!(height[k] > 0.6f)) continue;
+                Vector2 p = At(k);
+                if (Mathf.Abs(p.x - landingRoute[0].x) > length + 30f || Mathf.Abs(p.y - landingRoute[0].y) > length + 30f) continue;
+                float nearest = float.MaxValue; int at = -1;
+                for (int i = 0; i < n; i++) { float d2 = (landingRoute[i] - p).sqrMagnitude; if (d2 < nearest) { nearest = d2; at = i; } }
+                float d = Mathf.Sqrt(nearest), depth = height[k] - lane[at];
+                if (depth <= 0.02f) continue;
+                float blend = Mathf.Clamp(depth * 1.6f, 3f, 18f);
+                if (d >= HalfWidth + blend) continue;
+                bool spared = railClear[k] < 2f;
+                for (int f = 0; f < flats.Count && !spared; f++) spared = (p - flats[f].at).magnitude < flats[f].radius + 2f;
+                if (spared) { if (d < HalfWidth + 1f) kept++; continue; }
+                height[k] = Mathf.Lerp(lane[at], height[k], Smooth((d - HalfWidth) / blend));
+                cut++;
+            }
+            Debug.Log("[BWM] Winter Isle: the lane up from the landing: " + Sdk.F(length) + " m from " + landingRoute[0] + " to " + landingRoute[n - 1] + ", was as steep as "
+                + Sdk.F(Mathf.Atan(steepest) * Mathf.Rad2Deg) + " degrees, now " + Sdk.F(Mathf.Atan(MaxGrade) * Mathf.Rad2Deg) + "; cut up to " + Sdk.F(deepest) + " m deep over " + cut + " grid points"
+                + (kept > 0 ? "; " + kept + " points on it left alone (the railway's bed or a levelled flat)" : ""));
         }
         Spread(toPath, row, nz + 1);      // now in cells; times Cell for metres
         float PathDistance(Vector2 p) => toPath[Cell_(p)] * Cell;

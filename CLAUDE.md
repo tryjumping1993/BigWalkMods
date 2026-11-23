@@ -523,16 +523,21 @@ each time, and do not commit broken or half-built states.
   copies it to their Google Drive and shares it by link as they see fit. The user made the repo public on 2026-11-22;
   leave its visibility alone unless they ask.
 - Nothing has been tested with two players.
-- **Physics queries find nothing for a while after a dressing** (found 2026-11-23, probably the tester's "OFF THE
-  GROUND" below): 4 to 8 s after the dresser switches its copies on, every ray in the world hits nothing (the island's
-  ground, the copies, tunnels: the companion's `ground?x&z` from 3000 m answers "none" everywhere, the game's ground
-  check fails, the debug log's dressing check reports thousands of copies "over nothing"), and it lasts until colliders
-  change again: the dresser's culling starting after its check ended it 1 to 2 s later; with the check moved to 60 s
-  (live: `Dresser.CheckDelay`) it lasted 54 s. The old dressing did it too (1.2 s at a first join, check at 5 s). A full
-  re-dress (the list's file time touched) sets it off 9 to 13 s later; switching 24,000 existing copies off and on
-  (`Dresser.TestHide`) did not, nor did a quiet minute. Suspect PhysX's scene-query tree after the 90,000 new colliders;
-  while walking, the culling's switching may be what ends (or starts) the tester's spells. To measure: poll
-  `ground?x=-700&z=-700` every 100 ms through a join.
+- **Fixed 2026-11-23: physics queries finding nothing** (players "falling" on solid ground in the training room for some
+  seconds after joining, the tester's "OFF THE GROUND" round the plaza, dressing checks with thousands "over nothing").
+  The island's build had written 24 rocks with no height (NaN: a rock of a cluster off the island's edge), and one
+  collider at a NaN position makes every ray and ground check in the whole world find nothing while it is switched on
+  (so it came and went with the dressing's culling; some lay near the landing and the plaza). The build no longer writes
+  them and `Dresser.Load` leaves out any entry that is not finite. Found by switching every cell on (`Dresser.NearAll`
+  etc. = 99999), then `TestHide` by kind. A normal dressing check now finds 8 copies over nothing, not 1,100 to 1,800.
+- **The lane up from the landing** (island step 4a, 2026-11-23; players could not climb the bank behind the landing
+  beach, 10 m at 35 to 45 degrees): the route from the landing to the plaza is cut down to one in five, 5 m wide, never
+  filled, sparing the railway's bed and levelled flats. Walked with `tools\perf\walk.ps1` (beach to 12.7 m, never stuck).
+  The other paths are still only searched at up to 27 degrees between grid points and not graded.
+- **"Can still faintly see through the ground"** (players, 2026-11-23, on the release with the bridge): not reproduced on
+  this PC at any of the six quality levels, day or night, on the mainland, the bridge, the beach or the island. From
+  below (inside a mine shed or cut) the ground is not drawn, being one-sided. Needs a player's F8 mark (screenshot and
+  place in the debug log).
 - A tester's log (2026-11-22, RTX 5070 laptop, 2560x1600, quality level 5): they walked from the mainland onto the isle
   and round the plaza and mine station M9 (about -580..-500, -850..-750). (1) There they were often "OFF THE GROUND"
   while walking: the game's ground check and the debug log's rays found nothing under them (at -516, 13, -779 not

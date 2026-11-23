@@ -302,10 +302,10 @@ namespace WinterWalk
             wakeMs += MsSince(t0); wakeFrames++;
             if (wakeAt < wakeOrder.Count) return;
             wakeAt = -1;
-            // the debug log's check wants every copy there (rocks on rocks); drawing by distance starts after it. Not later
-            // than 5 s: some seconds after a dressing every physics query starts finding nothing (rays, the game's ground
-            // check), and that lasts until colliders change again, which the culling's first pass does; with the check at
-            // 60 s it lasted 54 s (2026-11-23). So the check can fall in it (thousands of copies "over nothing").
+            // the debug log's check wants every copy there (rocks on rocks); drawing by distance starts after it.
+            // (Until 2026-11-23 every physics query found nothing from a few seconds after this until the culling's first
+            // pass: 24 rocks in the list had no height, and a collider at a NaN position does that while it is switched on.
+            // Load now leaves such entries out.)
             if (Diag.On.Value) { checkAt = 0; checkFrom = Time.unscaledTime + CheckDelay; floating = moved = bodies = bare = buried = inTunnel = bareStanding = 0; worstFloat.Clear(); worstMoved.Clear(); worstBuried.Clear(); worstBare.Clear(); worstTunnel.Clear(); }
             else StartCulling();
             string Ms(double v) => v.ToString("0", CultureInfo.InvariantCulture);
@@ -423,9 +423,9 @@ namespace WinterWalk
             if (checkAt < n) return;
             checkAt = -1;
             string msg = "dressing check: " + n + " copies; " + floating + " float 0.6 m or more above what is under them, " + buried + " rocks lie wholly under the ground or something else, " + inTunnel + " rocks reach into a rail tunnel or the mine, " + moved + " moved since placed, " + bodies + " rocks carry a physics body, " + bare + " have nothing under them (" + bareStanding + " of them trees or firs)";
-            // (normal checks find 1,100 to 1,800 over nothing; one made while physics queries find nothing, which happens
-            // some seconds after a dressing, finds 10,000 to 76,000: see CheckDelay)
-            if (bare > 5000) msg += "\n  NOT TRUSTWORTHY: physics queries were finding nothing during the check (they do for a while some seconds after a dressing), so these counts are wrong";
+            // (a normal check finds a handful over nothing; thousands means physics queries were finding nothing, as they
+            // did while a collider at a NaN position was switched on: see Load)
+            if (bare > 5000) msg += "\n  NOT TRUSTWORTHY: physics queries were finding nothing during the check, so these counts are wrong";
             if (worstTunnel.Count > 0) msg += "\n  into tunnels, biggest: " + string.Join("; ", worstTunnel.ConvertAll(kv => kv.Value));
             if (worstFloat.Count > 0) msg += "\n  floating worst: " + string.Join("; ", worstFloat.ConvertAll(kv => kv.Value));
             if (worstBuried.Count > 0) msg += "\n  buried deepest: " + string.Join("; ", worstBuried.ConvertAll(kv => kv.Value));
@@ -463,6 +463,7 @@ namespace WinterWalk
         static void Load(byte[] bytes)
         {
             var list = new List<Entry>();
+            int bad = 0;
             using var text = new StreamReader(new MemoryStream(bytes));
             for (string raw; (raw = text.ReadLine()) != null;)
             {
@@ -470,6 +471,12 @@ namespace WinterWalk
                 string[] p = raw.Split('\t');
                 if (p[0] == "@bounds" && p.Length >= 5) { X0 = N(p[1]); X1 = N(p[2]); Z0 = N(p[3]); Z1 = N(p[4]); continue; }
                 if (p.Length < 9) continue;
+                // every number finite: one collider at a NaN position makes every physics query in the world find nothing
+                // while it is switched on (rays, the game's ground check: players "falling" on solid ground, 2026-11-23;
+                // the island's build had written 24 rocks with no height)
+                bool finite = true;
+                for (int i = 1; i <= 8 && finite; i++) { float v = N(p[i]); finite = !float.IsNaN(v) && !float.IsInfinity(v); }
+                if (!finite || N(p[7]) <= 0f) { bad++; continue; }
                 list.Add(new Entry
                 {
                     kind = p[0],
@@ -480,7 +487,7 @@ namespace WinterWalk
                 });
             }
             entries = list;
-            Plugin.L.LogInfo("Winter Walk: read " + list.Count + " placements from " + Path.GetFileName(file));
+            Plugin.L.LogInfo("Winter Walk: read " + list.Count + " placements from " + Path.GetFileName(file) + (bad > 0 ? " (" + bad + " left out: a place that is not a number)" : ""));
         }
 
         static string Base(string name)
