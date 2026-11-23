@@ -82,6 +82,28 @@ Shader "BWM/Mine"
             }
             ENDHLSL
         }
+        // The game renders deferred and URP copies depth before our forward passes draw: this pass puts the
+        // surface into the depth buffer during the GBuffer pass, so the fog and other depth effects do not see through it
+
+        Pass
+        {
+            Name "GBufferDepth"
+            Tags { "LightMode" = "UniversalGBuffer" "UniversalMaterialType" = "Unlit" }      // depth only, so the depth texture holds this surface (see the note above)
+            ZWrite On
+            ColorMask 0 0
+            ColorMask 0 1
+            ColorMask 0 2
+            ColorMask 0 3
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment Frag
+            float4 Vert(float4 positionOS : POSITION) : SV_POSITION { return TransformObjectToHClip(positionOS.xyz); }
+            half4 Frag(float4 positionCS : SV_POSITION) : SV_Target { return positionCS.z; }
+            ENDHLSL
+        }
+
 
         Pass
         {

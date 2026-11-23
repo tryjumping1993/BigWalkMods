@@ -138,10 +138,33 @@ namespace WinterWalk
             Plugin.L.LogInfo("Winter Walk: sun shadows " + (on > 0f ? "on" : "off") + " in our shaders (quality level " + QualitySettings.GetQualityLevel() + ")");
         }
 
+        // The game renders its sky into a cubemap every frame (one face a frame) for its reflections; our fog box
+        // (BWM/FogBox) takes its colour from it, so the fog is always the colour of the sky behind it, at any hour
+        static IntPtr skyCube;
+        static int skyCubeCheckFrame = -1000;
+        static void SkyCube()
+        {
+            if (Time.frameCount - skyCubeCheckFrame < 60) return;
+            skyCubeCheckFrame = Time.frameCount;
+            try
+            {
+                SkyboxToCubemapCamera sc = SkyboxToCubemapCamera.Instance;
+                RenderTexture cube = sc != null ? sc.cubemapTexture : null;
+                IntPtr ptr = cube != null ? cube.Pointer : IntPtr.Zero;
+                if (ptr == skyCube) return;
+                skyCube = ptr;
+                if (cube != null) Shader.SetGlobalTexture("_BwmSkyCube", cube);
+                Shader.SetGlobalFloat("_BwmSkyCubeOn", cube != null ? 1f : 0f);
+                Plugin.L.LogInfo("Winter Walk: sky cubemap for the fog " + (cube != null ? cube.width + " px" : "not found"));
+            }
+            catch (Exception e) { Shader.SetGlobalFloat("_BwmSkyCubeOn", 0f); Plugin.L.LogWarning("Winter Walk: sky cubemap: " + e.Message); }
+        }
+
         void LateUpdate()
         {
             using var diag = Diag.Time("sky");
             SunShadows();
+            SkyCube();
             try
             {
                 Enviro.EnviroManager env = Enviro.EnviroManager.instance;

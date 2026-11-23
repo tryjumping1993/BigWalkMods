@@ -67,7 +67,32 @@ namespace WinterWalk
                 puzzles.Add(p);
                 Managed += p.parts.Count;
             }
+            SkyLit();
             Plugin.L.LogInfo("Winter Walk: puzzle sleeper watches " + Managed + " components in " + puzzles.Count + " puzzles; they sleep beyond " + Range + " m from every player while their puzzle is not running");
+        }
+
+        // The packs' objects take their ambient light and reflections from the sky, not from the base island's baked light
+        // probes: out on the Winter Isle the game's probes are far away and the nearest is often in shade, which left
+        // gourds, vices, lamps and every SDK part dark under a bright sky (the user, 2026-11-22). The sky's ambient light
+        // (RenderSettings, which Enviro updates with the hour) is what our own snow and props are lit by.
+        public static int SkyLitRenderers;
+        void SkyLit()
+        {
+            int n = 0;
+            foreach (BigPuzzleSDK.PuzzleSDK sdk in FindObjectsOfType<BigPuzzleSDK.PuzzleSDK>())
+            {
+                if (sdk == null) continue;
+                foreach (Component c in sdk.transform.root.GetComponentsInChildren(Il2CppType.Of<Renderer>(), true))
+                {
+                    Renderer r = c != null ? c.TryCast<Renderer>() : null;
+                    if (r == null) continue;
+                    r.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+                    r.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+                    n++;
+                }
+            }
+            SkyLitRenderers = n;
+            Plugin.L.LogInfo("Winter Walk: " + n + " renderers in the packs lit by the sky rather than the base island's light probes");
         }
 
         void WakeAll()

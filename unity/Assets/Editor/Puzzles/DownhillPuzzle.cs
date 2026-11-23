@@ -447,7 +447,7 @@ public sealed class DownhillPuzzle : PuzzleDef
         var made = new List<Piece>();
         made.Add(f.Part("Switch Start", -1.2f, Front + 0.073f, 1.25f, 0f).Named(tag + " Start Switch"));
         made.Add(f.Part("Live Light", -1.2f, Front + 0.006f, 1.42f, 0f).Named(tag + " Live Light"));
-        Piece clock = f.Part("Timer", SideX, Face - 0.02f, 1.55f, 180f).Named(tag + " Clock").Scaled(0.6f, 0.6f, 0.6f);
+        Piece clock = f.Part("Timer", SideX, Face - 0.02f, 1.55f, 180f).Named(tag + " Clock").Scaled(0.6f * PuzzleBuilder.TimerScale, 0.6f * PuzzleBuilder.TimerScale, 0.6f * PuzzleBuilder.TimerScale);
         clock.Set("PuzzleTimer", "duration", T);
         Piece fail = f.Part("Light 8", SideX, Face - 0.03f, 2.05f, 180f).Named(tag + " Fail Lamp")
             .Set("PuzzleLight", "color", new Color(1f, 0f, 0f)).Set("PuzzleLight", "range", LampRange);

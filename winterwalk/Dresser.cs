@@ -414,6 +414,14 @@ namespace WinterWalk
                     Renderer r = c.TryCast<Renderer>();
                     if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 }
+            // lit by the sky, not the base island's far-off light probes (see PuzzleSleep.SkyLit)
+            foreach (Component c in copy.GetComponentsInChildren(Il2CppType.Of<Renderer>(), true))
+            {
+                Renderer r = c.TryCast<Renderer>();
+                if (r == null) continue;
+                r.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+                r.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+            }
             if (fir) { copy.SetActive(true); made++; return; }      // our own firs: snow is in their shader
             foreach (Component c in copy.GetComponentsInChildren(Il2CppType.Of<Renderer>(), true))
             {

@@ -89,7 +89,7 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   `BlindGate`. `Sdk.SetFlags` sets a flags enum (a hook's `acceptedVanilla`), `Sdk.AddInts` an int list (a peg
   board's `answerFromFlap`, needed when its answers are Sound Peg Answers). Part sizes that caught me out: a Peg
   Board's pivot is at one end (it runs 2 m to its left), the Door is 1.24 m wide, a turnstile 2.12 m.
-- The island's terrain is low shelves in the east and middle, a 73 m mountain in the west with two lower
+- The island's terrain is low shelves in the east and middle, a mountain of about 590 m in the west with two lower
   peaks, a ravine and a frozen lake (`Peaks`, `Lake` and the ravine constants in `WinterIslePuzzle.cs`). Its
   build levels every island puzzle's site, so a puzzle can be sited on a slope, and prints how much level
   ground is left.
@@ -156,6 +156,19 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Island Gear** (`IslandGearPuzzle.cs`, a scenery pack): five stations of the game's own tools (binoculars,
   walkie-talkies, megaphone, torches, GPS, map, compass, laser, night vision, a backpack and belt on hooks), at
   the landing, the plaza, the summit, the lodge and the mining yard. Items are not saved: a reload resets them.
+- **The fog box** (`BWM/FogBox`, built in `Veil`): drawn on the outer faces of a box round the whole island (to 760 m)
+  while the camera is outside it (fading over the last 60 m). The eye's ray is stepped through a round field of fog
+  (dense to 150 m, thinning by e every `_Ceiling` 180 m above, fading over the outer half of an ellipse in the box) up
+  to the scene's depth, and the fog takes the colour of the sky near the horizon behind it: the game renders its sky
+  into a live cubemap (`SkyboxToCubemapCamera.Instance.cubemapTexture`), which Winter Walk hands to shaders as
+  `_BwmSkyCube` (`Plugin.SkyCube`). Fog of a fixed colour read as an object whatever its shape (a wall, a dome, a
+  paper cut-out; 2026-11-22); the night's auto-exposure turns even a faint tint into a slab, so `_Festive` is 0.003.
+  The near (east) coast stays visible from the mainland. Judge it from the player's camera (`shot?file=x`, no camera,
+  `render?awake=1`). The old veil ribbons are no longer built; the blooms are drawn before the fog box, only at night.
+- **The covered bridge** (island step 9): from the end of the training area's exit walkway (stairs down to the beach
+  at -378.4, 1.2, -724.8, after its drawbridge) across the shallows to the island's landing: red timber on stone
+  piers, a snowy roof, garlands, lights, wreaths and lanterns. `ShorePoint` still guards the coast and picks the
+  landing. The world index (`world\world-index.tsv`) lists the walkway's pieces (`Walkway-IntroExit`).
 - **Weather and the fog veil:** `winterwalk\WeatherDriver.cs` works out mist and cloud from the hour and blizzards
   from the network clock (Poisson, mean `BlizzardMeanMinutes` of real play, default 90; a game day is only 15 real
   minutes); `SkyDriver` blends them into the sky, and a blizzard switches on the pack's "Blizzard Snowfall".
@@ -287,6 +300,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   `PuzzleSDK.Win` or to `GameObject.SetActive` (`piece.On(..., target.Go, "SetActive", true)`). `SnowmanPuzzle.cs`
   is the example. In the game each item's real prop is a root object named `VanillaItem`; the object with the
   item's own name is only a marker.
+- **Timer** is the game's countdown board: 3.92 x 1.57 m and 0.21 m deep at scale 1 (the SDK has no preview model, so
+  `part-metrics.tsv` has no size for it). `Part` scales it to `PuzzleBuilder.TimerScale` (0.28: 1.1 x 0.44 m); a
+  puzzle's own `Scaled(s)` on a timer must be `s * TimerScale`. Before 2026-11-22 they stood out through walls.
 - **Glass** is a 10 m plane stood upright by a 90 degree tilt on its prefab's root: `Part` keeps that tilt, and
   `.Pane(width, height)` sizes a pane in metres (4 cm thick). Before 2026-11-22 `Part` kept only the yaw and every
   window lay flat as a sheet across its room (the "thin dark grid lines" on the Glass Booth's pad were its wire).
@@ -308,6 +324,16 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   `BwmSnowflake.shader` (particles) are the examples. The lit pass must be tagged
   `"LightMode" = "UniversalForwardOnly"`: the game renders deferred, and a pass tagged `UniversalForward`
   draws nothing there. A build fails on shader compile errors.
+- **Our solid shaders also write depth in the GBuffer pass** (a `GBufferDepth` pass: `LightMode` UniversalGBuffer,
+  `UniversalMaterialType` Unlit, `ColorMask 0` on all four targets, the same vertex placement as the lit pass). The
+  game renders deferred and URP copies the depth buffer right after the GBuffer pass, before UniversalForwardOnly
+  passes draw, so without it every depth effect (the game's fog, ambient occlusion, our fog box) saw what lay behind
+  our surfaces: trees through cabin walls, a puzzle's inside through its walls, buried rocks through the snow (the
+  user's "glassy effect", 2026-11-22). Any new opaque shader of ours needs the same pass.
+- **Our objects are lit by the sky, not the game's light probes:** Winter Walk sets `lightProbeUsage` and
+  `reflectionProbeUsage` Off on every pack's renderers (`PuzzleSleep.SkyLit`) and on the dressing's copies. The
+  game's probes are baked over the base island; out here the nearest is often in shade, and gourds, vices and every
+  SDK part were dark under a bright sky. With probes off they take the sky's ambient light, which Enviro updates.
 - **Sun shadows in our shaders:** never URP's `_MAIN_LIGHT_SHADOWS*` / `_SHADOWS_SOFT*` multi_compiles. A pack only
   carries the variants our pipeline asset keeps, the game's levels want others (no sun shadows on Very Low and Low,
   soft Low on Medium, soft High on Very High; all Deferred+), and the nearest variant took everything outside the

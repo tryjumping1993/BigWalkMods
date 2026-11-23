@@ -370,7 +370,7 @@ public sealed class BigAirPuzzle : PuzzleDef
         Piece hutBar = PartAbs("Progress Bar", HW(0f, WallFace - 0.09f), deck + 2.5f, hutYaw).Named("Hut Bar").Scaled(0.8f, 0.8f, 0.8f);
         hutBar.Set("PuzzleProgressBar", "total", 6);
         Piece clockBar = PartAbs("Progress Bar", HW(0f, WallFace - 0.11f), deck + 2.0f, hutYaw).Named("Clock Bar");
-        Piece clock = PartAbs("Timer", HW(-1.1f, WallFace - 0.1f), deck + 1.35f, hutYaw).Named("Clock").Scaled(1.5f, 1.5f, 1.5f);
+        Piece clock = PartAbs("Timer", HW(-1.1f, WallFace - 0.1f), deck + 1.35f, hutYaw).Named("Clock").Scaled(1.5f * PuzzleBuilder.TimerScale, 1.5f * PuzzleBuilder.TimerScale, 1.5f * PuzzleBuilder.TimerScale);
         PartAbs("Switch Start", HW(0.5f, WallFace - 0.073f), deck + 1.25f, hutYaw).Named("Hut Switch");
         PartAbs("Live Light", HW(0.5f, WallFace - 0.006f), deck + 1.42f, hutYaw).Named("Hut Live");
         Piece speaker = PartAbs("Intercom Speaker", HW(1.35f, WallFace - 0.1f), deck + 1.3f, hutYaw).Named("Hut Speaker");

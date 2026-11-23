@@ -251,6 +251,30 @@ Shader "BWM/Fir"
             half4 Frag(Varyings i) : SV_Target { clip(Alpha(i.uv) - _Cutoff); return 0; }
             ENDHLSL
         }
+        // The game renders deferred and URP copies depth before our forward passes draw: this pass puts the
+        // surface into the depth buffer during the GBuffer pass, so the fog and other depth effects do not see through it
+
+        Pass
+        {
+            Name "GBufferDepth"
+            Tags { "LightMode" = "UniversalGBuffer" "UniversalMaterialType" = "Unlit" }      // depth only, so the depth texture holds this surface (see the note above)
+            ZWrite On
+            ColorMask 0 0
+            ColorMask 0 1
+            ColorMask 0 2
+            ColorMask 0 3
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment Frag
+            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
+            Varyings Vert(Attributes v) { Varyings o; o.positionCS = TransformObjectToHClip(v.positionOS.xyz); o.uv = v.uv; return o; }
+            half4 Frag(Varyings i) : SV_Target { clip(Alpha(i.uv) - _Cutoff); return i.positionCS.z; }
+            ENDHLSL
+        }
+
 
         Pass
         {

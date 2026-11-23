@@ -705,8 +705,11 @@ namespace WinterWalk
                         if (!c.name.StartsWith("Island ")) continue;
                         MeshCollider mc = c.GetComponent<MeshCollider>();
                         if (mc == null) continue;
+                        // (plain arithmetic: Bounds.SqrDistance made the whole check an "invalid program" in the game)
                         Bounds b = mc.bounds;
-                        float d = b.SqrDistance(at);
+                        Vector3 lo = b.min, hi = b.max;
+                        float ex = Math.Max(0f, Math.Max(lo.x - at.x, at.x - hi.x)), ey = Math.Max(0f, Math.Max(lo.y - at.y, at.y - hi.y)), ez = Math.Max(0f, Math.Max(lo.z - at.z, at.z - hi.z));
+                        float d = ex * ex + ey * ey + ez * ez;
                         if (d < bestD) { bestD = d; best = c; }
                     }
                     if (best != null)

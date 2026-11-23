@@ -130,6 +130,7 @@ namespace Bwm
         }
 
         // One of the SDK's prefabs by file name without extension, e.g. "Peg Board", "Switch Start", "Button Hold"
+        public const float TimerScale = 0.28f;      // the Timer at 1.1 x 0.44 m
         public Piece Part(string prefab, float x, float z, float height = 0f, float yaw = 0f, bool onGround = true)
         {
             string path = "Assets/BigPuzzleSDK/" + prefab + ".prefab";
@@ -140,6 +141,10 @@ namespace Bwm
             // (keeping the prefab's own turn: Glass is a plane stood upright by a 90 degree tilt on its root, and with only
             // the yaw every window lay flat, a sheet across the room; no other SDK part has a turn on its root)
             go.transform.rotation = Root.transform.rotation * Quaternion.Euler(0f, yaw, 0f) * asset.transform.localRotation;
+            // The Timer is the game's countdown board, 3.92 x 1.57 m and 0.21 m deep at scale 1 (measured in the game: the SDK
+            // has no preview model for it, so puzzles took it for a small clock and it stood out through their walls): a
+            // wall clock's size by default; a puzzle's own Scaled(s) on a timer should be s * TimerScale
+            if (prefab == "Timer") go.transform.localScale = Vector3.one * TimerScale;
             return new Piece(go);
         }
 

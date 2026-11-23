@@ -727,8 +727,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         var veil = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
         veil.SetVertices(verts); veil.SetUVs(0, uvs); veil.SetTriangles(tris, 0); veil.RecalculateBounds();
-        Piece veilPiece = b.MeshPiece("Fog Veil", veil, b.ShaderMaterial("BWM/Veil", "Veil"), false);
-        veilPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        // (The ribbons are no longer built: seen from the island they stood over the mainland as flat red and green walls
+        // with hard edges where the rings crossed, "out of place and amateurish" (the user, 2026-11-22). The fog box
+        // below hides the island from outside; from inside, the sky system's own haze does. The mesh is still worked out
+        // above, for its panel count.)
+        Object.DestroyImmediate(veil);
 
         // the blooms: red and green by turns, over the places that are lit. Small (a third of the size they were first
         // made, at the user's word, 2026-11-22): the fog itself carries the red and green now (BWM/Veil)
@@ -777,7 +780,20 @@ public sealed class WinterIslePuzzle : PuzzleDef
         glow.bounds = new Bounds(new Vector3((X0 + X1) / 2f - root.x, 300f - root.y, (Z0 + Z1) / 2f - root.z), new Vector3(X1 - X0 + 800f, 1400f, Z1 - Z0 + 800f));      // (every vertex sits at its bloom's centre: the real extent is the shader's)
         Piece glowPiece = b.MeshPiece("Fog Glow", glow, b.ShaderMaterial("BWM/VeilGlow", "Veil Glow"), false);
         glowPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        Debug.Log("[BWM] Winter Isle: a fog veil of " + (tris.Count / 6) + " panels and " + places.Count + " blooms of light");
+        // The fog that hides the island from afar (the user, 2026-11-22: from the mainland the mountain stood clear over the
+        // ribbons, which are clear near the viewer and end 330 m up): distance fog inside a box round the whole island,
+        // up past the summit, drawn on the box's outer faces only while the camera is outside it (BWM/FogBox)
+        const float FogBottom = -40f, FogTop = 760f;
+        var fogBox = new MeshBuilder();
+        Kit.AddBox(fogBox, new Vector3((X0 + X1) / 2f - root.x, FogBottom - root.y, (Z0 + Z1) / 2f - root.z), new Vector3(X1 - X0, FogTop - FogBottom, Z1 - Z0), Color.white);
+        Material fogMaterial = b.ShaderMaterial("BWM/FogBox", "Fog Box", m =>
+        {
+            m.SetVector("_BoxMin", new Vector4(X0, FogBottom, Z0, 0f));
+            m.SetVector("_BoxMax", new Vector4(X1, FogTop, Z1, 0f));
+        });
+        Piece fogPiece = b.MeshPiece("Fog Box", fogBox.ToMesh(), fogMaterial, false);
+        fogPiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        Debug.Log("[BWM] Winter Isle: no fog veil ribbons (" + (tris.Count / 6) + " panels left out), " + places.Count + " blooms of light, and a fog box " + (X1 - X0) + " x " + (Z1 - Z0) + " m to " + FogTop + " m up");
     }
 
     // The island's tiny lights. The mountain is strung like a Christmas tree: one string winds down it from the summit
@@ -3212,50 +3228,127 @@ public sealed class WinterIslePuzzle : PuzzleDef
 
         b.RegisterLand(X0, Z0, Cell, nx, nz, land, blocked);
 
-        // 9. Causeway from the mainland shore to the landing
-        Vector2 across_ = ShorePoint - landing, mid = (ShorePoint + landing) / 2f;
-        float yaw = Mathf.Atan2(across_.x, across_.y) * Mathf.Rad2Deg;
-        // a stone embankment: a cambered top under snow, sides of grey stone sloping into the water, and a band of
-        // boulders tipped along both sides at the waterline (a flat pale box read as an unfinished plane)
+        // 9. The way over from the mainland (the user, 2026-11-22: the old causeway began on the rocks beyond the beach,
+        //    hard to find from the training area; its gate's beam floated; "have it be a covered bridge adorned with
+        //    decorations"). A covered bridge crosses the shallows from where the training area's exit walkway comes down to
+        //    the beach to the island's landing. The island's landing and coast are unchanged (ShorePoint still guards them).
         {
-            var cw = new MeshBuilder();
-            var cwRandom = new System.Random(6151);
-            float Rc(float lo, float hi) => lo + (hi - lo) * (float)cwRandom.NextDouble();
-            Vector2 alongC = across_.normalized, sideC = new Vector2(alongC.y, -alongC.x);
-            float length = across_.magnitude + 24f;
+            Material bare = b.ShaderMaterial("BWM/Snowy", "Bare", m => m.SetFloat("_SnowLine", 2f));
+            Material snowy = b.ShaderMaterial("BWM/Snowy", "Snowy");
             Vector3 L3(Vector2 q, float y) => new Vector3(q.x - root.x, y - root.y, q.y - root.z);
-            void Face(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Color c) { cw.Quad(p0, p1, p2, p3, c); cw.Quad(p0, p3, p2, p1, c); }
-            var snowTop = new Color(0.9f, 0.92f, 0.96f);
-            int segments = Mathf.CeilToInt(length / 5f);
-            float[] footL = new float[segments + 1], footR = new float[segments + 1];
-            for (int si = 0; si <= segments; si++) { footL[si] = Rc(5.2f, 6.2f); footR[si] = Rc(5.2f, 6.2f); }
-            for (int si = 0; si < segments; si++)
+            // the ground under a point: the island's own, else the mainland's (the game's terrain, from the map)
+            float Ground(Vector2 q)
             {
-                Vector2 c0 = mid + alongC * (-length / 2f + si * length / segments), c1 = mid + alongC * (-length / 2f + (si + 1) * length / segments);
-                var stone = new Color(0.44f, 0.45f, 0.49f) * Rc(0.88f, 1.08f);
-                // the top, in two strips meeting at a low crown
-                Face(L3(c0 - sideC * 3.5f, 0.95f), L3(c0, 1.06f), L3(c1, 1.06f), L3(c1 - sideC * 3.5f, 0.95f), snowTop);
-                Face(L3(c0, 1.06f), L3(c0 + sideC * 3.5f, 0.95f), L3(c1 + sideC * 3.5f, 0.95f), L3(c1, 1.06f), snowTop);
-                // the sides, down into the water
-                Face(L3(c0 - sideC * 3.5f, 0.95f), L3(c1 - sideC * 3.5f, 0.95f), L3(c1 - sideC * footL[si + 1], -2.4f), L3(c0 - sideC * footL[si], -2.4f), stone);
-                Face(L3(c0 + sideC * 3.5f, 0.95f), L3(c0 + sideC * footR[si], -2.4f), L3(c1 + sideC * footR[si + 1], -2.4f), L3(c1 + sideC * 3.5f, 0.95f), stone);
+                float h = HeightAt(q);
+                if (!float.IsNaN(h) && h > 0.3f) return h;
+                return b.Ground.At(q.x, q.y, out float m) && !float.IsNaN(m) ? m : 1.2f;
             }
-            // the ends, closed
-            foreach (int end in new[] { 0, segments })
+            Color red = new Color(0.62f, 0.12f, 0.1f), white = new Color(0.94f, 0.93f, 0.9f), wood = new Color(0.36f, 0.25f, 0.17f), dark = new Color(0.22f, 0.15f, 0.1f);
+            Color green = new Color(0.1f, 0.34f, 0.17f), gold = new Color(0.95f, 0.72f, 0.2f), stone = new Color(0.46f, 0.47f, 0.5f);
+
+            // the bridge: from the mainland's water's edge to the landing, the deck sloping gently between the ground at its ends
+            Vector2 bridgeA = new Vector2(-382f, -719.7f), bridgeB = landing + (landing - new Vector2(-382f, -719.7f)).normalized * 2f;      // (the portal just north of the walkway's last stairs, which land at -378.4, -724.8: clear of them)
+            Vector2 u = (bridgeB - bridgeA).normalized, sd = new Vector2(u.y, -u.x);
+            float bridgeLength = (bridgeB - bridgeA).magnitude;
+            float bridgeYaw = Mathf.Atan2(u.x, u.y) * Mathf.Rad2Deg;
+            float deckA = Mathf.Max(Ground(bridgeA), 0.9f) + 0.25f, deckB = Mathf.Max(Ground(bridgeB), 0.9f) + 0.25f;
+            float DeckAt(float t) => Mathf.Lerp(deckA, deckB, t / bridgeLength);
+            Vector2 AtB(float t, float across) => bridgeA + u * t + sd * across;
+            const float HalfIn = 2.0f, WallTop = 3.0f, Eave = 2.75f, Ridge = 1.7f;      // half width inside, wall height, eave half width, ridge over the walls
+
+            var frame = new MeshBuilder();      // deck, walls, beams, piers: solid, never snowy
+            var roof = new MeshBuilder();       // the roof: takes snow on top
+            var deco = new MeshBuilder();       // garlands, baubles, wreaths, stars: no collider
+            void Both(MeshBuilder mb, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Color col) { mb.Quad(p0, p1, p2, p3, col); mb.Quad(p0, p3, p2, p1, col); }
+            const float Bay = 2.5f;
+            int bays = Mathf.CeilToInt(bridgeLength / Bay);
+            for (int k = 0; k < bays; k++)
             {
-                Vector2 c = mid + alongC * (-length / 2f + end * length / segments);
-                Face(L3(c - sideC * 3.5f, 0.95f), L3(c, 1.06f), L3(c, -2.4f), L3(c - sideC * footL[end], -2.4f), new Color(0.42f, 0.43f, 0.47f));
-                Face(L3(c, 1.06f), L3(c + sideC * 3.5f, 0.95f), L3(c + sideC * footR[end], -2.4f), L3(c, -2.4f), new Color(0.42f, 0.43f, 0.47f));
-            }
-            int riprap = 0;
-            for (int side = -1; side <= 1; side += 2)
-                for (float d = -length / 2f + 1f; d < length / 2f - 1f; d += Rc(1.2f, 2.0f))
+                float t0 = k * bridgeLength / bays, t1 = (k + 1) * bridgeLength / bays, tm = (t0 + t1) / 2f, len = t1 - t0;
+                float y0 = DeckAt(t0), y1 = DeckAt(t1), ym = DeckAt(tm);
+                // deck planks, across the bridge, a hair apart in colour
+                for (int pl = 0; pl < 5; pl++)
                 {
-                    Vector2 q = mid + alongC * d + sideC * (side * Rc(4.2f, 5.2f));
-                    Kit.AddRock(cw, L3(q, Rc(-0.7f, 0.2f)), new Vector3(Rc(0.9f, 1.9f), Rc(0.7f, 1.3f), Rc(0.9f, 1.9f)), 9000 + riprap);
-                    riprap++;
+                    float pt = t0 + (pl + 0.5f) * len / 5f;
+                    Kit.AddBox(frame, L3(AtB(pt, 0f), DeckAt(pt) - 0.2f), new Vector3(HalfIn * 2f + 0.5f, 0.2f, len / 5f - 0.03f), wood * (0.85f + 0.06f * ((pl + k) % 3)), bridgeYaw);
                 }
-            b.MeshPiece("Causeway", cw.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"));
+                foreach (int side in new[] { -1, 1 })
+                {
+                    // the wall: red boards to waist height, open above for the view, a white sill
+                    Kit.AddBox(frame, L3(AtB(tm, side * (HalfIn + 0.06f)), ym), new Vector3(0.12f, 1.05f, len), red, bridgeYaw);
+                    Kit.AddBox(frame, L3(AtB(tm, side * (HalfIn + 0.06f)), ym + 1.05f), new Vector3(0.24f, 0.08f, len), white, bridgeYaw);
+                    // a post at every bay, and the plate along the top
+                    Kit.AddBox(frame, L3(AtB(t0, side * (HalfIn + 0.06f)), y0), new Vector3(0.2f, WallTop, 0.2f), dark, bridgeYaw);
+                    Kit.AddBox(frame, L3(AtB(tm, side * (HalfIn + 0.06f)), ym + WallTop - 0.22f), new Vector3(0.26f, 0.22f, len), dark, bridgeYaw);
+                    // the roof slope, from the eave out over the wall up to the ridge
+                    Vector3 e0 = L3(AtB(t0, side * Eave), y0 + WallTop - 0.05f), e1 = L3(AtB(t1, side * Eave), y1 + WallTop - 0.05f);
+                    Vector3 r0 = L3(AtB(t0, 0f), y0 + WallTop + Ridge), r1 = L3(AtB(t1, 0f), y1 + WallTop + Ridge);
+                    Both(roof, e0, e1, r1, r0, new Color(0.36f, 0.32f, 0.3f));
+                    // a fascia board along the eave, and the garland on it: fir balls, a bauble now and then
+                    Kit.AddBox(frame, L3(AtB(tm, side * Eave), ym + WallTop - 0.3f), new Vector3(0.08f, 0.28f, len), white, bridgeYaw);
+                    for (int g = 0; g < 4; g++)
+                    {
+                        float gt = t0 + (g + 0.5f) * len / 4f;
+                        float sag = 0.18f * Mathf.Sin(Mathf.PI * ((gt % 5f) / 5f));
+                        Kit.AddBall(deco, L3(AtB(gt, side * (Eave + 0.1f)), DeckAt(gt) + WallTop - 0.35f - sag), 0.16f, green * (0.9f + 0.1f * (g % 2)));
+                    }
+                    if (k % 2 == 0) Kit.AddBall(deco, L3(AtB(t0, side * (Eave + 0.12f)), y0 + WallTop - 0.62f), 0.13f, (k / 2 + side) % 3 == 0 ? gold : red);
+                }
+                // a tie beam across every other bay
+                if (k % 2 == 0) Kit.AddBox(frame, L3(AtB(t0, 0f), y0 + WallTop - 0.22f), new Vector3(HalfIn * 2f + 0.3f, 0.2f, 0.2f), dark, bridgeYaw);
+                // stone piers under it every 12 m or so, down into the water
+                if (k % 5 == 2) Kit.AddBox(frame, L3(AtB(tm, 0f), -3f), new Vector3(HalfIn * 2f + 0.8f, ym - 0.2f + 3f, 1.2f), stone, bridgeYaw);
+            }
+            // the portals: a gable closing the roof's end over each mouth, a wreath with a bow and a star on it, a lantern
+            // each side, and the deck run out a little onto the ground
+            foreach (int end in new[] { 0, 1 })
+            {
+                float t = end == 0 ? 0f : bridgeLength, y = DeckAt(t), outward = end == 0 ? -1f : 1f;
+                Vector3 gl = L3(AtB(t, -Eave), y + WallTop - 0.05f), gr = L3(AtB(t, Eave), y + WallTop - 0.05f), gtop = L3(AtB(t, 0f), y + WallTop + Ridge);
+                frame.Tri(gl, gtop, gr, red); frame.Tri(gl, gr, gtop, red);
+                Kit.AddBox(frame, L3(AtB(t, 0f), y + WallTop - 0.25f), new Vector3(Eave * 2f, 0.25f, 0.3f), white, bridgeYaw);
+                Vector3 face = L3(AtB(t + outward * 0.25f, 0f), y + WallTop + 0.75f);
+                var across3 = new Vector3(sd.x, 0f, sd.y);
+                for (int w = 0; w < 16; w++)
+                {
+                    float a = 2f * Mathf.PI * w / 16f;
+                    Kit.AddBall(deco, face + across3 * (Mathf.Cos(a) * 0.55f) + Vector3.up * (Mathf.Sin(a) * 0.55f), 0.15f, green);
+                }
+                Kit.AddBall(deco, face + Vector3.down * 0.55f, 0.13f, red);
+                Kit.AddStar(deco, gtop + Vector3.up * 0.45f + new Vector3(u.x, 0f, u.y) * (outward * 0.2f), 0.42f, 0.09f, gold);
+                Kit.AddBox(frame, L3(AtB(t + outward * 1.6f, 0f), y - 0.2f), new Vector3(HalfIn * 2f + 0.5f, 0.2f, 3.2f), wood * 0.9f, bridgeYaw);      // the approach
+            }
+            Piece bridge = b.MeshPiece("Covered Bridge", frame.ToMesh(), bare);
+            b.MeshPiece("Covered Bridge Roof", roof.ToMesh(), snowy);
+            Piece bridgeDeco = b.MeshPiece("Covered Bridge Garlands", deco.ToMesh(), bare, false);
+            bridgeDeco.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            // lights: along both eaves outside, and warm white under the ridge inside
+            foreach (int side in new[] { -1, 1 })
+            {
+                var eaveLights = new List<Vector3>();
+                for (float t = 0f; t <= bridgeLength + 0.01f; t += bridgeLength / Mathf.Ceil(bridgeLength / 5f))
+                    eaveLights.Add(L3(AtB(t, side * (Eave + 0.18f)), DeckAt(t) + WallTop - 0.2f));
+                Kit.LightString(b, side < 0 ? "Bridge Lights Left" : "Bridge Lights Right", eaveLights, 0.25f, 0.45f, false, false, 21 + side);
+            }
+            var ridgeLights = new List<Vector3>();
+            for (float t = 0f; t <= bridgeLength + 0.01f; t += bridgeLength / Mathf.Ceil(bridgeLength / 4f))
+                ridgeLights.Add(L3(AtB(t, 0f), DeckAt(t) + WallTop + Ridge - 0.35f));
+            Kit.LightString(b, "Bridge Lights Inside", ridgeLights, 0.3f, 0.55f, false, false, 24, new[] { new Color(1f, 0.86f, 0.62f) });
+            var lanternMesh = new MeshBuilder(); var lanternGlow = new MeshBuilder();
+            foreach (int end in new[] { 0, 1 })
+                foreach (int side in new[] { -1, 1 })
+                {
+                    float t = end == 0 ? -1.2f : bridgeLength + 1.2f;
+                    Vector2 q = AtB(t, side * (Eave + 0.4f));
+                    Kit.AddLantern(lanternMesh, lanternGlow, L3(q, Ground(q)), 40 + end * 2 + (side + 1) / 2);
+                }
+            b.MeshPiece("Bridge Lanterns", lanternMesh.ToMesh(), snowy, false);
+            b.MeshPiece("Bridge Lantern Glow", lanternGlow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+
+            // (No boardwalk: the training area's exit walkway, with its drawbridge, already ends at stairs down to the beach
+            // at -378.4, 1.2, -724.8, three metres from the bridge's portal and at its deck's height: players step off it
+            // beside the bridge. A boardwalk laid on a tester's shortcut through the woods was built once and removed.)
+            Debug.Log("[BWM] Winter Isle: a covered bridge " + Sdk.F(bridgeLength) + " m from the mainland's shore to the landing (deck " + Sdk.F(deckA) + " to " + Sdk.F(deckB) + " m), its portal beside the end of the training area's exit walkway");
         }
 
         Snowfall(b);
@@ -3263,51 +3356,6 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Veil(b, root, HeightAt);
         Garlands(b, root, HeightAt, groundMaterial);
 
-        // Christmas lights down both sides of the causeway, a post every 9 m
-        var candy = new MeshBuilder();
-        Vector2 along = across_.normalized, side_ = new Vector2(along.y, -along.x);
-        float span = across_.magnitude + 16f;
-        for (int side = -1; side <= 1; side += 2)
-        {
-            var posts = new List<Vector3>();
-            for (float d = -8f; d <= span - 8f + 0.01f; d += 9f)
-            {
-                Vector2 p = landing + along * d + side_ * (side * 3.1f);
-                posts.Add(new Vector3(p.x - root.x, 1f + 2.4f - root.y, p.y - root.z));
-            }
-            Kit.LightString(b, side < 0 ? "Causeway Lights Left" : "Causeway Lights Right", posts, 0.35f, 0.5f, false, false, side + 3);
-            // the posts: candy-striped, red and white bands
-            foreach (Vector3 post in posts)
-                for (int band = 0; band < 9; band++)
-                    Kit.AddBox(candy, new Vector3(post.x, 0.95f - root.y + band * 0.27f, post.z), new Vector3(0.14f, 0.27f, 0.14f), band % 2 == 0 ? new Color(0.85f, 0.1f, 0.1f) : new Color(0.96f, 0.95f, 0.92f), band * 12f);
-        }
-        // the gate at the island's end of the causeway: two candy-striped towers, a beam with a wreath and a star, and
-        // lights along it
-        {
-            Vector2 gateAt = landing + along * 3f;
-            float gateYaw = Mathf.Atan2(side_.x, side_.y) * Mathf.Rad2Deg;
-            for (int sgn = -1; sgn <= 1; sgn += 2)
-            {
-                Vector2 towerAt = gateAt + side_ * (sgn * 3.9f);
-                for (int band = 0; band < 16; band++)
-                    Kit.AddBox(candy, new Vector3(towerAt.x - root.x, 0.95f - root.y + band * 0.3f, towerAt.y - root.z), new Vector3(0.42f, 0.3f, 0.42f), band % 2 == 0 ? new Color(0.85f, 0.1f, 0.1f) : new Color(0.96f, 0.95f, 0.92f), band * 9f);
-                Kit.AddBall(candy, new Vector3(towerAt.x - root.x, 0.95f - root.y + 4.95f, towerAt.y - root.z), 0.3f, new Color(0.95f, 0.72f, 0.2f));
-            }
-            var beam = new Vector3(gateAt.x - root.x, 0.95f - root.y + 4.5f, gateAt.y - root.z);
-            Kit.AddBox(candy, beam, new Vector3(0.35f, 0.45f, 8.4f), new Color(0.1f, 0.33f, 0.18f), gateYaw + 90f);      // the garland beam
-            Vector3 wreath = beam + Vector3.up * 1.1f - new Vector3(along.x, 0f, along.y) * 0.25f;
-            for (int k = 0; k < 14; k++)
-            {
-                float a = 2f * Mathf.PI * k / 14f;
-                Vector3 offset = new Vector3(side_.x, 0f, side_.y) * (Mathf.Cos(a) * 0.75f) + Vector3.up * (Mathf.Sin(a) * 0.75f);
-                Kit.AddBall(candy, wreath + offset, 0.2f, new Color(0.1f, 0.36f, 0.18f));
-            }
-            Kit.AddBall(candy, wreath + Vector3.down * 0.75f, 0.16f, new Color(0.85f, 0.1f, 0.1f));      // its bow
-            Kit.AddStar(candy, beam + Vector3.up * 2.4f, 0.55f, 0.1f, new Color(0.95f, 0.72f, 0.2f));
-            Vector2 gl = gateAt - side_ * 3.9f, gr = gateAt + side_ * 3.9f;
-            Kit.LightString(b, "Gate Lights", new List<Vector3> { new Vector3(gl.x - root.x, 5.3f - root.y, gl.y - root.z), new Vector3(gr.x - root.x, 5.3f - root.y, gr.y - root.z) }, 0.4f, 0.35f, false, false, 9);
-        }
-        b.MeshPiece("Candy Posts and Gate", candy.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Bare", m => m.SetFloat("_SnowLine", 2f)), true);
 
         // Materials Winter Walk uses at runtime on copies of the game's own objects. A material only reaches the
         // game inside a pack if something in the pack uses it, so a speck deep under the island carries them.

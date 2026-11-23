@@ -99,7 +99,7 @@ public sealed class AdventTrailPuzzle : PuzzleDef
         => b.Part("Display", x, z, Floor + h, 0f, false).Named(name).Set("PuzzleDisplay", "size", 0).Set("PuzzleDisplay", "randomOnStart", true);
 
     Piece Timer(string name, float x, float z, float h, float yaw, float scale)
-        => b.Part("Timer", x, z, Floor + h, yaw, false).Named(name).Scaled(scale, scale, scale).Set("PuzzleTimer", "duration", Clock);
+        => b.Part("Timer", x, z, Floor + h, yaw, false).Named(name).Scaled(scale * PuzzleBuilder.TimerScale, scale * PuzzleBuilder.TimerScale, scale * PuzzleBuilder.TimerScale).Set("PuzzleTimer", "duration", Clock);
 
     Piece Strikes(string name, float x, float z, float h, float yaw, float scaleX)
         => b.Part("Progress Bar", x, z, Floor + h, yaw, false).Named(name).Scaled(scaleX, 1f, 1f).Set("PuzzleProgressBar", "total", 3).Set("PuzzleProgressBar", "style", 0);

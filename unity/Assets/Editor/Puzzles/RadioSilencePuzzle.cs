@@ -201,7 +201,7 @@ public sealed class RadioSilencePuzzle : PuzzleDef
         Band(bands6, box, -1.6f, 0, 3, HutBlue); Band(bands6, box, -1.6f, 3, 5, IsleKit.Red); Band(bands6, box, -1.6f, 5, 6, IsleKit.Green);
         b.MeshPiece("Board 6 Bands", bands6.ToMesh(), bare, false).Under(four);
 
-        Piece checkClock = P(box, "Timer", 2.4f, 4.3f, 1.6f, 180f).Named("Check Clock").Set("PuzzleTimer", "duration", 8f).Scaled(0.5f, 0.5f, 0.5f);
+        Piece checkClock = P(box, "Timer", 2.4f, 4.3f, 1.6f, 180f).Named("Check Clock").Set("PuzzleTimer", "duration", 8f).Scaled(0.5f * PuzzleBuilder.TimerScale, 0.5f * PuzzleBuilder.TimerScale, 0.5f * PuzzleBuilder.TimerScale);
         Piece boxBar = P(box, "Progress Bar", -2.9f, 4.33f, 2.4f, 180f).Named("Box Time Bar").Scaled(0.35f, 0.35f, 1f);
         Piece stationClock = P(box, "Timer", -2.9f, 4.3f, 1.9f, 180f).Named("Station Clock").Set("PuzzleTimer", "duration", 300f);
         Sdk.Add(stationClock.Component("PuzzleTimer"), "progressBars", boxBar.Component("PuzzleProgressBar"), hutBar.Component("PuzzleProgressBar"),

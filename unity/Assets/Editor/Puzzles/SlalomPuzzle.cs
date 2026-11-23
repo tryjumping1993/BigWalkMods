@@ -434,7 +434,7 @@ public sealed class SlalomPuzzle : PuzzleDef
         b.MeshPiece("Lamp Swatches", swatches.ToMesh(), bare, false).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
 
         // the Row Clock, the bars and the mic
-        Piece clockPiece = MapPart("Timer", ClockU, TopV, 0.02f).Named("Row Clock").Scaled(0.6f, 0.6f, 0.6f);
+        Piece clockPiece = MapPart("Timer", ClockU, TopV, 0.02f).Named("Row Clock").Scaled(0.6f * PuzzleBuilder.TimerScale, 0.6f * PuzzleBuilder.TimerScale, 0.6f * PuzzleBuilder.TimerScale);
         clockPiece.Set("PuzzleTimer", "duration", clock[0]);
         Component rowClock = clockPiece.Component("PuzzleTimer");
         Component startBar = MapPart("Progress Bar", BarU, TopV, 0.03f).Named("Start Bar").Scaled(0.25f, 0.4f, 1f).Set("PuzzleProgressBar", "total", 1).Component("PuzzleProgressBar");
