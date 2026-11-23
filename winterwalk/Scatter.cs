@@ -79,9 +79,31 @@ namespace WinterWalk
 
         static long Key(int cx, int cz) => ((long)cx << 32) ^ (uint)cz;
 
-        void Load()
+        // The list's bytes are read on a thread, started from Plugin.Load (as the dresser's: read by the first frame,
+        // from a hard disk Windows had not cached, it held the game for 2 s)
+        static System.Threading.Tasks.Task<byte[]> reading;
+        static DateTime readingTime;
+
+        static void StartReading(DateTime time)
         {
-            using (var r = new BinaryReader(File.OpenRead(file)))
+            string path = file;
+            readingTime = time;
+            reading = System.Threading.Tasks.Task.Run(() => File.ReadAllBytes(path));
+        }
+
+        internal static void Prefetch()
+        {
+            try
+            {
+                file = Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location), "WinterIsle.scatter");
+                if (File.Exists(file)) StartReading(File.GetLastWriteTimeUtc(file));
+            }
+            catch (Exception) { reading = null; }
+        }
+
+        void Load(byte[] bytes)
+        {
+            using (var r = new BinaryReader(new MemoryStream(bytes)))
             {
                 if (r.ReadByte() != 'B' || r.ReadByte() != 'W' || r.ReadByte() != 'S' || r.ReadByte() != 'C' || r.ReadInt32() != 1) throw new InvalidDataException("not a scatter list this version reads");
                 int n = r.ReadInt32();
@@ -206,7 +228,17 @@ namespace WinterWalk
                     if (File.Exists(file))
                     {
                         DateTime t = File.GetLastWriteTimeUtc(file);
-                        if (t != fileTime) { fileTime = t; Load(); }
+                        if (t != fileTime)
+                        {
+                            if (reading == null || readingTime != t) StartReading(t);
+                            if (reading.IsCompleted)
+                            {
+                                var done = reading;
+                                reading = null;
+                                fileTime = t;
+                                Load(done.GetAwaiter().GetResult());
+                            }
+                        }
                     }
                     // the island's pack was loaded, or loaded again: its models are new objects
                     if (models && (meshes.Length == 0 || Array.TrueForAll(meshes, m => m == null))) { models = false; Array.Clear(have, 0, have.Length); drawnCentre = new Vector3(1e9f, 0f, 0f); todoAt = -1; if (front != null) front.Clear(); }

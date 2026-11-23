@@ -25,6 +25,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using BepInEx;
@@ -59,8 +60,44 @@ namespace WinterWalk
 
         // ---- the file ----
 
+        // ---- the start-up ----
+        // When the game's menu comes (its own "Starting base manager initialization"): how long after the process
+        // started, and how much the game had read from files by then. Big Walk reads 1.9 GB of its own before its menu;
+        // from a USB hard disk Windows has not cached (35 MB/s) that is about a minute, mods or not (measured
+        // 2026-11-23: vanilla 6.2 s warm, and a cold start's one frame of 42 to 49 s). The rate tells a slow disk.
+        [StructLayout(LayoutKind.Sequential)]
+        struct IoCounters { public ulong ReadOps, WriteOps, OtherOps, ReadBytes, WriteBytes, OtherBytes; }
+        [DllImport("kernel32.dll")] static extern bool GetProcessIoCounters(IntPtr process, out IoCounters counters);
+        [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+        static double ReadGB()
+        {
+            try { return GetProcessIoCounters(GetCurrentProcess(), out IoCounters c) ? c.ReadBytes / 1073741824.0 : -1; }
+            catch (Exception) { return -1; }
+        }
+        static double loadedRead = -1, menuRead = -1;
+        static DateTime menuAt;
+        internal static volatile bool MenuSeen;
+
+        internal static string Startup()
+        {
+            string G(double gb) => gb.ToString("0.00", CultureInfo.InvariantCulture);
+            string S(TimeSpan t) => t.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture);
+            DateTime start;
+            try { using (Process p = Process.GetCurrentProcess()) start = p.StartTime; }
+            catch (Exception) { start = Started; }
+            string s = "start-up: the game's menu " + S(menuAt - start) + " s after its process started (Winter Walk loaded at " + S(Started - start) + " s, after BepInEx and the puzzle packs)";
+            if (menuRead >= 0 && loadedRead >= 0)
+            {
+                double secs = Math.Max(0.1, (menuAt - Started).TotalSeconds), gb = menuRead - loadedRead;
+                s += "; the game read " + G(menuRead) + " GB of files by then, " + G(loadedRead) + " GB before Winter Walk loaded and " + G(gb) + " GB in the "
+                    + secs.ToString("0.0", CultureInfo.InvariantCulture) + " s after (" + (gb * 1024 / secs).ToString("0", CultureInfo.InvariantCulture) + " MB/s: a few tens is a hard disk Windows had not cached)";
+            }
+            return s;
+        }
+
         internal static void Start(ConfigFile cfg, string version)
         {
+            loadedRead = ReadGB();
             On = cfg.Bind("Debug", "DebugLog", true, "Write a debug log of each session to LocalLow\\House House\\Big Walk\\WinterWalk-logs (send it in when something goes wrong).");
             PlayerChecks = cfg.Bind("Debug", "PlayerChecks", true, "Watch the player's movement and write a snapshot when it looks stuck (floating, jump or crouch doing nothing).");
             HeartbeatSeconds = cfg.Bind("Debug", "HeartbeatSeconds", 10f, "How often the debug log notes the frame rate, memory and the player's state.");
@@ -168,6 +205,10 @@ namespace WinterWalk
             {
                 try
                 {
+                    if (!MenuSeen && e.Data != null && e.Data.ToString().StartsWith("Starting base manager initialization", StringComparison.Ordinal))
+                    {
+                        menuAt = DateTime.Now; menuRead = ReadGB(); MenuSeen = true;
+                    }
                     string source = e.Source != null ? e.Source.SourceName : "?";
                     bool serious = (e.Level & (LogLevel.Fatal | LogLevel.Error | LogLevel.Warning)) != 0;
                     lock (gate)
@@ -441,7 +482,7 @@ namespace WinterWalk
         float nextBeat, windowStart, worstFrame, nextSlowLine, nextCensus, nextSnapshot, toastUntil;
         int slowFrames, slowSuppressed, snapshots, marks;
         string toast = "";
-        bool inWalk, onIsle, guiFailed;
+        bool inWalk, onIsle, guiFailed, startupReported;
         int players = -1, quality = -1;
         string affinity = "", states = "";
         long memStep;
@@ -475,6 +516,7 @@ namespace WinterWalk
                 float now = Time.unscaledTime, dt = Time.unscaledDeltaTime;
                 string pending = Diag.Pending;
                 if (pending != null) { Diag.Pending = null; if (pending.Contains("DID NOT")) Diag.Warn(pending); else Diag.Event(pending); }
+                if (Diag.MenuSeen && !startupReported) { startupReported = true; Diag.Event(Diag.Startup()); }
 
                 // slow frames: the frame that just ended, and what of it was ours
                 if (dt > worstFrame) worstFrame = dt;

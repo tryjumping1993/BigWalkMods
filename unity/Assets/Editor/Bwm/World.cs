@@ -12,7 +12,8 @@ namespace Bwm
 {
     public static class World
     {
-        public const string GameData = @"G:\SteamLibrary\steamapps\common\Big Walk\Big Walk_Data\data.unity3d";
+        // (the game moved from G:'s Steam library to Z:'s on 2026-11-23: G: is a USB hard disk and a cold start waited a minute on it)
+        public const string GameData = @"Z:\SteamLibrary\steamapps\common\Big Walk\Big Walk_Data\data.unity3d";
 
         // Where the game's four spawn rooms are (x, z); the default place to look for a site near
         public static readonly Vector2 Spawn = new Vector2(-230.2f, -481.2f);

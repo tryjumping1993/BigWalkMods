@@ -1,7 +1,7 @@
 """Extracts Big Walk's menu music ("Menu Music LOOP v3.0", 4 min 12 s) from the installed game as a WAV, for the trailer's
 soundtrack (encode.ps1 -Music). Needs UnityPy (pip install --user UnityPy), which brings FMOD's decoder.
 
-  py.cmd tools/trailer/menu_theme.py [--game "G:/SteamLibrary/steamapps/common/Big Walk"] [--out menu-theme.wav]
+  py.cmd tools/trailer/menu_theme.py [--game "Z:/SteamLibrary/steamapps/common/Big Walk"] [--out menu-theme.wav]
 
 The clip lives in data.unity3d as an AudioClip whose samples are streamed from a .resource file beside it (an FSB5 bank,
 Vorbis). UnityPy looks for that file inside the bundle and hands FMOD the wrong bytes, so this reads them from the
@@ -14,7 +14,7 @@ import UnityPy
 import fmod_toolkit
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument("--game", default="G:/SteamLibrary/steamapps/common/Big Walk")
+ap.add_argument("--game", default="Z:/SteamLibrary/steamapps/common/Big Walk")
 ap.add_argument("--clip", default="Menu Music LOOP", help="start of the AudioClip's name")
 ap.add_argument("--out", default="Z:/Temp/claude/BigWalkMods/audio/menu-theme.wav")
 a = ap.parse_args()

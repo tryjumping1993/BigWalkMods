@@ -358,7 +358,9 @@ write the player's body; `using var diag = Diag.Time("name")` times a driver), s
 ground but not falling for 2 s, or jump/crouch does nothing (the game's movement components, what is below), slow
 frames, a count of what is drawn by owner and distance when the fps stays low, memory past each 2 GB step (biggest
 textures and meshes), a shader check 25 s into a walk (for "see-through ground"), and the Dresser's check of its
-copies (floating, buried, over nothing). F8 (`MarkKey`) marks a moment with a screenshot and both counts;
+copies (floating, buried, over nothing), and a "start-up:" line when the game's menu comes (seconds since the process
+started, and how many GB the game had read by then and how fast: a few tens of MB/s is a hard disk Windows had not
+cached, see "Start-up" below). F8 (`MarkKey`) marks a moment with a screenshot and both counts;
 `game 'set?path=WinterWalk.DiagDriver.TestMark&value=true'` does it without a keyboard. Players send
 `Send-Logs.cmd` (in the zip) output: one zip on their Desktop. Config `[Debug]` in `bwm.winterwalk.cfg`.
 
@@ -377,6 +379,22 @@ On 2026-11-22: base game 9.4 GB private, 8.3 GB in RAM, 5.6 GB video memory, 153
 the scatter change 16.1 / 12.0 / 8.5 GB and 147 fps on the island; after it 11.7 / 9.7 / 6.4 GB and 148.5 fps (the
 island's pack 221 MB, from 856). The slowest viewpoint (w1, 109-117 fps) looks at the plaza: the dressing is 14 fps
 of it, the rest is the plaza's puzzles.
+
+**Start-up** (`tools\perf\startup.ps1 [-Mode vanilla|dev|install] [-Walk]`, 2026-11-23): starts the game from Steam
+(vanilla: Doorstop off on the command line; dev: the dev profile; install: a plain start, so a players' install in the
+game folder) and samples the physical disks, the game's own reads, its CPU and Defender's every half second, to the
+menu, or with `-Walk` (dev) through hosting until the island is dressed; quits after, appends to `logs\perf-measure.log`.
+Big Walk reads 1.9 GB of its own before its menu. The game was in G:'s Steam library (USB hard disk, 35 MB/s cold),
+so a start Windows had not cached froze for one 42-49 s frame (69 s to the menu, the 08:38 start of 2026-11-23), mods
+or not; the mods added the SDK reading and hashing every pack at load (330 MB: 9.5 s from G:, under 1 s from Z:) and
+Winter Walk's two lists (4 s on the first frame, now read on threads from `Plugin.Load`). So the game moved to
+`Z:\SteamLibrary` that day: from Z:, cold (just copied, unbuffered) the players' install reached its menu 7.6 s after
+its process started; warm vanilla 2.9 s, the dev profile 5.7 s, and launch to a dressed island in a walk 26 s (31-40 s
+from G:). Joining a walk is the mods' real cost: the SDK builds every puzzle in one frame (about 4.6 s warm, 18.6 s
+from G: cold; WinterIsle's 306 MB bundle is most of it), then the dresser takes 7-8 s at about 20 fps and switches its
+90,801 copies on in one 0.7 s frame. Half floats for normals and colours would shrink the packs only 8-17% after
+compression (tried on the biggest meshes), so the pack size is the content's. A players' install read from G: also cost
+14.5 s of Defender's CPU (from Z: 0.5 s).
 
 **The puzzle sleeper** (`winterwalk\PuzzleSleep.cs`, 2026-11-22): every one of the SDK's puzzle components runs an
 Update every frame wherever the players are, and through Il2CppInterop each call is dear: the 29 redesigned puzzles
@@ -469,9 +487,11 @@ the user and friends, who must all have the same packs and SDK version.
   files came back byte-identical). The first start generates BepInEx's interop (needs the internet once).
 - **SDK internals:** the framework and companion call the SDK's exporter, checks, map importer and reload by
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
-- **Game folder:** only `winhttp.dll`, `.doorstop_version` and `doorstop_config.ini` (enabled = false,
-  absolute paths into `profile\`) were added to `G:\SteamLibrary\steamapps\common\Big Walk`.
-- **Disk:** C: is nearly full. Unity, its caches and this repo are on Z:; keep it that way.
+- **Game folder:** `Z:\SteamLibrary\steamapps\common\Big Walk` (moved from G:'s Steam library on 2026-11-23: G: is a
+  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.22-21dcd69) is in it, so a plain
+  Steam start runs that; `play`/`launch` still load the dev profile. Tools find the folder through Steam's library list
+  (`Find-Game` in `tools\install\Install-Common.ps1`); `World.GameData` (the Unity side) names it.
+- **Disk:** C: is nearly full. Unity, its caches, this repo and the game are on Z:; keep it that way.
 
 ## Git
 

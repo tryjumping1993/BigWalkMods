@@ -275,10 +275,34 @@ namespace WinterWalk
 
         static float N(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
-        static void Load()
+        // The list's bytes are read on a thread, started from Plugin.Load: read by the first frame, from a hard disk
+        // Windows had not cached, it held the game for 2 s while the game was loading its own data (a players' install
+        // in a USB drive's Steam library, 2026-11-23). Parsed on the main thread once read (a tenth of a second).
+        static System.Threading.Tasks.Task<byte[]> reading;
+        static DateTime readingTime;
+
+        static void StartReading(DateTime time)
+        {
+            string path = file;
+            readingTime = time;
+            reading = System.Threading.Tasks.Task.Run(() => File.ReadAllBytes(path));
+        }
+
+        internal static void Prefetch()
+        {
+            try
+            {
+                file = Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location), "WinterIsle.dressing");
+                if (File.Exists(file)) StartReading(File.GetLastWriteTimeUtc(file));
+            }
+            catch (Exception) { reading = null; }
+        }
+
+        static void Load(byte[] bytes)
         {
             var list = new List<Entry>();
-            foreach (string raw in File.ReadAllLines(file))
+            using var text = new StreamReader(new MemoryStream(bytes));
+            for (string raw; (raw = text.ReadLine()) != null;)
             {
                 if (raw.Length == 0 || raw[0] == '#') continue;
                 string[] p = raw.Split('\t');
@@ -462,7 +486,18 @@ namespace WinterWalk
                     if (File.Exists(file))
                     {
                         DateTime t = File.GetLastWriteTimeUtc(file);
-                        if (t != fileTime) { fileTime = t; Load(); dirty = true; }
+                        if (t != fileTime)
+                        {
+                            if (reading == null || readingTime != t) StartReading(t);
+                            if (reading.IsCompleted)
+                            {
+                                var done = reading;
+                                reading = null;
+                                fileTime = t;
+                                Load(done.GetAwaiter().GetResult());
+                                dirty = true;
+                            }
+                        }
                     }
                     // Dress when the island is here (its pack carries our material) and not yet dressed
                     if (next < 0 && (holder == null || dirty) && entries.Count > 0 && GameObject.Find("Material Store") != null)

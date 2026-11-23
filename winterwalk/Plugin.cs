@@ -33,6 +33,8 @@ namespace WinterWalk
             Enabled = Config.Bind("General", "WinterSky", true, "Blend the sky and light towards winter near the Winter Isle.");
             Tracks = Config.Bind("General", "SnowTracks", true, "Players leave tracks in the Winter Isle's snow.");
             Diag.Start(Config, "0.1.0");      // the debug log (Diag.cs), first, so it sees everything after
+            Dresser.Prefetch();      // the island's lists, read on threads while the game loads
+            Scatter.Prefetch();
             ClassInjector.RegisterTypeInIl2Cpp<DiagDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();

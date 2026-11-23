@@ -12,7 +12,9 @@ param([string]$Version = '')
 $ErrorActionPreference = 'Stop'
 $Repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $Profile = Join-Path $Repo 'profile'
-$Game = 'G:\SteamLibrary\steamapps\common\Big Walk'
+. (Join-Path $PSScriptRoot 'Install-Common.ps1')      # Find-Game: Big Walk's folder, from Steam's library list
+$Game = Find-Game
+if (-not $Game) { throw 'Big Walk is not in any Steam library.' }
 $Dist = if ($env:BWM_DIST) { $env:BWM_DIST } else { 'Z:\Temp\claude\BigWalkMods\dist' }
 
 if (-not $Version) {
