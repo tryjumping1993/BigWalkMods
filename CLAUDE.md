@@ -21,7 +21,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. `play` and `launch` tell Doorstop on the command line to load the dev profile, so they work even while a players' install sits in the game folder (a plain Steam start then runs the install). |
 | `log` | The puzzle-related lines of the last game run. |
 | `logs [n] [-Full]` | Winter Walk's debug log of the latest session (n = 2 the one before): the header, what became of the session before, warnings, snapshots, marks, slow frames, the last heartbeat. |
-| `release [<version>] [-Notes <file>]` | That zip (default the newest) as a release on the private GitHub repo, tagged `v<version>` at its commit: the user's own versioning. They copy it to Google Drive themselves. |
+| `release [<version>] [-Notes <file>]` | That zip (default the newest) as a release on the GitHub repo, tagged `v<version>` at its commit: the user's own versioning. They copy it to Google Drive themselves. |
 | `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 0.9 GB) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
 | (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods\trailer\` (`-Music <wav> -MusicStart 2.4` lays the game's menu theme under it; `menu_theme.py` extracts that from the game). `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
@@ -449,7 +449,7 @@ the user and friends, who must all have the same packs and SDK version.
 
 ## Git
 
-The repo is private on GitHub (`origin`). The user has given standing permission to commit and push whenever
+The repo is on GitHub (`origin`), public since 2026-11-22 by the user's choice (it was private before). The user has given standing permission to commit and push whenever
 the work forms a meaningful commit (a feature working in game, a spike answered, notes updated); do not ask
 each time, and do not commit broken or half-built states.
 
@@ -458,9 +458,9 @@ each time, and do not commit broken or half-built states.
 - (Probably fixed 2026-11-22: the flat Glass sheet, see Glass above.) Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
   material on the test island and causeway does not. Cause unknown.
 - `ClearGround` leaves dark flat patches where some boulders were.
-- Releases are private (user, 2026-11-21): the repo stays private. Each players' zip becomes a release on the private
-  GitHub repo (`bwm.ps1 release`; the first, `v2026.11.21-d565e2a`); the user copies it to their Google Drive
-  (`D:\My Drive\Big Christmas Walk\`) and shares it by link as they see fit. Never make the repo public.
+- Releases (user, 2026-11-21): each players' zip becomes a release on the GitHub repo (`bwm.ps1 release`); the user
+  copies it to their Google Drive and shares it by link as they see fit. The user made the repo public on 2026-11-22;
+  leave its visibility alone unless they ask.
 - Nothing has been tested with two players.
 - A tester's log (2026-11-22, RTX 5070 laptop, 2560x1600, quality level 5): they walked from the mainland onto the isle
   and round the plaza and mine station M9 (about -580..-500, -850..-750). (1) There they were often "OFF THE GROUND"
