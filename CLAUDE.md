@@ -391,10 +391,13 @@ Winter Walk's two lists (4 s on the first frame, now read on threads from `Plugi
 `Z:\SteamLibrary` that day: from Z:, cold (just copied, unbuffered) the players' install reached its menu 7.6 s after
 its process started; warm vanilla 2.9 s, the dev profile 5.7 s, and launch to a dressed island in a walk 26 s (31-40 s
 from G:). Joining a walk is the mods' real cost: the SDK builds every puzzle in one frame (about 4.6 s warm, 18.6 s
-from G: cold; WinterIsle's 306 MB bundle is most of it), then the dresser takes 7-8 s at about 20 fps and switches its
-90,801 copies on in one 0.7 s frame. Half floats for normals and colours would shrink the packs only 8-17% after
-compression (tried on the biggest meshes), so the pack size is the content's. A players' install read from G: also cost
-14.5 s of Defender's CPU (from Z: 0.5 s).
+from G: cold, where WinterIsle's 306 MB bundle took 9.2 s of it; warm 1.4 s), then the dresser takes 7-8 s at about
+20 fps and switches its 90,801 copies on in one 0.7 s frame. Half floats for normals and colours would shrink the packs
+only 8-17% after compression (tried on the biggest meshes), so the pack size is the content's. A players' install
+started from G: also cost 14.5 s of Defender's CPU, and 0.5 s from Z:, but the Z: files had just been written (so
+probably scanned then): whether Defender scans a friend's 330 MB of packs again after its updates is not known. The
+minute from G: cold is inferred (1.9 GB at G:'s measured 35 MB/s, and the 23:11 dev start of 2026-11-22 froze 42 s with
+its packs warm on Z:); no cold vanilla start from G: was run.
 
 **The puzzle sleeper** (`winterwalk\PuzzleSleep.cs`, 2026-11-22): every one of the SDK's puzzle components runs an
 Update every frame wherever the players are, and through Il2CppInterop each call is dear: the 29 redesigned puzzles
