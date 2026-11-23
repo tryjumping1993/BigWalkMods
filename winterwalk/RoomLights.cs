@@ -30,9 +30,21 @@ namespace WinterWalk
         {
             foreach (Light l in lights) if (l != null) Destroy(l.gameObject);
             lights.Clear(); places.Clear(); ranges.Clear(); powers.Clear();
-            foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>())
+            // the packs' objects only (the markers are in the puzzles), not every object in the world: that took 145 ms of
+            // the frame after joining a walk, and with the island dressed the world holds half a million more
+            var marks = new List<Transform>();
+            foreach (BigPuzzleSDK.PuzzleSDK sdk in UnityEngine.Object.FindObjectsOfType<BigPuzzleSDK.PuzzleSDK>())
             {
-                if (t == null || !t.name.StartsWith("Room Light")) continue;
+                if (sdk == null) continue;
+                foreach (Component c in sdk.transform.root.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Transform>(), false))
+                {
+                    Transform m = c != null ? c.TryCast<Transform>() : null;
+                    if (m != null && m.name.StartsWith("Room Light")) marks.Add(m);
+                }
+            }
+            foreach (Transform t in marks)
+            {
+                if (t == null) continue;
                 var go = new GameObject("Lamp for " + t.name);
                 go.transform.position = t.position;
                 Light light = go.AddComponent<Light>();
@@ -86,7 +98,7 @@ namespace WinterWalk
             {
                 if (!found)
                 {
-                    if (Time.unscaledTime < nextLook) return;
+                    if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
                     nextLook = Time.unscaledTime + 5f;
                     Find();
                     return;

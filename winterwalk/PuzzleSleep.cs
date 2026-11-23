@@ -39,6 +39,7 @@ namespace WinterWalk
         readonly List<Puzzle> puzzles = new List<Puzzle>();
         float nextScan, nextTick;
         int rootsSeen = -1;
+        bool skyLitDue;
         readonly List<Vector3> players = new List<Vector3>();
         bool wasOff;
 
@@ -67,7 +68,7 @@ namespace WinterWalk
                 puzzles.Add(p);
                 Managed += p.parts.Count;
             }
-            SkyLit();
+            skyLitDue = true;      // on a later frame: it goes through every renderer of every pack
             Plugin.L.LogInfo("Winter Walk: puzzle sleeper watches " + Managed + " components in " + puzzles.Count + " puzzles; they sleep beyond " + Range + " m from every player while their puzzle is not running");
         }
 
@@ -119,8 +120,9 @@ namespace WinterWalk
                     foreach (BigPuzzleSDK.PuzzleSDK sdk in FindObjectsOfType<BigPuzzleSDK.PuzzleSDK>()) if (sdk != null) roots++;
                     bool stale = roots != rootsSeen;
                     foreach (Puzzle p in puzzles) if (p.sdk == null) { stale = true; break; }
-                    if (stale) { rootsSeen = roots; Scan(); }
+                    if (stale) { if (Setup.Turn()) { rootsSeen = roots; Scan(); } else nextScan = now; }      // (one driver's set-up a frame)
                 }
+                if (skyLitDue && Setup.Turn()) { skyLitDue = false; SkyLit(); }
                 if (now < nextTick || puzzles.Count == 0) return;
                 nextTick = now + 0.25f;
 

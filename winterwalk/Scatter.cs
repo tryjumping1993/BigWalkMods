@@ -145,7 +145,12 @@ namespace WinterWalk
         void FindModels()
         {
             int found = 0;
-            foreach (Transform t in FindObjectsOfType<Transform>(true))
+            // beside the island's Material Store (as the firs are): no need to go through every object in the world
+            Transform holder = Dresser.IslandChild("Scatter Models");
+            var candidates = new List<Transform>();
+            if (holder != null) for (int k = 0; k < holder.childCount; k++) candidates.Add(holder.GetChild(k));
+            else foreach (Transform t in FindObjectsOfType<Transform>(true)) candidates.Add(t);
+            foreach (Transform t in candidates)
             {
                 if (!t.name.StartsWith("Scatter Model ") || t.parent == null || t.parent.name != "Scatter Models") continue;
                 int i = Array.IndexOf(names, t.name.Substring(14));
@@ -242,7 +247,7 @@ namespace WinterWalk
                     }
                     // the island's pack was loaded, or loaded again: its models are new objects
                     if (models && (meshes.Length == 0 || Array.TrueForAll(meshes, m => m == null))) { models = false; Array.Clear(have, 0, have.Length); drawnCentre = new Vector3(1e9f, 0f, 0f); todoAt = -1; if (front != null) front.Clear(); }
-                    if (!models && places.Length > 0 && Time.unscaledTime >= nextSearch && GameObject.Find("Material Store") != null)
+                    if (!models && places.Length > 0 && Time.unscaledTime >= nextSearch && Setup.Turn() && GameObject.Find("Material Store") != null)
                     {
                         nextSearch = Time.unscaledTime + 5f;
                         FindModels();

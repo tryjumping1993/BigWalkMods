@@ -35,6 +35,7 @@ namespace WinterWalk
             Diag.Start(Config, "0.1.0");      // the debug log (Diag.cs), first, so it sees everything after
             Dresser.Prefetch();      // the island's lists, read on threads while the game loads
             Scatter.Prefetch();
+            SdkSpeedups.Apply();      // quicker lookups for the SDK's puzzle builds
             ClassInjector.RegisterTypeInIl2Cpp<DiagDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
@@ -76,6 +77,23 @@ namespace WinterWalk
             go.AddComponent<WeatherDriver>();
             go.AddComponent<MapDriver>();
             L.LogInfo("Winter Walk loaded" + (Diag.FilePath != null ? "; debug log " + Diag.FilePath : ""));
+        }
+    }
+
+    // One driver's set-up a frame. The frame that builds the puzzles on joining a walk is seconds long, so every driver's
+    // look for its puzzle came due in the frame after it, and together they held that frame for 0.7 s (2026-11-23). A
+    // driver that does not get the turn looks again on a later frame.
+    public static class Setup
+    {
+        public static bool Off;      // live, for tests: every driver sets up when it is due
+        static int frame = -1;
+        internal static bool Turn()
+        {
+            if (Off) return true;
+            int f = Time.frameCount;
+            if (f == frame) return false;
+            frame = f;
+            return true;
         }
     }
 

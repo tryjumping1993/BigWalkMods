@@ -78,7 +78,7 @@ namespace WinterWalk
             {
                 Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
                 if (me == null) { State = "no player"; return; }
-                if (Time.unscaledTime >= nextLook && (rackSki == null || modelSki == null))
+                if (Time.unscaledTime >= nextLook && (rackSki == null || modelSki == null) && Setup.Turn())
                 {
                     nextLook = Time.unscaledTime + 2f;
                     Find();

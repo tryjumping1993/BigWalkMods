@@ -117,7 +117,7 @@ namespace WinterWalk
             bool rescan = !calmScanned || (calm.Count == 0 && Time.unscaledTime >= nextCalmScan) || (model != null && calmSentinel != model);
             for (int i = 0; !rescan && i < calm.Count; i++)
                 if (calm[i] == null) rescan = true;
-            if (rescan) ScanCalm();
+            if (rescan) { if (Setup.Turn()) ScanCalm(); else nextCalmCheck = Time.unscaledTime; }
         }
 
         // Whether a point is inside any Calm Air box: |d . axis| <= axis . axis for each half axis (plain arithmetic)
@@ -248,7 +248,7 @@ namespace WinterWalk
             {
                 Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
                 if (me == null) { State = "no player"; return; }
-                if (Time.unscaledTime >= nextLook && (presents.Count == 0 || model == null))
+                if (Time.unscaledTime >= nextLook && (presents.Count == 0 || model == null) && Setup.Turn())
                 {
                     nextLook = Time.unscaledTime + 3f;
                     Find();

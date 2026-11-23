@@ -175,7 +175,7 @@ namespace WinterWalk
             {
                 if (lineRoot == null)
                 {
-                    if (Time.unscaledTime < nextLook) return;
+                    if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
                     nextLook = Time.unscaledTime + 2f;
                     cabins.Clear();
                     treePlinths.Clear();

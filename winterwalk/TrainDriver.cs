@@ -520,7 +520,7 @@ namespace WinterWalk
                 if (root == null)
                 {
                     InTunnel = false;
-                    if (Time.unscaledTime < nextLook) return;
+                    if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
                     nextLook = Time.unscaledTime + 2f;
                     plinths.Clear();
                     if (!Find()) return;

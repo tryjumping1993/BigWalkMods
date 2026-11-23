@@ -49,7 +49,10 @@ code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-N
   The dressing (95,500 copies: 44,000 of our firs, 24,000 game rocks, 27,000 game plants and logs) is drawn by
   distance: 64 m cells in three tiers, tier 0 within `NearFar` 600 m (big rocks, one tree in ten), tier 1 within
   `NearMid` 500 m, tier 2 within `NearAll` 200 m (live statics on `Dresser`). With all of it on, the island ran
-  about 20 % slower than the base game, and our firs' near meshes were most of that.
+  about 20 % slower than the base game, and our firs' near meshes were most of that. Each kind (per snow line) is
+  made once as a cleaned prototype under the holder's switched-off "Prototypes" and every place is a plain copy of
+  it; the cell groups are made switched off and switched on in steps of `WakeMs` (60 ms) once all are made. The
+  drivers' first look for their puzzle goes through `Setup.Turn()` (Plugin.cs): one driver's set-up a frame.
 - `profile\` — the mod profile: BepInEx 6.0.788 (IL2CPP), the SDK mod, the companion and dev helpers
   (UnityExplorer hidden at startup, NoClip, SkipIntro). Builds export to `profile\BepInEx\plugins\BigPuzzleSDK\`.
 - `previews\<Name>-*.png` — editor renders of the last build. `shots\*.png` — screenshots from the real game.
@@ -390,10 +393,18 @@ or not; the mods added the SDK reading and hashing every pack at load (330 MB: 9
 Winter Walk's two lists (4 s on the first frame, now read on threads from `Plugin.Load`). So the game moved to
 `Z:\SteamLibrary` that day: from Z:, cold (just copied, unbuffered) the players' install reached its menu 7.6 s after
 its process started; warm vanilla 2.9 s, the dev profile 5.7 s, and launch to a dressed island in a walk 26 s (31-40 s
-from G:). Joining a walk is the mods' real cost: the SDK builds every puzzle in one frame (about 4.6 s warm, 18.6 s
-from G: cold, where WinterIsle's 306 MB bundle took 9.2 s of it; warm 1.4 s), then the dresser takes 7-8 s at about
-20 fps and switches its 90,801 copies on in one 0.7 s frame. Half floats for normals and colours would shrink the packs
-only 8-17% after compression (tried on the biggest meshes), so the pack size is the content's. A players' install
+from G:). Joining a walk is the mods' real cost. The SDK builds every puzzle in one frame: 4.2 s warm before, 3.5 s
+now (18.6 s from G: cold, where WinterIsle's 306 MB bundle took 9.2 s of it; warm 1.1 s, about 0.8 s of which is cooking
+its 176 collision meshes, 3.9 M vertices: Unity's "Prebake Collision Meshes" would move that into the pack at the cost
+of its size, not tried). The 0.5 s saved is the SDK's "Circle" lamps (40 in our puzzles), which it found by searching
+every lamp in the game: `winterwalk\SdkSpeedups.cs` gives it their place (a Harmony postfix on `GameRefs.Light.ExactPath`;
+an SDK update can move it, and the log then says so). In the frame after, every Winter Walk driver found its puzzle at
+once (0.73 s of ours in a 0.84 s frame; room lights 145 ms, mine 93, sleeper 77): now one a frame, room lights only
+among the packs' objects and the mine's material among the loaded materials, so no frame of ours over about 0.15 s.
+The dresser took 7-8 s at about 20 fps (70 us a copy) and ended with a 0.7 s frame; from prototypes it copies in 1.2 s
+of the main thread and dresses in 3.4 s, switching on in about ten 60 ms frames. Launch to a dressed island: 21.4 s.
+Half floats for normals and colours would shrink the packs only 8-17% after compression (tried on the biggest meshes),
+so the pack size is the content's. A players' install
 started from G: also cost 14.5 s of Defender's CPU, and 0.5 s from Z:, but the Z: files had just been written (so
 probably scanned then): whether Defender scans a friend's 330 MB of packs again after its updates is not known. The
 minute from G: cold is inferred (1.9 GB at G:'s measured 35 MB/s, and the 23:11 dev start of 2026-11-22 froze 42 s with
@@ -490,6 +501,7 @@ the user and friends, who must all have the same packs and SDK version.
   files came back byte-identical). The first start generates BepInEx's interop (needs the internet once).
 - **SDK internals:** the framework and companion call the SDK's exporter, checks, map importer and reload by
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
+  Winter Walk also patches `GameRefs.Light.ExactPath` (`SdkSpeedups.cs`, Circle lamps' place) with Harmony.
 - **Game folder:** `Z:\SteamLibrary\steamapps\common\Big Walk` (moved from G:'s Steam library on 2026-11-23: G: is a
   USB hard disk and a cold start waited a minute on it). A players' install (2026.11.22-21dcd69) is in it, so a plain
   Steam start runs that; `play`/`launch` still load the dev profile. Tools find the folder through Steam's library list
@@ -511,6 +523,16 @@ each time, and do not commit broken or half-built states.
   copies it to their Google Drive and shares it by link as they see fit. The user made the repo public on 2026-11-22;
   leave its visibility alone unless they ask.
 - Nothing has been tested with two players.
+- **Physics queries find nothing for a while after a dressing** (found 2026-11-23, probably the tester's "OFF THE
+  GROUND" below): 4 to 8 s after the dresser switches its copies on, every ray in the world hits nothing (the island's
+  ground, the copies, tunnels: the companion's `ground?x&z` from 3000 m answers "none" everywhere, the game's ground
+  check fails, the debug log's dressing check reports thousands of copies "over nothing"), and it lasts until colliders
+  change again: the dresser's culling starting after its check ended it 1 to 2 s later; with the check moved to 60 s
+  (live: `Dresser.CheckDelay`) it lasted 54 s. The old dressing did it too (1.2 s at a first join, check at 5 s). A full
+  re-dress (the list's file time touched) sets it off 9 to 13 s later; switching 24,000 existing copies off and on
+  (`Dresser.TestHide`) did not, nor did a quiet minute. Suspect PhysX's scene-query tree after the 90,000 new colliders;
+  while walking, the culling's switching may be what ends (or starts) the tester's spells. To measure: poll
+  `ground?x=-700&z=-700` every 100 ms through a join.
 - A tester's log (2026-11-22, RTX 5070 laptop, 2560x1600, quality level 5): they walked from the mainland onto the isle
   and round the plaza and mine station M9 (about -580..-500, -850..-750). (1) There they were often "OFF THE GROUND"
   while walking: the game's ground check and the debug log's rays found nothing under them (at -516, 13, -779 not

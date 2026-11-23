@@ -191,7 +191,7 @@ namespace WinterWalk
                 if (me == null) { State = "no player"; return; }
                 if (!found)
                 {
-                    if (Time.unscaledTime < nextLook) return;
+                    if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
                     nextLook = Time.unscaledTime + 3f;
                     Find();
                     if (!found) { State = "no planes in the loaded packs"; return; }

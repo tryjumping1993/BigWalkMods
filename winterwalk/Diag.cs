@@ -483,6 +483,7 @@ namespace WinterWalk
         int slowFrames, slowSuppressed, snapshots, marks;
         string toast = "";
         bool inWalk, onIsle, guiFailed, startupReported;
+        float walkSince = -1000f;
         int players = -1, quality = -1;
         string affinity = "", states = "";
         long memStep;
@@ -523,10 +524,10 @@ namespace WinterWalk
                 if (dt * 1000f > Diag.SlowFrameMs.Value && Time.frameCount > 10)
                 {
                     slowFrames++;
-                    if (now >= nextSlowLine)
+                    if (now >= nextSlowLine || dt > 0.4f)      // (a frame of 0.4 s or more always gets its line)
                     {
                         nextSlowLine = now + 5f;
-                        string ours = Diag.Shares(true, 3, out double total);
+                        string ours = Diag.Shares(true, dt > 0.4f ? 10 : 3, out double total);
                         Diag.Write("[slow] a " + (dt * 1000f).ToString("0", CultureInfo.InvariantCulture) + " ms frame; Winter Walk's part " + total.ToString("0.0", CultureInfo.InvariantCulture) + " ms" + (ours.Length > 0 ? " (" + ours + ")" : "") + (slowSuppressed > 0 ? "; " + slowSuppressed + " more since the last line" : ""));
                         slowSuppressed = 0;
                     }
@@ -537,7 +538,7 @@ namespace WinterWalk
                 Player(now, dt);
 
                 if (KeyDown(markKey) || TestMark) { TestMark = false; Mark(); }
-                if (now >= nextBeat) Beat(now);
+                if (now >= nextBeat) { using (Diag.Time("diag")) Beat(now); }
             }
             catch (Exception e)
             {
@@ -592,6 +593,7 @@ namespace WinterWalk
             if (!inWalk)
             {
                 inWalk = true;
+                walkSince = now;
                 bool host = false;
                 try { host = Mirror.NetworkServer.active; } catch (Exception) { }
                 Diag.Event("in a walk as " + (host ? "host" : "client") + " at " + Diag.V(pos));
@@ -878,14 +880,16 @@ namespace WinterWalk
 
             // a frame rate that stays low: count what is drawn and where the camera looks (once a session: the count
             // itself takes about a second; F8 counts again whenever wanted)
-            if (pc != null && fps < Diag.LowFps.Value && frames > 0 && nextCensus == 0f && Time.frameCount > 600)
+            // (not while a walk is still loading: the counts take up to a second each, and joining is slow anyway)
+            bool settled = !inWalk || (now - walkSince > 40f && !Dresser.Busy);
+            if (pc != null && settled && fps < Diag.LowFps.Value && frames > 0 && nextCensus == 0f && Time.frameCount > 600)
             {
                 nextCensus = now;
                 Diag.Write("[perf] the frame rate is " + fps.ToString("0", CultureInfo.InvariantCulture) + "; camera " + Camera() + "\n" + Census.Drawn());
             }
             // memory past each 2 GB step: the biggest textures and meshes
             long step = priv / (2L << 30);
-            if (step > memStep && priv > (4L << 30))
+            if (settled && step > memStep && priv > (4L << 30))
             {
                 memStep = step;
                 Diag.Warn("memory passed " + (step * 2) + " GB (private bytes)\n" + Census.Memory());

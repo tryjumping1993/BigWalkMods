@@ -1,4 +1,4 @@
-﻿// Winter Walk: the Winter Isle's mine railway.
+// Winter Walk: the Winter Isle's mine railway.
 //
 // The island's pack carries the mine (WinterIsleMine in the Unity project): the hall, the low tunnels, the track,
 // the mantrips ("Mine Trips/Mantrip 0"..) and the gates across every tunnel mouth ("Mine Gates"). Its build also
@@ -166,10 +166,11 @@ namespace WinterWalk
         void Dress()
         {
             Material concrete = null, flat = null;
-            foreach (Renderer r in UnityEngine.Object.FindObjectsOfType<Renderer>(true))
+            // among the loaded materials (a few thousand) rather than every renderer in the world's (93 to 140 ms of the
+            // frame after joining a walk)
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<Material>()))
             {
-                if (r == null) continue;
-                Material m = r.sharedMaterial;
+                Material m = o != null ? o.TryCast<Material>() : null;
                 if (m == null) continue;
                 if (concrete == null && m.name == "Concrete_Mottle_Vertex") concrete = m;
                 else if (flat == null && m.name == "hhVertexColors") flat = m;
@@ -322,7 +323,7 @@ namespace WinterWalk
                 {
                     if (Underground && snowfall != null) snowfall.SetActive(true);
                     Underground = false;
-                    if (Time.unscaledTime < nextLook) return;
+                    if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
                     nextLook = Time.unscaledTime + 2f;
                     trips.Clear();
                     plinths.Clear();
@@ -330,7 +331,7 @@ namespace WinterWalk
                     parked = false; nextOpenCheck = 0f;
                     if (!Find()) return;
                 }
-                if (!dressed && Time.unscaledTime >= nextDress) { nextDress = Time.unscaledTime + 10f; Dress(); }
+                if (!dressed && Time.unscaledTime >= nextDress && Setup.Turn()) { nextDress = Time.unscaledTime + 10f; Dress(); }
                 if (Time.unscaledTime >= nextOpenCheck)
                 {
                     nextOpenCheck = Time.unscaledTime + 0.25f;

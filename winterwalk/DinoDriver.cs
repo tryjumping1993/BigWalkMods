@@ -553,7 +553,7 @@ namespace WinterWalk
             {
                 if (dinos.Count == 0 || dinos[0].root == null)
                 {
-                    if (Time.unscaledTime < nextLook) return;
+                    if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
                     nextLook = Time.unscaledTime + 3f;
                     if (!Find()) return;
                 }
