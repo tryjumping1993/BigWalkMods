@@ -114,7 +114,9 @@ public static class WinterIsleMine
 
     // The line: the shortest round through the hall and every station, each leg routed under ground that covers
     // it. 'heightAt' is the finished ground; 'avoid' is ground a tunnel should not pass under near the surface.
-    public static void FindRoute(Func<Vector2, float> heightAt, Func<Vector2, bool> avoid, float x0, float z0, float x1, float z1)
+    // 'shut' is ground no tunnel may pass under at all; 'ceiling' the highest a tunnel's floor may be at a point (NaN:
+    // as the ground allows), which is how the line is taken under the railway wherever it crosses it.
+    public static void FindRoute(Func<Vector2, float> heightAt, Func<Vector2, bool> avoid, float x0, float z0, float x1, float z1, Func<Vector2, bool> shut = null, Func<Vector2, float> ceiling = null)
     {
         // ---- the order: nearest neighbour from the hall, then uncrossed (2-opt). Node 0 is the hall ----
         var nodes = new List<Vector2> { Hub };
@@ -153,13 +155,28 @@ public static class WinterIsleMine
             gh[k] = heightAt(p);
             bad[k] = !float.IsNaN(gh[k]) && avoid(p);
         }
+        var closed = new bool[gx * gz];
+        var byStation = new bool[gx * gz];      // within 28 m of any station: no other leg comes this near
+        for (int k = 0; k < gh.Length; k++)
+        {
+            if (float.IsNaN(gh[k])) continue;
+            var p = new Vector2(x0 + (k % gx) * G, z0 + (k / gx) * G);
+            closed[k] = shut != null && shut(p);
+            foreach (Vector2 s in Stations) if ((s - p).sqrMagnitude < 28f * 28f) { byStation[k] = true; break; }
+        }
         int CellOf(Vector2 p) => Mathf.Clamp(Mathf.RoundToInt((p.y - z0) / G), 0, gz - 1) * gx + Mathf.Clamp(Mathf.RoundToInt((p.x - x0) / G), 0, gx - 1);
         Vector2 PlaceOf(int k) => new Vector2(x0 + (k % gx) * G, z0 + (k / gx) * G);
         var cost = new float[gx * gz];
         var from = new int[gx * gz];
         int[] di = { 1, -1, 0, 0, 1, 1, -1, -1 }, dj = { 0, 0, 1, -1, 1, -1, 1, -1 };
-        List<Vector2> Leg(Vector2 start, Vector2 end)
+        // A leg leaves its station straight on and comes into the next one straight on: the ground behind each end
+        // (within Loop of the station, and not ahead of where the leg starts or ends) costs dear, and so does coming
+        // near any other station. Until 2026-11-24 a leg could turn straight back: at the station by the bridge the
+        // line reversed within 4 m and the returning tunnel's shed stood on the station's own track.
+        const float Loop = 34f;
+        List<Vector2> Leg(Vector2 start, Vector2 end, Vector2 startStation, Vector2 startDir, Vector2 endStation, Vector2 endDir)
         {
+            bool hasStart = !float.IsNaN(startStation.x), hasEnd = !float.IsNaN(endStation.x);
             int s = CellOf(start), e = CellOf(end);
             for (int k = 0; k < cost.Length; k++) { cost[k] = float.MaxValue; from[k] = -1; }
             var open = new SortedSet<(float cost, int cell)> { (0f, s) };
@@ -179,7 +196,12 @@ public static class WinterIsleMine
                     if (float.IsNaN(h) || h < 2.6f) continue;
                     Vector2 q = PlaceOf(nk);
                     bool nearEnd = (q - start).magnitude < 40f || (q - end).magnitude < 40f;
+                    if (closed[nk] && (q - start).magnitude > 24f && (q - end).magnitude > 24f) continue;
                     float weight = 1f + (nearEnd ? 0f : (h < LowestFloor + Cover + Crown ? 14f : 0f) + (bad[nk] ? 40f : 0f));
+                    bool ownStart = hasStart && (q - startStation).sqrMagnitude < Loop * Loop, ownEnd = hasEnd && (q - endStation).sqrMagnitude < Loop * Loop;
+                    if (ownStart && Vector2.Dot(q - startStation, startDir) < 9f) weight += 200f;
+                    if (ownEnd && Vector2.Dot(q - endStation, endDir) > -9f) weight += 200f;
+                    if (byStation[nk] && !ownStart && !ownEnd) weight += 200f;
                     float c2 = top.cost + (k < 4 ? 1f : 1.41421f) * weight;
                     if (c2 < cost[nk]) { cost[nk] = c2; from[nk] = top.cell; open.Add((c2, nk)); }
                 }
@@ -229,7 +251,10 @@ public static class WinterIsleMine
             Vector2 legStart = here == 0 ? MouthOf(nodes[next]) : nodes[here] + (nodes[next] - nodes[prev]).normalized * 11f;
             int after = order[(i + 2) % n];
             Vector2 legEnd = next == 0 ? MouthOf(nodes[here]) : nodes[next] - (nodes[after] - nodes[here]).normalized * 11f;
-            List<Vector2> leg = Leg(legStart, legEnd);
+            var none = new Vector2(float.NaN, float.NaN);
+            List<Vector2> leg = Leg(legStart, legEnd,
+                here == 0 ? none : nodes[here], here == 0 ? Vector2.zero : (nodes[next] - nodes[prev]).normalized,
+                next == 0 ? none : nodes[next], next == 0 ? Vector2.zero : (nodes[after] - nodes[here]).normalized);
             if (here == 0) round.Add(legStart);
             for (int k = 1; k + 1 < leg.Count; k++) round.Add(leg[k]);
             if (next == 0) round.Add(legEnd);
@@ -295,6 +320,18 @@ public static class WinterIsleMine
             float centre = heightAt(flat[k]);
             floor[k] = kind[k] == 2 ? Floor : kind[k] == 0 ? (float.IsNaN(centre) ? surface[k] : centre) + 0.02f : Mathf.Max(LowestFloor, surface[k] - Cover);
         }
+        // ...and no higher than the ceiling (under the railway); the passes below then ramp the floor down to it
+        var cap = new float[count];
+        int capped = 0;
+        for (int k = 0; k < count; k++)
+        {
+            cap[k] = float.NaN;
+            if (ceiling == null || kind[k] != 1) continue;
+            float limit = ceiling(flat[k]);
+            if (float.IsNaN(limit)) continue;
+            cap[k] = Mathf.Max(LowestFloor, limit);
+            if (floor[k] > cap[k]) { floor[k] = cap[k]; capped++; }
+        }
         float rise = Grade * Step;
         for (int pass = 0; pass < 2; pass++)
         {
@@ -313,6 +350,8 @@ public static class WinterIsleMine
                 if (!held[k]) eased[k] = (floor[(k + count - 1) % count] + floor[k] * 2f + floor[(k + 1) % count]) / 4f;
             floor = eased;
         }
+        for (int k = 0; k < count; k++) if (!float.IsNaN(cap[k]) && floor[k] > cap[k]) floor[k] = cap[k];      // (the easing may not lift it back)
+        if (ceiling != null) Debug.Log("[BWM] Winter Isle mine: the floor taken down under the railway at " + capped + " points of the line");
 
         line.Clear(); lineRight.Clear(); lineKind.Clear(); lineCut.Clear(); cutCells.Clear();
         for (int k = 0; k < count; k++)
@@ -356,6 +395,11 @@ public static class WinterIsleMine
     {
         for (int k = 0; k < line.Count; k += 2)
             if (lineCut[k] || lineKind[k] == 0) yield return (new Vector2(line[k].x, line[k].z), lineKind[k] == 0 ? 5.5f : 3.2f);
+    }
+    // The open stretch of track at every station: the line's points in the open air (y is the floor, 0.17 m under the rail)
+    public static IEnumerable<Vector3> StationTrack()
+    {
+        for (int k = 0; k < line.Count; k++) if (lineKind[k] == 0) yield return line[k];
     }
     // Where the tunnel runs in a shed, and the height of the shed's roof: the island heaps its ground over each one
     // (a low bank of snow, not a grey strip of roof across the forest)

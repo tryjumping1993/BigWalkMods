@@ -77,10 +77,26 @@ float BwmSnowLight(float3 n, float3 sunDirection, float cavity, float relief)
     return lit * lerp(1.0, smoothstep(0.1, 0.5, cavity), (1.0 - saturate(sunDirection.y * 1.5)) * 0.5 * relief);
 }
 
+// How much daylight there is: 1 by day, 0 in the dead of night, read from the sky's own light. The game's sky gives no
+// light at all between about 23 h and 1 h and its nights are black (players, 2026-11-24: the island's night was "way too
+// bright"): every constant light term of ours is scaled by this, so nothing of ours glows after dark but its lamps.
+float BwmDaylight()
+{
+    float3 sky = max(SampleSH(float3(0.0, 1.0, 0.0)), 0.0);
+    return saturate(dot(sky, float3(0.3, 0.5, 0.2)) / 0.3);
+}
+
+// The sky's light on a shaded surface plus a little that is always there by day (shade under an open sky is never
+// black), none of it at night
+float3 BwmShadeLight(float3 ambient, float always)
+{
+    return ambient * 1.1 + always * BwmDaylight();
+}
+
 // Unlit snow goes blue instead of black, as it does under an open sky
 float3 BwmSnowShade(float3 shadeColor, float3 ambient)
 {
-    return shadeColor * (ambient * 1.1 + 0.18);
+    return shadeColor * BwmShadeLight(ambient, 0.18);
 }
 
 // A soft sheen where the surface mirrors the sun, strongest on wind crust
@@ -117,7 +133,7 @@ float3 BwmSnowOn(float3 snowColor, float3 shadeColor, float3 positionWS, float3 
     float3 ambient = SampleSH(ns);
     float3 color = BwmSnowShade(shadeColor, ambient) * occlusion + albedo * sunColor * lit;      // sunlight adds to the sky's light
     color += (BwmSnowSheen(ns, v, sunDirection, detail.flats) + BwmSnowGlints(positionWS, ns, v, sunDirection, viewDistance, 70.0, 2.4, 22.0)) * up * sunColor * sunShadow;
-    color += pow(1.0 - saturate(dot(ns, v)), 4.0) * 0.18 * (ambient + 0.1) * occlusion;
+    color += pow(1.0 - saturate(dot(ns, v)), 4.0) * 0.18 * (ambient + 0.1 * BwmDaylight()) * occlusion;
     return color;
 }
 

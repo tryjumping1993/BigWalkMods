@@ -445,6 +445,31 @@ namespace BwmCompanion
         {
             Type type = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(r.Str("type", ""))).FirstOrDefault(t => t != null);
             if (type == null) return "ERROR no type '" + r.Str("type") + "'";
+            // call?type=T&method=M&args=true,2.5  calls a static method (or one of the first live object's) with plain
+            // arguments: bool, whole numbers, numbers, text, an enum's name
+            if (r.Has("args"))
+            {
+                string[] given = r.Str("args", "").Split(new[] { ',' }, StringSplitOptions.None);
+                if (given.Length == 1 && given[0] == "") given = new string[0];
+                MethodInfo with = type.GetMethods(Any | BindingFlags.Static).FirstOrDefault(x => x.Name == r.Str("method") && x.GetParameters().Length == given.Length);
+                if (with == null) return "ERROR " + type.Name + " has no " + r.Str("method") + " taking " + given.Length + " argument(s)";
+                var values = new object[given.Length];
+                ParameterInfo[] wanted = with.GetParameters();
+                for (int i = 0; i < given.Length; i++)
+                {
+                    Type pt = wanted[i].ParameterType;
+                    values[i] = pt == typeof(bool) ? (object)(given[i] == "true" || given[i] == "1") : pt == typeof(int) ? int.Parse(given[i], CultureInfo.InvariantCulture)
+                        : pt == typeof(float) ? float.Parse(given[i], CultureInfo.InvariantCulture) : pt.IsEnum ? Enum.Parse(pt, given[i], true) : given[i];
+                }
+                object target = null;
+                if (!with.IsStatic)
+                {
+                    target = typeof(UnityEngine.Object).GetMethods().First(x => x.Name == "FindObjectOfType" && x.IsGenericMethod && x.GetParameters().Length == 0).MakeGenericMethod(type).Invoke(null, null);
+                    if (target == null) return "ERROR no active " + type.Name;
+                }
+                object got = with.Invoke(target, values);
+                return "called " + type.Name + "." + with.Name + "(" + string.Join(", ", given) + ")" + (got != null ? " -> " + got : "");
+            }
             // The generic FindObjectOfType<T>() survives in this build; the (Type) overload was stripped
             object typed = typeof(UnityEngine.Object).GetMethods().First(x => x.Name == "FindObjectOfType" && x.IsGenericMethod && x.GetParameters().Length == 0).MakeGenericMethod(type).Invoke(null, null);
             if (typed == null) return "ERROR no active " + type.Name;

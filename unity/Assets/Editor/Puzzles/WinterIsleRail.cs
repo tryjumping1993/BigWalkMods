@@ -140,6 +140,23 @@ public static class WinterIsleRail
         return Mathf.Sqrt(best);
     }
 
+    // As Distance, and the height of the rails at that nearest point (NaN when none is within reach)
+    public static float Nearest(Vector2 p, float reach, out float railHeight)
+    {
+        float best = float.MaxValue;
+        railHeight = float.NaN;
+        int r = Mathf.CeilToInt(reach / Bucket), bx = Mathf.FloorToInt(p.x / Bucket), bz = Mathf.FloorToInt(p.y / Bucket);
+        for (int oz = -r; oz <= r; oz++)
+            for (int ox = -r; ox <= r; ox++)
+                if (buckets.TryGetValue(BucketKey(bx + ox, bz + oz), out var list))
+                    foreach (int g in list)
+                    {
+                        float d = (new Vector2(Line[g].x, Line[g].z) - p).sqrMagnitude;
+                        if (d < best) { best = d; railHeight = Line[g].y; }
+                    }
+        return Mathf.Sqrt(best);
+    }
+
     // A track's middle at point i: side +1 the right-hand (up) track, -1 the other; one track on a loop and at an open
     // line's termini
     public static float Offset(RailLine l, int i, int side)

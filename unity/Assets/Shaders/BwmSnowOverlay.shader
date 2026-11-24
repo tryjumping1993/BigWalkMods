@@ -78,6 +78,8 @@ Shader "BWM/SnowOverlay"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS      // torches, room lights, night vision: as the ground takes them
+            #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
             #pragma multi_compile_fog
             #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -144,6 +146,18 @@ Shader "BWM/SnowOverlay"
                 // lit as all the island's snow is (BwmSnowCommon); the cap is thinner, so a little darker, at its edge
                 float3 color = BwmSnowOn(_SnowColor.rgb, _ShadeColor.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, 1.0)
                     * lerp(0.86, 1.0, cover);
+                #if defined(_ADDITIONAL_LIGHTS)
+                {
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = positionWS;
+                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
+                    uint lightCount = GetAdditionalLightsCount();
+                    LIGHT_LOOP_BEGIN(lightCount)
+                        Light lamp = GetAdditionalLight(lightIndex, positionWS, half4(1, 1, 1, 1));
+                        color += _SnowColor.rgb * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.7 + 0.3));
+                    LIGHT_LOOP_END
+                }
+                #endif
                 color = MixFog(color, i.fogFactor);
                 return half4(color, cover);
             }

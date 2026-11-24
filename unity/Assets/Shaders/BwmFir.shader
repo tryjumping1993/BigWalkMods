@@ -181,7 +181,7 @@ Shader "BWM/Fir"
                 float lit = saturate(ndl * 0.6 + 0.4) * sun.shadowAttenuation;
                 float through = spray ? saturate(-ndl) * _Translucency * (1.0 - snow) * sun.shadowAttenuation : 0.0;
                 float3 ambient = SampleSH(n);
-                float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.14) * lerp(0.6, 1.0, depth);
+                float3 shade = albedo * _ShadeColor.rgb * BwmShadeLight(ambient, 0.14) * lerp(0.6, 1.0, depth);
                 float3 color = shade + albedo * sun.color * lit + needles * sun.color * through;      // sunlight adds to the sky's light
                 // the snow itself, lit as all the island's snow is (BwmSnowCommon); deep in the crown it is in shade
                 color = lerp(color, BwmSnowOn(_SnowColor.rgb, _SnowShade.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, lerp(0.6, 1.0, depth)), snow);

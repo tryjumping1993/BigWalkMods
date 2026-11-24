@@ -821,6 +821,9 @@ namespace WinterWalk
                 + " | dressing " + Dresser.Shown + " of " + Dresser.Made + " shown"
                 + " | scatter " + Scatter.State
                 + " | unstuck " + Unstuck.State
+                + " | swim " + SwimDriver.State
+                + " | riders " + Riders.State
+                + " | night vision " + NightVision.State
                 + " | puzzles " + PuzzleSleep.State;
         }
 

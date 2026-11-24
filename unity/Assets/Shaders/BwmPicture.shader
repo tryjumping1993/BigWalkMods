@@ -118,7 +118,9 @@ Shader "BWM/Picture"
                 Light sun = BwmSun(i.positionWS);
                 float lit = saturate(dot(n, sun.direction) * 0.65 + 0.35) * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
-                float3 outdoors = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16) + albedo * sun.color * lit;      // sunlight adds to the sky's light
+                // (the little light that is always there fades with the sky's own: the game's nights are black, see BwmDaylight in BwmSnowCommon.hlsl)
+                float daylight = saturate(dot(max(SampleSH(float3(0.0, 1.0, 0.0)), 0.0), float3(0.3, 0.5, 0.2)) / 0.3);
+                float3 outdoors = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16 * daylight) + albedo * sun.color * lit;      // sunlight adds to the sky's light
                 outdoors += sun.color * shine * pow(saturate(dot(n, normalize(sun.direction + v))), power) * sun.shadowAttenuation;
                 // the room: a warm light from above and in front, and a little from everywhere
                 float3 room = normalize(TransformObjectToWorldDir(_RoomDir.xyz));

@@ -121,7 +121,7 @@ Shader "BWM/Snowy"
                 float wrap = saturate(max(towards, -towards * _Through) * 0.65 + 0.35);      // a blade of grass is lit from behind too
                 float lit = wrap * sun.shadowAttenuation;
                 float3 ambient = SampleSH(n);
-                float3 shade = albedo * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
+                float3 shade = albedo * _ShadeColor.rgb * BwmShadeLight(ambient, 0.16);
                 float3 color = shade + albedo * sun.color * lit;      // sunlight adds to the sky's light
                 // the snow itself, lit as all the island's snow is (BwmSnowCommon)
                 color = lerp(color, BwmSnowOn(_SnowColor.rgb, _SnowShade.rgb, positionWS, n, v, viewDistance, detail, sun.direction, sun.color, sun.shadowAttenuation, 1.0), snow);

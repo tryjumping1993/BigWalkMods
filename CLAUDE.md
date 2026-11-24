@@ -96,6 +96,11 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   peaks, a ravine and a frozen lake (`Peaks`, `Lake` and the ravine constants in `WinterIslePuzzle.cs`). Its
   build levels every island puzzle's site, so a puzzle can be sited on a slope, and prints how much level
   ground is left.
+- **The coast is closed** (island steps 3d and again after the mine's snow banks, `CloseCoast`): beyond the submerged
+  rim there is no ground at all, so wherever levelling, benching or heaping leaves the ground's edge standing above
+  -6.5 m, more ground is grown out from it, each ring 58 degrees lower, down to -14 m. Before 2026-11-24 the mine's
+  snow banks at two cliff-top stations hung over the sea as rows of sheer strips with the water showing between
+  (players: "some map edges look unfinished").
 - **The island's ground** is a 3 m height grid (`height[]`, which paths, sites and the dressing work on) drawn as a
   mesh twice as fine: `HeightAt` is a smooth curve through the grid with crags on steep ground, and the mesh and
   its collider follow it exactly. Use `HeightAt` for anything placed on the ground. On top of it the build lays
@@ -125,7 +130,16 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   high: a seated rider clears it, on foot it is a crouch) that runs under the whole island and surfaces at about
   thirteen stations, plus one big hall under the summit. The stations are placed and the line routed by the
   build (`PlaceStations`, `FindRoute`); where the ground is too thin the tunnel runs in a stone shed and the
-  island's mesh leaves the ground out (`InCut`). The build writes the line and the lamps' places beside the
+  island's ground is heaped over its roof (`ShedRoofs`; never into a station's open track: until 2026-11-24 the banks
+  met over every station and buried it 2 m deep). Stations go only where their level ground lasts (`StationAllowed`:
+  the sea further off than the flat plus a 58 degree fall from its level, no mountainside), since two used to stand on
+  the brink of 50 m sea cliffs with the track diving 16 m. A leg of the line leaves its station straight on and may not
+  come within 28 m of any other station, nor turn back within 34 m of its own (`FindRoute`'s `Leg`: at the station
+  by the bridge the line used to reverse in 4 m and the returning tunnel's shed stood on the station's track), and
+  always passes under the railway where it crosses it (`MineCeiling`: within 8 m of the rails its floor is held 3.95 m
+  below them; at -699, -977 it used to run through the railway's tunnel 4 m above the rails and its unseen walls
+  knocked standing passengers out of the coaches). `tools\mine\minecheck.py` checks a built
+  line: each station's open track, the line near its own stations, every crossing of the railway. The build writes the line and the lamps' places beside the
   Winter Walk plugin as `WinterIsle.mineline`, and the mine tower's place to `unity/Land/WinterIsle.mine`, which
   The Tree reads, so build WinterIsle before TheTree. In the game `winterwalk/MineDriver.cs` runs the twelve
   mantrips from the network clock, opens the gates, stops the snowfall underground, and gives the mine the game's
@@ -149,6 +163,35 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Calm Air:** a jetpack does not fire inside an empty named "Calm Air ..." (an oriented box: position, rotation,
   scale). Every walled puzzle puts one over its area (`IsleKit.CalmAir`), so nobody flies over walls or fences.
   Thrust is cut, not momentum. `JetpackDriver.CalmBoxes` says how many are known.
+- **Night is the game's night** (players, 2026-11-24: the island's night was "way too bright"): the game's sky gives no
+  light at all from about 23 h to 1 h (`RenderSettings.ambientSkyColor` 0, sun 0) and little from 21 h to 4 h. Our
+  shaders used to add a constant to the sky's light (0.14 to 0.18, "shade is never black"), which at night was all the
+  light there was and made the snow glow mid-blue. Every such constant is now scaled by `BwmDaylight()`
+  (`BwmSnowCommon.hlsl`: the sky's light straight up over 0.3, clamped), so after dark only lamps light anything: the
+  garlands' pools, room lights, torches (the ground, `BWM/Fir`, `BWM/Snowy` and `BWM/Picture` take additional lights;
+  `BWM/SnowOverlay` does not). A new lit shader of ours must do the same. Compare with `shots\night-*.png`.
+- **Night vision** (`winterwalk\NightVision.cs`): the game's night-vision goggles are an unfinished item (kept switched
+  off in its "SecretZone"; `PostProcessingManager.SetNightVision` moves none of its volumes and changes no pixel, on
+  the mainland either), but the SDK hands them out and Island Gear has them. Winter Walk watches goggles whose
+  `PeckEffectTelescope.givesNightVision` is set, and while one is in use by this PC's player
+  (`isActiveForLocalPlayer`), shines a green directional light with no shadows the way they look, tilted 32 degrees
+  down so level ground takes it (`NightVision.Strength`, `Tilt`; `TestOn` for tests). Only the wearer's PC has the
+  light. Do not hook `SetNightVision` as the signal: the game throws it about 90 times a frame.
+- **Swimming** (`winterwalk\SwimDriver.cs`): the game's swimmers stand on `Ocean/FloatFloorCollider`, a box 2500 m
+  square about the world's middle; most of the island's sea lay outside it and players fell through the water for ever.
+  Winter Walk widens that box's collider to the island's box plus 400 m, switches the game's depth limit
+  (`PlayerGround.limitWaterMovement`, measured to the game's terrain, which is 13 m down or absent out here) off near
+  the island, and keeps swimmers within `SwimDriver.Reach` (60 m) of the island's land from `WinterIsle.coast` (the
+  island's build writes it: the sea's distance from land on a 6 m grid): beyond it a swimmer is moved back towards
+  land at `Pull` 3.2 m/s (the game's mover sets a swimmer's speed itself every step, so changing the rigidbody's
+  velocity does nothing). `SwimDriver.State`, `ShoreDistance`, `Off`.
+- **Riding on foot** (`winterwalk\Riders.cs`): our vehicles are set down at a new place every frame, with plain
+  colliders; a player standing in one was shoved, not carried, and ended wedged in a wall. Now this PC's player is moved
+  by whatever the vehicle under their feet moved (any object straight under "Mine Trips", "Trains", "Gondola Cabins",
+  "Ski Lift Chairs", "Summit Lift Chairs"), through jumps too (`Riders.Hold` 1.2 s), and anyone standing in a mantrip
+  when it sets off is sat in a free seat (its tunnel is lower than a standing player). Other players see a standing
+  rider a little behind the vehicle (ordinary position updates); seated ones are exact. The game's own train does
+  this with `PlatformingBody` + `StickyPlatform` + `TrainCar` (a proxy body), which we do not copy.
 - **Getting unstuck** (`winterwalk\Unstuck.cs`): a player pushing to move or jump for 3 s without moving, on ground
   too steep to use or held up off it, is set down on the game's last safe position or the nearest open spot.
 - **Jetpacks** (`winterwalk\JetpackDriver.cs`): walking up to one of the opened presents under The Tree ("Jetpack
@@ -522,7 +565,12 @@ each time, and do not commit broken or half-built states.
 - Releases (user, 2026-11-21): each players' zip becomes a release on the GitHub repo (`bwm.ps1 release`); the user
   copies it to their Google Drive and shares it by link as they see fit. The user made the repo public on 2026-11-22;
   leave its visibility alone unless they ask.
-- Nothing has been tested with two players.
+- Nothing has been tested with two players. In particular: a standing rider as other players see them (`Riders`
+  moves only this PC's player), and seats clicked by a player who is not the host.
+- A seat is clicked from within about 2 m (the game's reach): from 2.6 m the test player's `use` did nothing, from
+  1.4 m it sat. Beside a mantrip that means standing right at its side.
+- Sea cliffs carry big smooth white sheets where the ground shader's "gully" snow lies on 58 degree faces (seen from
+  the sea at -1041, -2420); the edges are closed, but the faces could use more rock.
 - **Fixed 2026-11-23: physics queries finding nothing** (players "falling" on solid ground in the training room for some
   seconds after joining, the tester's "OFF THE GROUND" round the plaza, dressing checks with thousands "over nothing").
   The island's build had written 24 rocks with no height (NaN: a rock of a cluster off the island's edge), and one

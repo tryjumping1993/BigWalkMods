@@ -133,6 +133,9 @@ namespace WinterWalk
             while (hi - lo > 1) { int m = (lo + hi) / 2; if (loopTime[m] <= t) lo = m; else hi = m; }
             float f = (t - loopTime[lo]) / Mathf.Max(loopTime[hi] - loopTime[lo], 1e-5f);
             heading = loop[hi] - loop[lo];
+            // waiting at a stop the two ends are one point: face the way the line goes on (a mantrip parked at a stop
+            // while the mine was closed was left as the build made it, which was across the track)
+            for (int ahead = 1; ahead <= 6 && heading.sqrMagnitude < 1e-8f; ahead++) heading = loop[(hi + ahead) % loop.Count] - loop[lo];
             return Vector3.Lerp(loop[lo], loop[hi], f);
         }
 

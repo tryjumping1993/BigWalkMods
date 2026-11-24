@@ -58,7 +58,8 @@ Shader "BWM/Snowflake"
                 o.color = v.color;
                 o.uv = v.uv;
                 Light sun = GetMainLight();
-                o.light = sun.color * 0.55 + SampleSH(float3(0, 1, 0)) * 0.9 + 0.04;
+                float3 sky = max(SampleSH(float3(0, 1, 0)), 0.0);
+                o.light = sun.color * 0.55 + sky * 0.9 + 0.04 * saturate(dot(sky, float3(0.3, 0.5, 0.2)) / 0.3);      // no light of their own at night
                 o.viewDepth = -p.positionVS.z;
                 return o;
             }

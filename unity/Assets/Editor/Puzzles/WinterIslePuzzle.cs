@@ -1194,6 +1194,24 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 foreach (Vector3 site in b.OtherSites) if ((p - new Vector2(site.x, site.y)).magnitude < site.z + 18f) return false;
                 if (rail && WinterIsleRail.Distance(p, 64f) < 45f) return false;
                 if (WinterIsleAirport.Outside(p) < 30f || WinterIsleAirport.StripOutside(p) < 20f) return false;
+                // ...and only where its level ground will last: 3b wears a flat that stands by a sea cliff down to a
+                // slope (two stations ended on the brink of 50 and 60 m cliffs with their track diving 16 m, and the
+                // snow heaped over their sheds stood out over the water), so the sea must be further off than the
+                // flat's edge plus a 58 degree fall from its level; and not on a mountainside
+                float here = height[Cell_(p)];
+                if (!(here > 0.5f)) return false;
+                float clear = WinterIsleMine.StationRadius + 6f + here / 1.6f;
+                for (int a = 0; a < 16; a++)
+                {
+                    var dir = new Vector2(Mathf.Cos(a * Mathf.PI / 8f), Mathf.Sin(a * Mathf.PI / 8f));
+                    for (int ring = 1; ring <= 3; ring++)
+                    {
+                        Vector2 q = p + dir * (clear * ring / 3f);
+                        if (q.x < X0 || q.x > X1 || q.y < Z0 || q.y > Z1 || !(height[Cell_(q)] > 0.3f)) return false;
+                    }
+                    Vector2 near = p + dir * 15f;
+                    if (Mathf.Abs(height[Cell_(near)] - here) > 10f) return false;
+                }
                 return true;
             }
             WinterIsleMine.PlaceStations(wanted, 13, p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : height[Cell_(p)], StationAllowed, X0, Z0, X1, Z1);
@@ -1431,6 +1449,63 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             Debug.Log("[BWM] Winter Isle railway: " + benched + " points of ground benched to the line");
         }
+
+        // 3d. Close the coast. The rim under water ends where the land's outline says (beyond it there is no ground at
+        //     all), and benching lifts whatever rim lies under the line: where the railway runs along a sea cliff its bed
+        //     reached that edge 20 to 40 m up, and the ground stopped there in a row of sheer strips with the sea showing
+        //     between them (players, 2026-11-24: "some map edges look unfinished"). So wherever the ground's edge stands
+        //     higher than a beach's rim, more ground is grown out from it, each ring about 58 degrees lower than the
+        //     last (as 3b's limit), until the edge is deep under water everywhere
+        void CloseCoast(string after)
+        {
+            const float Deep = -14f, Enough = -6.5f;
+            float fall = 1.6f * Cell;
+            int grown = 0, rings = 0, reachedBox = 0;
+            float highest = float.MinValue; Vector2 highestAt = Vector2.zero;
+            var frontier = new List<int>();
+            for (int k = 0; k < count; k++)
+            {
+                if (!(height[k] > Enough)) continue;
+                int i = k % row, j = k / row;
+                bool edge = i == 0 || j == 0 || i == nx || j == nz
+                    || float.IsNaN(height[k - 1]) || float.IsNaN(height[k + 1]) || float.IsNaN(height[k - row]) || float.IsNaN(height[k + row])
+                    || float.IsNaN(height[k - row - 1]) || float.IsNaN(height[k - row + 1]) || float.IsNaN(height[k + row - 1]) || float.IsNaN(height[k + row + 1]);
+                if (!edge) continue;
+                frontier.Add(k);
+                if (height[k] > highest) { highest = height[k]; highestAt = At(k); }
+            }
+            int began = frontier.Count;
+            while (frontier.Count > 0 && rings < 400)
+            {
+                rings++;
+                var add = new Dictionary<int, float>();
+                foreach (int k in frontier)
+                {
+                    int i = k % row, j = k / row;
+                    for (int dj = -1; dj <= 1; dj++)
+                        for (int di = -1; di <= 1; di++)
+                        {
+                            if (di == 0 && dj == 0) continue;
+                            int ni = i + di, nj = j + dj;
+                            if (ni < 0 || nj < 0 || ni > nx || nj > nz) { reachedBox++; continue; }
+                            int n = nj * row + ni;
+                            if (!float.IsNaN(height[n])) continue;
+                            float h = Mathf.Max(Deep, height[k] - (di != 0 && dj != 0 ? fall * 1.41421f : fall));
+                            if (!add.TryGetValue(n, out float had) || h > had) add[n] = h;      // the gentlest fall from any neighbour
+                        }
+                }
+                frontier.Clear();
+                foreach (var a in add)
+                {
+                    height[a.Key] = a.Value;
+                    grown++;
+                    if (a.Value > Enough) frontier.Add(a.Key);
+                }
+            }
+            Debug.Log("[BWM] Winter Isle coast closed (after " + after + "): " + began + " points of the ground's edge stood above " + Sdk.F(Enough) + " m (the highest " + Sdk.F(highest) + " m at " + Sdk.F(highestAt.x) + ", " + Sdk.F(highestAt.y)
+                + "); " + grown + " points of ground grown out from them in " + rings + " rings" + (reachedBox > 0 ? "; " + reachedBox + " TIMES THE ISLAND'S BOX STOPPED IT (an open edge is left there)" : ""));
+        }
+        CloseCoast("the benching");
 
         // 4. Where the causeway lands; then paths from the plaza to the landing and to every site, by the easiest
         //    gradient (Dijkstra over the grid: steep steps cost a great deal, very steep ones are not allowed)
@@ -1713,6 +1788,20 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         Spread(toWater, row, nz + 1);
         Spread(toLandCells, row, nz + 1);
+        // For swimming (winterwalk/SwimDriver.cs): how far each point of the sea is from the island's land, on a 6 m
+        // grid, in steps of 2 m (255 = 510 m or more). Written beside the Winter Walk plugin as WinterIsle.coast.
+        {
+            string coastFile = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.coast"));
+            int coastWide = nx / 2 + 1, coastDeep = nz / 2 + 1;
+            using (var coast = new System.IO.BinaryWriter(System.IO.File.Create(coastFile)))
+            {
+                coast.Write(X0); coast.Write(Z0); coast.Write(Cell * 2f); coast.Write(coastWide); coast.Write(coastDeep);
+                for (int cj = 0; cj < coastDeep; cj++)
+                    for (int ci = 0; ci < coastWide; ci++)
+                        coast.Write((byte)Mathf.Clamp(Mathf.RoundToInt(toLandCells[Mathf.Min(cj * 2, nz) * row + Mathf.Min(ci * 2, nx)] * Cell / 2f), 0, 255));
+            }
+            Debug.Log("[BWM] Winter Isle: wrote the sea's distance from land for swimming (" + coastWide + " x " + coastDeep + " points)");
+        }
         // The ground's height anywhere: a smooth curve through the grid's heights (bicubic; bilinear at the rim of
         // the land, where the grid runs out), with crags on steep ground away from the paths. The mesh follows
         // exactly this, so banks, peaks and the shore are not flat 3 m facets.
@@ -1823,9 +1912,35 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 if (WinterIsleAirport.Outside(p) < 10f) return true;      // ...or the airport
                 return false;
             }
-            WinterIsleMine.FindRoute(p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : HeightAt(p), MineAvoid, X0, Z0, X1, Z1);
+            // ...and always under the railway, never through it: a tunnel follows the ground 3.4 m down, and where the
+            // railway is itself in a tunnel under a low hill the two met (at -699, -977 the mine's floor was 4 m above the
+            // rails, inside the railway's bore, and its unseen walls knocked standing passengers out of the coaches; at
+            // -858, -933 its roof stood in the track's bed). Within 8 m of the railway the mine's floor is held low enough
+            // that its roof and shed (2.3 m) clear the railway's bed (0.75 m under the rails) by 0.9 m; where that would be
+            // below the lowest floor a mine may have (the railway near sea level) it may not cross at all.
+            float MineCeiling(Vector2 p)
+            {
+                if (!rail) return float.NaN;
+                if (WinterIsleRail.Nearest(p, 16f, out float railY) > 8f || float.IsNaN(railY)) return float.NaN;
+                return railY - 0.75f - WinterIsleMine.Crown - 0.55f - 0.9f;
+            }
+            bool MineShut(Vector2 p)
+            {
+                if (!rail) return false;
+                if (WinterIsleRail.Nearest(p, 16f, out float railY) > 10f || float.IsNaN(railY)) return false;
+                return railY - 0.75f - WinterIsleMine.Crown - 0.55f - 0.9f < WinterIsleMine.LowestFloor + 0.05f;
+            }
+            WinterIsleMine.FindRoute(p => p.x < X0 || p.x > X1 || p.y < Z0 || p.y > Z1 ? float.NaN : HeightAt(p), MineAvoid, X0, Z0, X1, Z1, MineShut, MineCeiling);
             foreach (var kept in WinterIsleMine.KeptClear()) structures.Add(kept);
             // where the tunnel runs in a shed, the ground is heaped over its roof: a low bank of snow with gentle sides
+            // ...but not into the stations: the banks ran 10 m out from each tunnel mouth and met over the 16 m of open
+            // track between them, so every station lay buried under 1.5 to 2.5 m of ground (found 2026-11-24)
+            var stationTrack = new List<Vector3>(WinterIsleMine.StationTrack());
+            bool InStation(Vector2 q, float within)
+            {
+                foreach (Vector3 st in stationTrack) { float sdx = q.x - st.x, sdz = q.y - st.z; if (sdx * sdx + sdz * sdz < within * within) return true; }
+                return false;
+            }
             int bermed = 0;
             foreach (var shed in WinterIsleMine.ShedRoofs())
             {
@@ -1839,12 +1954,23 @@ public sealed class WinterIslePuzzle : PuzzleDef
                         int sk = sj * row + si;
                         if (float.IsNaN(height[sk])) continue;
                         Vector2 sp = At(sk);
+                        if (InStation(sp, 6.5f)) continue;
                         float wanted = need - Mathf.Max(0f, (sp - shed.at).magnitude - 4.5f) * 0.55f + (Mathf.PerlinNoise(sp.x * 0.08f, sp.y * 0.08f) - 0.5f) * 0.4f;
                         if (wanted > height[sk]) { height[sk] = wanted; bermed++; }
                     }
             }
             Debug.Log("[BWM] Winter Isle: ground heaped over the mine's sheds at " + bermed + " points");
+            float worstOver = 0f, worstUnder = 0f; Vector3 overAt = Vector3.zero, underAt = Vector3.zero;
+            foreach (Vector3 st in stationTrack)
+            {
+                float gap = HeightAt(new Vector2(st.x, st.z)) - st.y;
+                if (gap > worstOver) { worstOver = gap; overAt = st; }
+                if (-gap > worstUnder) { worstUnder = -gap; underAt = st; }
+            }
+            Debug.Log("[BWM] Winter Isle mine stations: " + stationTrack.Count + " points of open track; the ground stands at most " + Sdk.F(worstOver) + " m over the track's floor (at " + Sdk.F(overAt.x) + ", " + Sdk.F(overAt.z)
+                + ") and at most " + Sdk.F(worstUnder) + " m under it (at " + Sdk.F(underAt.x) + ", " + Sdk.F(underAt.z) + ")");
         }
+        CloseCoast("the mine's snow banks");
         // Woods: a few dense stands that the trails run through (alternately fir and birch), so that a walker is
         // sometimes among close trunks instead of always in the open
         var woods = new List<(Vector2 at, float radius, bool birch)>();

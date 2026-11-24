@@ -462,8 +462,8 @@ Shader "BWM/Snow"
                 // trodden snow: packed and a little greyer, each print bluer and darker than the snow round it
                 float3 pathAlbedo = _PathColor.rgb * (0.94 + 0.06 * ValueNoise(positionWS.xz * 1.3)) * lerp(float3(0.82, 0.87, 0.97), float3(1.0, 1.0, 1.0), smoothstep(0.15, 0.5, trackCavity));
                 float3 snowColor = lerp(lerp(lerp(snowAlbedo, pathAlbedo, path), earth, earthy), rockColor, rock);
-                float3 earthShade = earth * _ShadeColor.rgb * (ambient * 1.1 + 0.16);
-                shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * lerp(float3(1, 1, 1), _ShadeColor.rgb, 0.35) * (ambient * 1.1 + 0.16), rock);      // rock in shade stays grey, not snow-blue
+                float3 earthShade = earth * _ShadeColor.rgb * BwmShadeLight(ambient, 0.16);
+                shade = lerp(lerp(shade * lerp(1.0, 0.9, path), earthShade, earthy), rockColor * lerp(float3(1, 1, 1), _ShadeColor.rgb, 0.35) * BwmShadeLight(ambient, 0.16), rock);      // rock in shade stays grey, not snow-blue
                 float3 color = shade + snowColor * sun.color * lit;      // sunlight adds to the sky's light: white in the sun, blue in shade (the user, 2026-11-22)
 
                 // Hollows between drifts are a touch bluer; so is every dip in the land, and crests catch more light
@@ -498,7 +498,7 @@ Shader "BWM/Snow"
                 color += BwmSnowGlints(positionWS, n, v, sun.direction, viewDistance, _SparkleScale, _SparkleAmount, _SparkleDistance)
                     * (1.0 - path) * (1.0 - rock) * (1.0 - earthy) * (1.0 - icy) * sun.color * sun.shadowAttenuation;
 
-                color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1) * (1.0 - earthy);
+                color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1 * BwmDaylight()) * (1.0 - earthy);
                 if (_BwmNight > 0.001 && _GlowBox.z > 0.0)
                     color += snowColor * SAMPLE_TEXTURE2D(_GlowMap, sampler_GlowMap, (positionWS.xz - _GlowBox.xy) * _GlowBox.zw).rgb * (_BwmNight * _GlowStrength);
                 color = MixFog(color, i.fogFactor);
