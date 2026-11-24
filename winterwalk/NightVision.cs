@@ -32,6 +32,8 @@ namespace WinterWalk
 
         Light lamp;
         float level, nextLook;
+        bool inWalk;
+        int emptyLooks;
         readonly List<PeckEffectTelescope> goggles = new List<PeckEffectTelescope>();
 
         void LateUpdate()
@@ -43,14 +45,28 @@ namespace WinterWalk
                 bool worn = false;
                 if (now >= nextLook)
                 {
-                    // the goggles there are (the SDK's copies come with the puzzles), looked for now and then
-                    nextLook = now + 5f;
-                    goggles.Clear();
-                    foreach (PeckEffectTelescope scope in FindObjectsOfType<PeckEffectTelescope>())
-                        if (scope != null && scope.givesNightVision) goggles.Add(scope);
-                    var where = new System.Text.StringBuilder();
-                    foreach (PeckEffectTelescope scope in goggles) { Vector3 at = scope.transform.position; where.Append(at.x.ToString("0.0")).Append(", ").Append(at.y.ToString("0.0")).Append(", ").Append(at.z.ToString("0.0")).Append("; "); }
-                    Where = where.ToString();
+                    // The goggles there are (the SDK's copies come with the puzzles), looked for now and then: only in a
+                    // walk, some seconds after joining it, then once a minute (and at once when one of them is gone: a
+                    // reload makes new ones). The search goes through every object in the world and took about 30 ms;
+                    // every 5 s, as it was until 2026-11-24, that was a hitch every player could feel.
+                    if (Mirror.NetworkClient.localPlayer == null) { nextLook = now + 3f; inWalk = false; emptyLooks = 0; goggles.Clear(); }
+                    else if (!inWalk) { inWalk = true; nextLook = now + 8f; }
+                    else
+                    {
+                        goggles.Clear();
+                        foreach (PeckEffectTelescope scope in FindObjectsOfType<PeckEffectTelescope>())
+                            if (scope != null && scope.givesNightVision) goggles.Add(scope);
+                        var where = new System.Text.StringBuilder();
+                        foreach (PeckEffectTelescope scope in goggles)
+                        {
+                            Vector3 at = scope.transform.position;
+                            where.Append(at.x.ToString("0.0")).Append(", ").Append(at.y.ToString("0.0")).Append(", ").Append(at.z.ToString("0.0")).Append("; ");
+                        }
+                        Where = where.ToString();
+                        // (none yet: the puzzles' items may still be on their way, so a few more looks soon)
+                        if (goggles.Count > 0) emptyLooks = 0;
+                        nextLook = now + (goggles.Count > 0 || emptyLooks++ >= 6 ? 60f : 10f);
+                    }
                 }
                 for (int i = 0; i < goggles.Count; i++)
                 {

@@ -168,15 +168,18 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   shaders used to add a constant to the sky's light (0.14 to 0.18, "shade is never black"), which at night was all the
   light there was and made the snow glow mid-blue. Every such constant is now scaled by `BwmDaylight()`
   (`BwmSnowCommon.hlsl`: the sky's light straight up over 0.3, clamped), so after dark only lamps light anything: the
-  garlands' pools, room lights, torches (the ground, `BWM/Fir`, `BWM/Snowy` and `BWM/Picture` take additional lights;
-  `BWM/SnowOverlay` does not). A new lit shader of ours must do the same. Compare with `shots\night-*.png`.
+  garlands' pools, the island's lamps, room lights, torches (the ground, `BWM/Fir`, `BWM/Snowy`, `BWM/SnowOverlay` and
+  `BWM/Picture` take additional lights). A new lit shader of ours must do the same, and take the island's lamps from
+  `BwmLamps.hlsl` (below). Compare with `shots\night-*.png`.
 - **Night vision** (`winterwalk\NightVision.cs`): the game's night-vision goggles are an unfinished item (kept switched
   off in its "SecretZone"; `PostProcessingManager.SetNightVision` moves none of its volumes and changes no pixel, on
   the mainland either), but the SDK hands them out and Island Gear has them. Winter Walk watches goggles whose
   `PeckEffectTelescope.givesNightVision` is set, and while one is in use by this PC's player
   (`isActiveForLocalPlayer`), shines a green directional light with no shadows the way they look, tilted 32 degrees
   down so level ground takes it (`NightVision.Strength`, `Tilt`; `TestOn` for tests). Only the wearer's PC has the
-  light. Do not hook `SetNightVision` as the signal: the game throws it about 90 times a frame.
+  light. Do not hook `SetNightVision` as the signal: the game throws it about 90 times a frame. It looks for the goggles
+  once a minute, in a walk only (`FindObjectsOfType` goes through every object in the world: about 30 ms; every 5 s,
+  as it was in the 2026-11-24 release, took the 1% low frame rate at the plaza from 110 fps to 81).
 - **Swimming** (`winterwalk\SwimDriver.cs`): the game's swimmers stand on `Ocean/FloatFloorCollider`, a box 2500 m
   square about the world's middle; most of the island's sea lay outside it and players fell through the water for ever.
   Winter Walk widens that box's collider to the island's box plus 400 m, switches the game's depth limit
@@ -234,6 +237,31 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   size (`BloomSize` in `Veil`). All of it is lit by `_BwmNight`, which Winter Walk's `WeatherDriver` sets from the
   hour (up from 17 to 19 h, down from 5.5 to 7.5 h, half in a blizzard); `WeatherDriver.ForceNight` 0..1 holds it for
   tests. It is the same at every quality level (checked at Low and Very High).
+- **The island's lamps** (the user, 2026-11-24: "some additional, sparse lighting throughout the island now that it is
+  sufficiently dark"): every lantern, porch lamp and station lamp throws light at night. The island's build gathers
+  them in `WinterIslePuzzle.Lamps` (`Lamp(world, power, seen)`; the mine, the railway and the airport add theirs): 115
+  lanterns (`LanternSpot` says where one may stand: along every path and trail 38 to 120 m apart, one where each
+  puzzle's path reaches its site, one by each mine station and lift station, six round the plaza), a porch lamp on each
+  cabin, the lodge, the terminal and the lamp house (`Kit.AddPorchLamp`), the rail stations' shelter lamps, and lamps
+  under the covered bridge's ridge: 161 in all. `Garlands` gives each a warm point in the tiny lights' mesh, bakes its
+  pool into the glow map's alpha (`LightPools.png`, 2048 px, RGBA: rgb the strings' pools, alpha the lamps', 2.2 m
+  wide) and writes `WinterIsle.lamps` (x y z power) beside the plugin. `winterwalk\IsleLamps.cs` lights the eight
+  nearest the camera (within `Reach` 60 m, fading in over `Fade` 14 m, as strong as `WeatherDriver.Night`) twice over:
+  a real point light on each (`Power` 1.6, `Range` 9 m, no shadows) for the game's own surfaces, and the same eight as
+  shader globals (`_BwmLampPos0..7`, `_BwmLampCol0..7`, `_BwmLampCount`, `_BwmLampReach`) that our own shaders light
+  themselves from (`BwmLamps.hlsl`, `BwmLampLight`: the ground, Snowy, Fir and SnowOverlay). **The game allows a
+  surface drawn forward four lights** (`maxAdditionalLightsCount` 4, chosen for the whole object), and the ground's
+  tiles and the meshes that span the island (cabins, lanterns, platforms) each took some four of the lamps near a
+  player: a cabin stood black beside its own porch lamp. The real lights' culling mask leaves out layer 10 (the SDK's
+  layer for every pack's objects), so they take none of our meshes' four places from a torch; the game's surfaces are
+  lit deferred, where the mask is not asked, and stay lit. The ground shows a lamp's baked pool only where the lamp is
+  too far off to be lit for real. Each pack carries its own copy of our shaders, so a pack must be rebuilt to take a
+  shader change (all were on 2026-11-24). Tests: `IsleLamps.Off`, `Count`, `Power`, `Range`, `Mask` (-1: every
+  layer), `NoGlobals`, `State`. At the plaza at midnight, Very High, uncapped: 157.7 fps with the lamps, 157.1
+  without. The gear stations' lamps are RoomLights markers with "Night" in the name (lit as far as it is night).
+  For night screenshots set `time?hour=0` right before each one (the clock moves an hour every 37 s: two minutes
+  after midnight is first light) and shoot from the player's own camera (the lamps go by `Camera.main`):
+  `shots\lamps2-*.png`.
 - **Towers:** the SDK supports one tower button list, and shows one plinth per puzzle loaded, first in the list
   first. The Tree's list is its own five plinths (the gondola), then the mine tower's five (the mine), the airport
   tower's five (the biplanes), the train tower's five (the railway), then the summit's twenty; every tower but the

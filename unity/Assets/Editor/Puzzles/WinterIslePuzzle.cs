@@ -37,6 +37,15 @@ public sealed class WinterIslePuzzle : PuzzleDef
     const float Skirt = 24f;            // how far the submerged rim runs out from the coast
     static readonly Vector2 ShorePoint = new Vector2(-468f, -700f);     // where the causeway meets the mainland
 
+    // The island's lamps: every lantern, porch lamp and station lamp that throws light at night (2026-11-24: with the
+    // night as dark as the game's, they are what lights the island after dark). The build gathers them here (the mine,
+    // the railway and the airport add theirs), and Garlands gives each a warm point in the tiny lights' mesh so it shows
+    // from far off, bakes its pool of light into the ground's glow map, and writes them all beside the Winter Walk
+    // plugin as WinterIsle.lamps, where IsleLamps.cs sets real lights on the few nearest the camera. 'seen' false is a
+    // lamp under a roof with no point and no pool of its own (the covered bridge's inside).
+    public static readonly List<(Vector3 at, float power, bool seen)> Lamps = new List<(Vector3, float, bool)>();
+    public static void Lamp(Vector3 world, float power = 1f, bool seen = true) => Lamps.Add((world, power, seen));
+
     public static readonly Vector2 Plaza = new Vector2(-705f, -795f);   // the open middle, where The Tree stands
     public const float PlazaRadius = 24f;
 
@@ -931,6 +940,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 onRail++;
             }
 
+        // the island's lamps: a warm point each (in the lantern's glass, where its halo shows round it at night)
+        int strung = bulbs.Count;
+        var lampColor = new Color(1f, 0.78f, 0.5f);
+        foreach (var lamp in Lamps) if (lamp.seen) bulbs.Add((lamp.at, lampColor));
+
         // one mesh of squares, each vertex at its bulb's centre (the shader turns them to the camera)
         var verts = new List<Vector3>(); var uvs = new List<Vector2>(); var uv2 = new List<Vector2>(); var colors = new List<Color>(); var tris = new List<int>();
         var random = new System.Random(1224);
@@ -952,13 +966,14 @@ public sealed class WinterIslePuzzle : PuzzleDef
         stakePiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
         // the pools of light on the snow: each bulb's colour spread about 4 m round it, over the island's box
-        const int W = 1024;
+        const int W = 2048;      // (1.35 m a pixel: a lamp's pool is only a few metres across)
         int H = Mathf.CeilToInt(W * (Z1 - Z0) / (X1 - X0));
         var pool = new Vector3[W * H];
         float perX = W / (X1 - X0), perZ = H / (Z1 - Z0), sigma = 4.2f * perX;
         int reach = Mathf.CeilToInt(sigma * 2.6f);
-        foreach (var bulb in bulbs)
+        for (int strungBulb = 0; strungBulb < strung; strungBulb++)
         {
+            var bulb = bulbs[strungBulb];
             float px = (bulb.at.x - X0) * perX - 0.5f, pz = (bulb.at.z - Z0) * perZ - 0.5f;
             for (int dz = -reach; dz <= reach; dz++)
                 for (int dx = -reach; dx <= reach; dx++)
@@ -970,9 +985,42 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     pool[iz * W + ix] += new Vector3(bulb.color.r, bulb.color.g, bulb.color.b) * fall;
                 }
         }
-        var texture = new Texture2D(W, H, TextureFormat.RGB24, false);
+        // ...and each lamp's, in the map's alpha (the ground's shader gives it the lamps' colour, and shows it only
+        // where a lamp is too far from the camera to be lit for real): as tight as a real lamp's light on level snow,
+        // which is a third of its brightest 3 m out and nearly nothing at 6 m, so the dark lies between the lamps
+        // (not one hung high over the ground, or under it)
+        float lampSigma = 2.2f * perX;
+        int lampReach = Mathf.CeilToInt(lampSigma * 3f), pooled = 0;
+        var lampPool = new float[W * H];
+        foreach (var lamp in Lamps)
+        {
+            if (!lamp.seen) continue;
+            float under = heightAt(new Vector2(lamp.at.x, lamp.at.z));
+            if (float.IsNaN(under) || lamp.at.y < under || lamp.at.y - under > 6f) continue;
+            pooled++;
+            float px = (lamp.at.x - X0) * perX - 0.5f, pz = (lamp.at.z - Z0) * perZ - 0.5f;
+            for (int dz = -lampReach; dz <= lampReach; dz++)
+                for (int dx = -lampReach; dx <= lampReach; dx++)
+                {
+                    int ix = Mathf.RoundToInt(px) + dx, iz = Mathf.RoundToInt(pz) + dz;
+                    if (ix < 0 || iz < 0 || ix >= W || iz >= H) continue;
+                    float ddx = ix - px, ddz = iz - pz;
+                    lampPool[iz * W + ix] += Mathf.Exp(-(ddx * ddx + ddz * ddz) / (2f * lampSigma * lampSigma)) * lamp.power;
+                }
+        }
+        var lampText = new System.Text.StringBuilder("# the Winter Isle's lamps: x y z power (winterwalk/IsleLamps.cs sets real lights on the nearest at night)\n");
+        foreach (var lamp in Lamps)
+            lampText.Append(Sdk.F(lamp.at.x)).Append(' ').Append(Sdk.F(lamp.at.y)).Append(' ').Append(Sdk.F(lamp.at.z)).Append(' ').Append(Sdk.F(lamp.power)).Append('\n');
+        System.IO.File.WriteAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.lamps")), lampText.ToString());
+        Debug.Log("[BWM] Winter Isle lamps: " + Lamps.Count + " (" + pooled + " with a pool of light on the snow), written to WinterIsle.lamps");
+
+        var texture = new Texture2D(W, H, TextureFormat.RGBA32, false);
         var pixels = new Color[W * H];
-        for (int k = 0; k < pixels.Length; k++) pixels[k] = new Color(Mathf.Min(1f, pool[k].x), Mathf.Min(1f, pool[k].y), Mathf.Min(1f, pool[k].z)).gamma;
+        for (int k = 0; k < pixels.Length; k++)
+        {
+            pixels[k] = new Color(Mathf.Min(1f, pool[k].x), Mathf.Min(1f, pool[k].y), Mathf.Min(1f, pool[k].z)).gamma;
+            pixels[k].a = Mathf.Min(1f, lampPool[k]);
+        }
         texture.SetPixels(pixels);
         texture.Apply();
         const string poolPath = "Assets/Puzzles/WinterIsle/LightPools.png";
@@ -980,7 +1028,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Object.DestroyImmediate(texture);
         UnityEditor.AssetDatabase.ImportAsset(poolPath, UnityEditor.ImportAssetOptions.ForceUpdate);
         var importer = (UnityEditor.TextureImporter)UnityEditor.AssetImporter.GetAtPath(poolPath);
-        importer.wrapMode = TextureWrapMode.Clamp; importer.sRGBTexture = true; importer.mipmapEnabled = true; importer.maxTextureSize = 1024;
+        importer.wrapMode = TextureWrapMode.Clamp; importer.sRGBTexture = true; importer.mipmapEnabled = true; importer.maxTextureSize = 2048;
+        importer.alphaSource = UnityEditor.TextureImporterAlphaSource.FromInput; importer.alphaIsTransparency = false;
         importer.npotScale = UnityEditor.TextureImporterNPOTScale.None;
         importer.SaveAndReimport();
         ground.SetTexture("_GlowMap", UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(poolPath));
@@ -992,6 +1041,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
     public override void Build(PuzzleBuilder b)
     {
         Vector3 root = b.Root.transform.position;      // on the sea floor, at the box's centre
+        Lamps.Clear();
         int nx = Mathf.RoundToInt((X1 - X0) / Cell), nz = Mathf.RoundToInt((Z1 - Z0) / Cell);
         int row = nx + 1, count = row * (nz + 1);
         Vector2 At(int k) => new Vector2(X0 + (k % row) * Cell, Z0 + (k / row) * Cell);
@@ -2646,6 +2696,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             float ground = Mathf.Min(HeightAt(cabin.at), Mathf.Min(HeightAt(cabin.at + Vector2.one * 3f), HeightAt(cabin.at - Vector2.one * 3f)));
             var foot = new Vector3(cabin.at.x - root.x, ground - root.y, cabin.at.y - root.z);
             Kit.AddCabin(cabinMesh, glowMesh, foot, cabin.size, cabin.yaw, ++seedCabin);
+            Lamp(root + Kit.AddPorchLamp(cabinMesh, glowMesh, foot, cabin.size, cabin.yaw), 0.7f);
             var box = new GameObject("Cabin");
             box.transform.SetParent(cabinColliders.transform, false);
             box.transform.localPosition = foot + Vector3.up * 1.8f;
@@ -2654,13 +2705,110 @@ public sealed class WinterIslePuzzle : PuzzleDef
         }
         // Lanterns: a waymark now and then, not a street. Close together near the plaza and the hamlet, further
         // apart out on the trails, on whichever side, and never two near each other where trails share a stretch.
-        int lanterns = 0;
+        // (2026-11-24: every lantern is a lamp that lights what is round it at night, see Lamps. So they also stand
+        // on the paths to the puzzles, not only the trails; one stands where each puzzle's path reaches its site, one
+        // by each mine station and each lift station, and six round the plaza.)
+        int lanterns = 0, onPaths = 0, atSites = 0, atStations = 0, atLifts = 0, roundPlaza = 0;
         var lit = new List<Vector2>();
         var lanternRandom = new System.Random(2512);
         float Rl(float lo, float hi) => lo + (hi - lo) * (float)lanternRandom.NextDouble();
+        var openTrack = new List<Vector3>(WinterIsleMine.StationTrack());
+        // Ground a lantern may stand on: land, off the railway, the mine's open track, the pistes, the runways, the lake,
+        // every puzzle's site and the cabins (and, for one along a path, clear of the stations and other structures)
+        bool LanternSpot(Vector2 q, bool clearOfStructures = true)
+        {
+            if (q.x < X0 + 6f || q.x > X1 - 6f || q.y < Z0 + 6f || q.y > Z1 - 6f) return false;
+            float g = HeightAt(q);
+            if (float.IsNaN(g) || g < 0.8f) return false;
+            if (railClear[Cell_(q)] < 2.5f || WinterIsleRail.InCut(q) || WinterIsleMine.InCut(q)) return false;
+            if (MountainHeight(q) > 4f && Piste(q) > 0.2f) return false;
+            if (WinterIsleAirport.Outside(q) < 3f || WinterIsleAirport.StripOutside(q) < 3f) return false;
+            if ((q - Lake).magnitude < LakeRadius + 2f) return false;
+            foreach (Vector3 t in openTrack) { float dx = t.x - q.x, dz = t.z - q.y; if (dx * dx + dz * dz < 3.3f * 3.3f) return false; }
+            foreach (Vector3 site in b.OtherSites)
+            {
+                var centre = new Vector2(site.x, site.y);
+                if ((centre - Plaza).magnitude > 5f && (q - centre).magnitude < site.z + 1f) return false;      // (the plaza is The Tree's site)
+            }
+            foreach (var cabin in cabins) if ((q - cabin.at).magnitude < cabin.size.magnitude * 0.5f + 1.5f) return false;
+            if (clearOfStructures) foreach (var s in structures) if ((q - s.at).magnitude < s.radius - 3f) return false;
+            return true;
+        }
+        void Lantern(Vector2 q)
+        {
+            float g = HeightAt(q);
+            Kit.AddLantern(cabinMesh, glowMesh, new Vector3(q.x - root.x, g - root.y, q.y - root.z), lanterns);
+            Lamp(new Vector3(q.x, g + 2.18f, q.y));
+            lit.Add(q);
+            lanterns++;
+        }
+        // round the plaza, just outside The Tree's ring of lights
+        for (int a = 0; a < 6; a++)
+        {
+            float angle = (a * 60f + 30f) * Mathf.Deg2Rad;
+            Vector2 q = Plaza + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (PlazaRadius + 2f);
+            if (LanternSpot(q, false)) { Lantern(q); roundPlaza++; }
+        }
+        // beside each station of the gondola and the ski lift
+        foreach (var (end, other) in new[] { (GondolaBottom, GondolaTop), (GondolaTop, GondolaBottom), (SkiLiftBottom, SkiLiftTop), (SkiLiftTop, SkiLiftBottom) })
+        {
+            Vector2 along = (other - end).normalized, across = new Vector2(along.y, -along.x);
+            foreach (float sideways in new[] { 8f, -8f, 11f, -11f })
+            {
+                Vector2 q = end - along * 3f + across * sideways;
+                if (!LanternSpot(q, false) || lit.Exists(o => (o - q).magnitude < 12f)) continue;
+                Lantern(q); atLifts++;
+                break;
+            }
+        }
+        // beside the open track at each mine station, on the plaza's side first
+        foreach (Vector2 station in WinterIsleMine.Stations)
+        {
+            int nearest = -1; float nearestD = 30f * 30f;
+            for (int i = 0; i < openTrack.Count; i++)
+            {
+                float d = (new Vector2(openTrack[i].x, openTrack[i].z) - station).sqrMagnitude;
+                if (d < nearestD) { nearestD = d; nearest = i; }
+            }
+            if (nearest < 0) continue;
+            int next = nearest + 1 < openTrack.Count && (openTrack[nearest + 1] - openTrack[nearest]).magnitude < 6f ? nearest + 1 : nearest - 1;
+            if (next < 0 || (openTrack[next] - openTrack[nearest]).magnitude > 6f) continue;
+            var here = new Vector2(openTrack[nearest].x, openTrack[nearest].z);
+            Vector2 along = (new Vector2(openTrack[next].x, openTrack[next].z) - here).normalized, across = new Vector2(along.y, -along.x);
+            if (Vector2.Dot(across, Plaza - here) < 0f) across = -across;
+            foreach (float sideways in new[] { 4.6f, -4.6f, 6f, -6f })
+            {
+                Vector2 q = here + across * sideways;
+                if (!LanternSpot(q, false) || lit.Exists(o => (o - q).magnitude < 12f)) continue;
+                Lantern(q); atStations++;
+                break;
+            }
+        }
+        // where each puzzle's path reaches its site (a site with no path: on the plaza's side), beside the path, not on it
+        foreach (Vector3 site in b.OtherSites)
+        {
+            var at = new Vector2(site.x, site.y);
+            if (at.x < X0 || at.x > X1 || at.y < Z0 || at.y > Z1 || float.IsNaN(HeightAt(at)) || (at - Plaza).magnitude < PlazaRadius) continue;
+            float ring = site.z + 2.2f, bestPath = 2.6f;
+            Vector2 toward = (Plaza - at).normalized;
+            for (int a = 0; a < 48; a++)
+            {
+                var d = new Vector2(Mathf.Cos(a * Mathf.PI / 24f), Mathf.Sin(a * Mathf.PI / 24f));
+                float pathDistance = PathDistance(at + d * ring);
+                if (pathDistance < bestPath) { bestPath = pathDistance; toward = d; }
+            }
+            float facing = Mathf.Atan2(toward.y, toward.x);
+            for (int turn = 0; turn < 14; turn++)
+            {
+                float angle = facing + (3.2f + turn / 2 * 3f) / ring * (turn % 2 == 0 ? 1f : -1f);
+                Vector2 q = at + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * ring;
+                if (!LanternSpot(q, false) || lit.Exists(o => (o - q).magnitude < 12f)) continue;
+                Lantern(q); atSites++;
+                break;
+            }
+        }
         foreach (var r in routes)
         {
-            if (!r.trail) continue;
             var pts = new List<Vector2>(r.points);
             pts.Reverse();      // from where the trail leaves the network, outwards
             float run = 0f, next = Rl(15f, 35f);
@@ -2674,12 +2822,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     Vector2 dir = (c - a).normalized, offset = new Vector2(dir.y, -dir.x) * (Rl(0f, 1f) < 0.5f ? -1f : 1f) * Rl(2.6f, 4f);
                     Vector2 q = p + offset;
                     float fromPlaza = (q - Plaza).magnitude;
-                    if (fromPlaza > PlazaRadius + 4f && HeightAt(q) > 0.8f && !lit.Exists(o => (o - q).magnitude < 30f))
-                    {
-                        Kit.AddLantern(cabinMesh, glowMesh, new Vector3(q.x - root.x, HeightAt(q) - root.y, q.y - root.z), lanterns);
-                        lit.Add(q);
-                        lanterns++;
-                    }
+                    if (fromPlaza > PlazaRadius + 4f && LanternSpot(q) && !lit.Exists(o => (o - q).magnitude < 30f)) { Lantern(q); onPaths++; }
                     next += Mathf.Lerp(38f, 120f, Smooth((fromPlaza - 120f) / 450f)) * Rl(0.75f, 1.35f);
                 }
                 run += seg;
@@ -2736,7 +2879,8 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
         }
         System.IO.File.WriteAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "world", "winter-viewpoints.tsv")), views.ToString());
-        Debug.Log("[BWM] Winter Isle: " + cabins.Count + " cabins, " + lanterns + " lanterns, " + poles + " snow poles");
+        Debug.Log("[BWM] Winter Isle: " + cabins.Count + " cabins, " + lanterns + " lanterns (" + onPaths + " along the paths and trails, " + atSites + " at puzzle sites, " + atStations
+            + " at mine stations, " + atLifts + " at lift stations, " + roundPlaza + " round the plaza), " + poles + " snow poles");
 
         // 11. The gondola: two stations, pylons and the cable between, and the cabins. Winter Walk moves the cabins
         //     (GondolaDriver): it reads the cable's line from the "Gondola Line" markers, P0 at the bottom station.
@@ -3377,6 +3521,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 float faceRun = Mathf.Atan2(-runSide.x, -runSide.y) * Mathf.Rad2Deg;
                 Vector3 lodgeFoot = Ground3(lodge);
                 Kit.AddCabin(furniture, lodgeGlow, lodgeFoot, new Vector2(12f, 18f), faceRun, 4401);
+                Lamp(root + Kit.AddPorchLamp(furniture, lodgeGlow, lodgeFoot, new Vector2(12f, 18f), faceRun));
                 Quaternion lt = Quaternion.Euler(0f, faceRun, 0f);
                 var warm = new Color(1f, 0.72f, 0.36f);
                 for (int wi = -3; wi <= 3; wi++)
@@ -3506,6 +3651,16 @@ public sealed class WinterIslePuzzle : PuzzleDef
             for (float t = 0f; t <= bridgeLength + 0.01f; t += bridgeLength / Mathf.Ceil(bridgeLength / 4f))
                 ridgeLights.Add(L3(AtB(t, 0f), DeckAt(t) + WallTop + Ridge - 0.35f));
             Kit.LightString(b, "Bridge Lights Inside", ridgeLights, 0.3f, 0.55f, false, false, 24, new[] { new Color(1f, 0.86f, 0.62f) });
+            // real light inside from the ridge's string: a lamp every 15 m or so (it has no pool on the ground below)
+            {
+                int ridgeLamps = Mathf.Max(1, Mathf.RoundToInt(bridgeLength / 15f));
+                for (int k = 0; k < ridgeLamps; k++)
+                {
+                    float t = bridgeLength * (k + 0.5f) / ridgeLamps;
+                    Vector2 q = AtB(t, 0f);
+                    Lamp(new Vector3(q.x, DeckAt(t) + WallTop + Ridge - 1.2f, q.y), 0.9f, false);
+                }
+            }
             var lanternMesh = new MeshBuilder(); var lanternGlow = new MeshBuilder();
             foreach (int end in new[] { 0, 1 })
                 foreach (int side in new[] { -1, 1 })
@@ -3513,6 +3668,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     float t = end == 0 ? -1.2f : bridgeLength + 1.2f;
                     Vector2 q = AtB(t, side * (Eave + 0.4f));
                     Kit.AddLantern(lanternMesh, lanternGlow, L3(q, Ground(q)), 40 + end * 2 + (side + 1) / 2);
+                    Lamp(new Vector3(q.x, Ground(q) + 2.18f, q.y));
                 }
             b.MeshPiece("Bridge Lanterns", lanternMesh.ToMesh(), snowy, false);
             b.MeshPiece("Bridge Lantern Glow", lanternGlow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);

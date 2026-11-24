@@ -56,6 +56,7 @@ public sealed class IslandGearPuzzle : PuzzleDef
 
     // A station at world (x, z) facing 'yaw': posts, a pitched roof, a table with the items on it, a back rail with a
     // backpack and a belt on hooks, and lights along the front eave
+    int lamps;
     void Station(string name, Vector2 at, float yaw, int[] items)
     {
         float lx = at.x - site.x, lz = at.y - site.z;
@@ -73,6 +74,15 @@ public sealed class IslandGearPuzzle : PuzzleDef
         Kit.AddBox(mb, L(0f, 2.75f, -1.2f), new Vector3(2.2f, 0.4f, 0.06f), new Color(0.1f, 0.33f, 0.18f), yaw);       // the sign over the front
         Piece shelter = b.MeshPiece(name, mb.ToMesh(), IsleKit.Snowy(b));
         shelter.Transform.position = b.WorldPoint(lx, lz);
+        // a lamp under the roof, lit at night (Winter Walk's RoomLights: "Night" in the marker's name), so the torches
+        // can be found in the dark
+        var lampGlass = new MeshBuilder();
+        Kit.AddGlow(lampGlass, L(0f, 2.2f, -0.35f), new Vector3(0.22f, 0.3f, 0.22f), yaw, new Color(1f, 0.78f, 0.42f), (name.Length * 0.13f) % 1f);
+        Piece lamp = b.MeshPiece(name + " Lamp", lampGlass.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+        lamp.Transform.position = shelter.Transform.position;
+        var lampMark = new GameObject("Room Light Night " + (++lamps) + " FFCB8C 8.0 1.3");
+        lampMark.transform.SetParent(shelter.Go.transform, false);
+        lampMark.transform.localPosition = L(0f, 1.9f, -0.35f);
         // the tools on the table, in a row
         for (int i = 0; i < items.Length; i++)
         {

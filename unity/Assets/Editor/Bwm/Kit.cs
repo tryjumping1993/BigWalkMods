@@ -275,6 +275,19 @@ namespace Bwm
             AddGlow(glow, foot + Vector3.up * 2.18f, new Vector3(0.26f, 0.42f, 0.26f), 0f, new Color(1f, 0.78f, 0.42f), (seed * 0.618f) % 1f);
         }
 
+        // A lamp on a cabin's front wall beside its door (AddCabin's door): an iron bracket and cap over a small lit
+        // glass. Returns where its light is (as 'foot' is given), for the caller to make a lamp of.
+        public static Vector3 AddPorchLamp(MeshBuilder mb, MeshBuilder glow, Vector3 foot, Vector2 size, float yaw)
+        {
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            Vector3 at = foot + turn * new Vector3(-size.x * 0.18f + 0.85f, 2.2f, size.y / 2f + 0.22f);
+            var iron = new Color(0.12f, 0.12f, 0.13f);
+            AddBox(mb, at + turn * new Vector3(0f, 0.15f, -0.12f), new Vector3(0.05f, 0.05f, 0.26f), iron, yaw);      // the bracket
+            AddBox(mb, at + Vector3.up * 0.12f, new Vector3(0.24f, 0.04f, 0.24f), iron, yaw);                           // its cap
+            AddGlow(glow, at, new Vector3(0.15f, 0.22f, 0.15f), yaw, new Color(1f, 0.78f, 0.42f), Mathf.Abs(foot.x * 0.37f + foot.z * 0.11f) % 1f);
+            return at;
+        }
+
         // A trail marker: a thin wooden snow pole with a painted top, leaning a little, as set out along winter
         // trails so they can be followed when the path is drifted over
         public static void AddSnowPole(MeshBuilder mb, Vector3 foot, int seed)

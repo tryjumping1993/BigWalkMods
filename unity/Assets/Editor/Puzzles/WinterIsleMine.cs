@@ -1113,6 +1113,7 @@ public static class WinterIsleMine
         }
         // the lamp house: a cabin facing the line, its windows lit
         Kit.AddCabin(mb, glow, G(Y(11f, -7f), -0.05f), new Vector2(5f, 6.5f), facing, 6061);
+        WinterIslePuzzle.Lamp(root + Kit.AddPorchLamp(mb, glow, G(Y(11f, -7f), -0.05f), new Vector2(5f, 6.5f), facing), 0.8f);
         // the sign: a red board on two posts by the siding, a pick and a hammer crossed on it
         Vector2 sign = Y(2.5f, -12f);
         Vector3 sf = G(sign);

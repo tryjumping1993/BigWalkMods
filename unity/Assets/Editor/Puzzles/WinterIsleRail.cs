@@ -512,6 +512,7 @@ public static class WinterIsleRail
                     for (int k = 0; k < name.Length && k < 14; k++)      // letters as gold blocks, a stand-in for the name
                         if (name[k] != ' ') OBox(station, L(sh + Vector3.up * 2.55f + Rr * (side * 0.73f) + flatF * ((-1.8f + k * 0.27f) * side)), Rr, Vector3.up, flatF, 0.02f, 0.18f, 0.09f, gold);
                     Kit.AddGlow(glow, L(sh + Vector3.up * 3.15f), new Vector3(0.4f, 0.14f, 0.4f), yaw, new Color(1f, 0.8f, 0.45f), s * 0.17f);
+                    WinterIslePuzzle.Lamp(sh + Vector3.up * 2.9f, 0.9f);      // the shelter's lamp lights its platform at night
                     var posts = new List<Vector3>();
                     for (int k = -StationReach; k <= StationReach; k += 5)
                     {

@@ -177,6 +177,7 @@ public static class WinterIsleAirport
             var t = new MeshBuilder();
             Vector3 foot = Pt(-62f, -44f, 0f);
             Kit.AddCabin(t, glow, foot, new Vector2(12f, 8f), yawAcross, 77);
+            WinterIslePuzzle.Lamp(root + Kit.AddPorchLamp(t, glow, foot, new Vector2(12f, 8f), yawAcross));
             Vector3 sock = Pt(140f, -34f, 0f);
             Kit.AddBox(t, sock, new Vector3(0.18f, 7f, 0.18f), Steel, 0f);
             for (int k = 0; k < 5; k++)      // the sock streaming south-east (downwind of the north-west wind), in orange and white bands

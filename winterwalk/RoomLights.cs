@@ -5,7 +5,9 @@
 // a room is lit from its own lamps rather than only by its glowing shades. The pack's BWM/Picture and BWM/Snowy
 // materials take the lights. The marker's name says what light: a six-digit hex colour (sRGB), then its range and its
 // intensity, as in "Room Light 3 FFBE78 4.5 1.6"; without them it is warm (or "cold": a cool white tube light; "red":
-// an exit sign's glow) at the default range and intensity. Intensity and Range scale every light live.
+// an exit sign's glow) at the default range and intensity. Intensity and Range scale every light live. A marker with
+// "Night" in its name is an outdoor lamp: lit only as far as it is night (WeatherDriver.Night), as the island's
+// lamps are (the gear stations' lamps).
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -22,14 +24,15 @@ namespace WinterWalk
         readonly List<Light> lights = new List<Light>();
         readonly List<Vector3> places = new List<Vector3>();
         readonly List<float> ranges = new List<float>(), powers = new List<float>();
-        float setIntensity = 1f, setRange = 1f;
+        readonly List<bool> byNight = new List<bool>();
+        float setIntensity = 1f, setRange = 1f, setNight = -1f;
         float nextLook, nextCheck;
         bool found;
 
         void Find()
         {
             foreach (Light l in lights) if (l != null) Destroy(l.gameObject);
-            lights.Clear(); places.Clear(); ranges.Clear(); powers.Clear();
+            lights.Clear(); places.Clear(); ranges.Clear(); powers.Clear(); byNight.Clear();
             // the packs' objects only (the markers are in the puzzles), not every object in the world: that took 145 ms of
             // the frame after joining a walk, and with the island dressed the world holds half a million more
             var marks = new List<Transform>();
@@ -67,8 +70,9 @@ namespace WinterWalk
                 }
                 light.color = colour;
                 light.range = range * Range;
-                light.intensity = power * Intensity;
-                ranges.Add(range); powers.Add(power);
+                bool night = n.Contains("night");
+                light.intensity = power * Intensity * (night ? WeatherDriver.Night : 1f);
+                ranges.Add(range); powers.Add(power); byNight.Add(night);
                 light.shadows = LightShadows.None;
                 light.enabled = false;
                 lights.Add(light);
@@ -107,15 +111,16 @@ namespace WinterWalk
                 nextCheck = Time.unscaledTime + 0.5f;
                 Camera cam = Camera.main;
                 Vector3 eye = cam != null ? cam.transform.position : Vector3.zero;
-                bool rescale = setIntensity != Intensity || setRange != Range;
+                float nightNow = WeatherDriver.Night;
+                bool rescale = setIntensity != Intensity || setRange != Range, nightMoved = Math.Abs(nightNow - setNight) > 0.005f;
                 for (int i = 0; i < lights.Count; i++)
                 {
                     if (lights[i] == null) { found = false; return; }
-                    bool on = cam != null && (places[i] - eye).sqrMagnitude < 70f * 70f;
+                    bool on = cam != null && (places[i] - eye).sqrMagnitude < 70f * 70f && (!byNight[i] || nightNow > 0.01f);
                     if (lights[i].enabled != on) lights[i].enabled = on;
-                    if (rescale) { lights[i].intensity = powers[i] * Intensity; lights[i].range = ranges[i] * Range; }
+                    if (rescale || (byNight[i] && nightMoved)) { lights[i].intensity = powers[i] * Intensity * (byNight[i] ? nightNow : 1f); lights[i].range = ranges[i] * Range; }
                 }
-                setIntensity = Intensity; setRange = Range;
+                setIntensity = Intensity; setRange = Range; setNight = nightNow;
             }
             catch (Exception e)
             {

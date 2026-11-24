@@ -85,6 +85,7 @@ Shader "BWM/SnowOverlay"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
+            #include "BwmLamps.hlsl"
 
             struct Attributes
             {
@@ -153,11 +154,15 @@ Shader "BWM/SnowOverlay"
                     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
                     uint lightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(lightCount)
-                        Light lamp = GetAdditionalLight(lightIndex, positionWS, half4(1, 1, 1, 1));
-                        color += _SnowColor.rgb * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.7 + 0.3));
+                        if (!BwmIsLampLight(lightIndex))      // (the island's lamps come from BwmLamps' globals, below: no four to an object)
+                        {
+                            Light lamp = GetAdditionalLight(lightIndex, positionWS, half4(1, 1, 1, 1));
+                            color += _SnowColor.rgb * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.7 + 0.3));
+                        }
                     LIGHT_LOOP_END
                 }
                 #endif
+                color += _SnowColor.rgb * BwmLampLight(positionWS, n, 0.3);
                 color = MixFog(color, i.fogFactor);
                 return half4(color, cover);
             }
