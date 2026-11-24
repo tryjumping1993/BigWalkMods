@@ -94,6 +94,7 @@ Shader "BWM/Fir"
             #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
             #include "BwmLamps.hlsl"
+            #include "BwmGlow.hlsl"
 
             struct Attributes
             {
@@ -195,7 +196,7 @@ Shader "BWM/Fir"
                     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
                     uint lightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(lightCount)
-                        if (!BwmIsLampLight(lightIndex))      // (the island's lamps come from BwmLamps' globals, below: no four to an object)
+                        if (!BwmIsLampLight(lightIndex) && !BwmIsGlowLight(lightIndex))      // (the island's lamps and Christmas lights come from globals, below: no four to an object)
                         {
                             Light lamp = GetAdditionalLight(lightIndex, positionWS, half4(1, 1, 1, 1));
                             color += albedo * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.6 + 0.4));
@@ -203,7 +204,7 @@ Shader "BWM/Fir"
                     LIGHT_LOOP_END
                 }
                 #endif
-                color += albedo * BwmLampLight(positionWS, n, 0.4);
+                color += albedo * (BwmLampLight(positionWS, n, 0.4) + BwmGlowLight(positionWS, n, 0.4));
 
                 color = MixFog(color, i.fogFactor);
                 return half4(color, 1);

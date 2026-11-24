@@ -58,6 +58,7 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<Riders>();
             ClassInjector.RegisterTypeInIl2Cpp<NightVision>();
             ClassInjector.RegisterTypeInIl2Cpp<IsleLamps>();
+            ClassInjector.RegisterTypeInIl2Cpp<IsleGlow>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -84,6 +85,7 @@ namespace WinterWalk
             go.AddComponent<Riders>();      // (LateUpdate: after every driver has set its vehicles down for the frame)
             go.AddComponent<NightVision>();
             go.AddComponent<IsleLamps>();
+            go.AddComponent<IsleGlow>();
             L.LogInfo("Winter Walk loaded" + (Diag.FilePath != null ? "; debug log " + Diag.FilePath : ""));
         }
     }

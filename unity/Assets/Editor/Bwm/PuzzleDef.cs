@@ -87,6 +87,13 @@ namespace Bwm
 
         // Every other puzzle's remembered site as (x, z, radius), for packs that dress the land round them
         public List<Vector3> OtherSites = new List<Vector3>();
+
+        // The light strings this build hung, stretch by stretch (Kit.LightString records them): the two ends in the
+        // world at the bulbs' mean height (the same point twice for a small ring, which shines as one point), the
+        // bulbs' mean colour and how many there are, and the string's object. The build writes them to
+        // unity\Land\Strings\<Name>.strings, and the island bakes the light they throw into its ground's glow map.
+        public struct GlowStretch { public Vector3 a, b; public Color color; public int bulbs; public GameObject piece; }
+        public readonly List<GlowStretch> Strings = new List<GlowStretch>();
         readonly string assetDir;      // Assets/Puzzles/<Name>
         readonly Dictionary<string, Material> materials = new Dictionary<string, Material>();
 

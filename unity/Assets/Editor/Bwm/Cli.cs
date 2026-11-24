@@ -287,6 +287,7 @@ namespace Bwm
             }
             def.Build(builder);
             Debug.Log("[BWM] Built " + root.GetComponentsInChildren<Transform>(true).Length + " objects");
+            WriteStrings(name, root, builder);
 
             AssetDatabase.SaveAssets();
             CheckShaders(root);
@@ -294,6 +295,32 @@ namespace Bwm
             if (!Flag("-bwmNoPreview")) Preview.Render(root, name, PreviewDir, Mathf.Max(def.Footprint.x, def.Footprint.y) / 2f);
             Check(root);
             if (!Flag("-bwmNoExport")) Export(root);
+        }
+
+        // The light strings a build hung (PuzzleBuilder.Strings), for the island's build, which bakes the light they throw
+        // into its ground's glow map: unity\Land\Strings\<Name>.strings, a line a stretch (world):
+        // ax ay az bx by bz r g b bulbs grouped. 'grouped' is 1 for a string put under another object (a lobby group
+        // shown for some numbers of players, say): not always there, so not baked. So after changing a puzzle's strings,
+        // build WinterIsle again (as after moving its site).
+        public static string StringsDir => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Land", "Strings"));
+        static void WriteStrings(string name, GameObject root, PuzzleBuilder builder)
+        {
+            string file = Path.Combine(StringsDir, name + ".strings");
+            if (builder.Strings.Count == 0) { if (File.Exists(file)) File.Delete(file); return; }
+            Directory.CreateDirectory(StringsDir);
+            var text = new System.Text.StringBuilder("# " + name + "'s light strings, a line a stretch (world): ax ay az bx by bz r g b bulbs grouped\n");
+            int grouped = 0;
+            foreach (PuzzleBuilder.GlowStretch s in builder.Strings)
+            {
+                bool under = s.piece == null || s.piece.transform.parent != root.transform;
+                if (under) grouped++;
+                text.Append(Sdk.F(s.a.x)).Append(' ').Append(Sdk.F(s.a.y)).Append(' ').Append(Sdk.F(s.a.z)).Append(' ')
+                    .Append(Sdk.F(s.b.x)).Append(' ').Append(Sdk.F(s.b.y)).Append(' ').Append(Sdk.F(s.b.z)).Append(' ')
+                    .Append(Sdk.F(s.color.r)).Append(' ').Append(Sdk.F(s.color.g)).Append(' ').Append(Sdk.F(s.color.b)).Append(' ')
+                    .Append(s.bulbs).Append(' ').Append(under ? 1 : 0).Append('\n');
+            }
+            File.WriteAllText(file, text.ToString());
+            Debug.Log("[BWM] Light strings: " + builder.Strings.Count + " stretches (" + grouped + " in groups), written to Land\\Strings\\" + name + ".strings");
         }
 
         // A shader of ours that does not compile would export and then draw nothing (or pink) in the game

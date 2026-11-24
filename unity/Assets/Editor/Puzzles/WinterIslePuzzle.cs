@@ -743,7 +743,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Object.DestroyImmediate(veil);
 
         // the blooms: red and green by turns, over the places that are lit. Small (a third of the size they were first
-        // made, at the user's word, 2026-11-22): the fog itself carries the red and green now (BWM/Veil)
+        // made, at the user's word, 2026-11-22): the fog itself carries the red and green now (BWM/Veil). And faint
+        // (BwmVeilGlow's _Strength, 0.2 from 0.55 on 2026-11-24): once the lights threw a natural amount of light, balls
+        // of red and green as bright as these over the woods were the one thing left that no light of that size could make
         const float BloomSize = 0.3f;
         var gv = new List<Vector3>(); var gu = new List<Vector2>(); var gu2 = new List<Vector2>(); var gc = new List<Color>(); var gt = new List<int>();
         var places = new List<(Vector2 at, float up, float radius)>
@@ -809,9 +811,20 @@ public sealed class WinterIslePuzzle : PuzzleDef
     // in a spiral, a turn every 42 m of height, a bulb about every 6 m, except across the ski face, where the strings
     // line both edges of each run instead; and both sides of the railway carry bulbs
     // wherever it runs in the open. Each bulb is a bead on a short stake (BWM/TinyLight draws all of them as one mesh;
-    // at night they are lit, and never smaller than a pixel or two, so the strings show from across the island). The
-    // light they throw on the snow is baked into a map of the island the ground's shader adds at night, so the
-    // mountain glows in bands of red, green and gold without a single real light.
+    // at night they are lit, and never smaller than a pixel or two, so the strings show from across the island).
+    //
+    // The light they throw is a small light's (the user, 2026-11-24: "a natural amount of illumination"): it falls off
+    // with the square of the distance, so a bulb 0.8 m up its stake lights a pool of snow about a metre across, and a
+    // string of small bulbs between posts (Kit.LightString, at every puzzle) a soft band under it. Near the camera
+    // Winter Walk lights every surface of ours from the bulbs and strings themselves (IsleGlow.cs, BwmGlow.hlsl); this
+    // bakes the same light on the ground into a map of the island that the ground's shader adds at night beyond that.
+    // (Before, each bulb's colour was spread 4 m round it at a third of full light, which lit the hillsides in bands of
+    // red and green ten metres wide, while the strings at the puzzles threw no light at all: black snow under them.)
+    // The numbers are IsleGlow's too: a bulb's and a string bulb's light at 1 m (a lantern's is 1.6), and how far each
+    // counts. (Chosen in the game at midnight: with a bulb counted to 5 m the pools of three red bulbs in a row ran
+    // together into a red wash over the railway's bed; to 3.6 m each stake stands in its own pool with dark between.)
+    const float GlowBulbPower = 0.16f, GlowBulbRange = 3.6f, GlowFairyPower = 0.05f, GlowStringRange = 9f;
+    const float GlowMapScale = 2f;      // the map holds the light times this (the ground's _GlowStrength is one over it)
     void Garlands(PuzzleBuilder b, Vector3 root, System.Func<Vector2, float> heightAt, Material ground)
     {
         var bulbs = new List<(Vector3 at, Color color)>();
@@ -965,26 +978,94 @@ public sealed class WinterIslePuzzle : PuzzleDef
         Piece stakePiece = b.MeshPiece("Tiny Light Stakes", stakes.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Bare", m => m.SetFloat("_SnowLine", 2f)), false);
         stakePiece.Go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-        // the pools of light on the snow: each bulb's colour spread about 4 m round it, over the island's box
+        // the light on the snow, over the island's box
         const int W = 2048;      // (1.35 m a pixel: a lamp's pool is only a few metres across)
         int H = Mathf.CeilToInt(W * (Z1 - Z0) / (X1 - X0));
         var pool = new Vector3[W * H];
-        float perX = W / (X1 - X0), perZ = H / (Z1 - Z0), sigma = 4.2f * perX;
-        int reach = Mathf.CeilToInt(sigma * 2.6f);
+        float perX = W / (X1 - X0), perZ = H / (Z1 - Z0);
+        // What one bulb (ab zero) or one stretch of string from a to a + ab throws on level ground at p: BwmGlow.hlsl's
+        // BwmOneGlow with the normal straight up and the ground's wrap of 0.3
+        Vector3 Throw(Vector3 p, Vector3 a, Vector3 ab, float perLength2, float half2, float perRange2, Vector3 light)
+        {
+            Vector3 to = a + ab * Mathf.Clamp01(Vector3.Dot(p - a, ab) * perLength2) - p;
+            float d2 = to.sqrMagnitude, fade = d2 * perRange2;
+            if (fade >= 1f) return Vector3.zero;
+            float window = 1f - fade * fade;
+            float facing = Mathf.Clamp01(to.y / Mathf.Sqrt(Mathf.Max(d2, 1e-4f)) * 0.7f + 0.3f);
+            d2 = Mathf.Max(d2, 0.3f);
+            return light * (window * window * facing / Mathf.Sqrt(d2 * (d2 + half2)));
+        }
+        // each strung bulb's pool (narrower than a pixel of the map, so nine points a pixel)
+        int reach = Mathf.CeilToInt(GlowBulbRange * perX) + 1, pooledBulbs = 0;
+        var glowText = new System.Text.StringBuilder("# the Winter Isle's strung bulbs: x y z r g b (winterwalk/IsleGlow.cs lights what is near them at night)\n");
         for (int strungBulb = 0; strungBulb < strung; strungBulb++)
         {
             var bulb = bulbs[strungBulb];
+            glowText.Append(Sdk.F(bulb.at.x)).Append(' ').Append(Sdk.F(bulb.at.y)).Append(' ').Append(Sdk.F(bulb.at.z)).Append(' ')
+                .Append(Sdk.F(bulb.color.r)).Append(' ').Append(Sdk.F(bulb.color.g)).Append(' ').Append(Sdk.F(bulb.color.b)).Append('\n');
+            float under = heightAt(new Vector2(bulb.at.x, bulb.at.z));
+            if (float.IsNaN(under) || bulb.at.y < under || bulb.at.y - under > GlowBulbRange) continue;      // (a bulb on a trestle lights its deck, not the ground far below)
+            pooledBulbs++;
+            var light = new Vector3(bulb.color.r, bulb.color.g, bulb.color.b) * (GlowBulbPower * GlowMapScale / 9f);
             float px = (bulb.at.x - X0) * perX - 0.5f, pz = (bulb.at.z - Z0) * perZ - 0.5f;
             for (int dz = -reach; dz <= reach; dz++)
                 for (int dx = -reach; dx <= reach; dx++)
                 {
                     int ix = Mathf.RoundToInt(px) + dx, iz = Mathf.RoundToInt(pz) + dz;
                     if (ix < 0 || iz < 0 || ix >= W || iz >= H) continue;
-                    float ddx = ix - px, ddz = iz - pz;
-                    float fall = Mathf.Exp(-(ddx * ddx + ddz * ddz) / (2f * sigma * sigma)) * 0.34f;
-                    pool[iz * W + ix] += new Vector3(bulb.color.r, bulb.color.g, bulb.color.b) * fall;
+                    Vector3 sum = Vector3.zero;
+                    for (int sz = -1; sz <= 1; sz++)
+                        for (int sx = -1; sx <= 1; sx++)
+                            sum += Throw(new Vector3(X0 + (ix + 0.5f + sx / 3f) / perX, under, Z0 + (iz + 0.5f + sz / 3f) / perZ), bulb.at, Vector3.zero, 0f, 0f, 1f / (GlowBulbRange * GlowBulbRange), light);
+                    pool[iz * W + ix] += sum;
                 }
         }
+        System.IO.File.WriteAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.glow")), glowText.ToString());
+        // ...and every light string's band: the island's own (stations, the bridge) and the puzzles', which their builds
+        // list in unity\Land\Strings (not the ones in a lobby group, which are not always there)
+        var strings = new List<(Vector3 a, Vector3 c, Vector3 color, int bulbs)>();
+        foreach (PuzzleBuilder.GlowStretch own in b.Strings)
+            if (own.piece != null && own.piece.transform.parent == b.Root.transform) strings.Add((own.a, own.b, new Vector3(own.color.r, own.color.g, own.color.b), own.bulbs));
+        int ownStrings = strings.Count, stringFiles = 0;
+        if (System.IO.Directory.Exists(Cli.StringsDir))
+            foreach (string file in System.IO.Directory.GetFiles(Cli.StringsDir, "*.strings"))
+            {
+                if (System.IO.Path.GetFileNameWithoutExtension(file) == b.Root.name) continue;
+                stringFiles++;
+                foreach (string line in System.IO.File.ReadAllLines(file))
+                {
+                    if (line.Length == 0 || line[0] == '#') continue;
+                    string[] f = line.Split(' ');
+                    if (f.Length < 11 || f[10] != "0") continue;
+                    var v = new float[9];
+                    bool good = int.TryParse(f[9], out int count);
+                    for (int k = 0; k < 9 && good; k++) good = float.TryParse(f[k], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v[k]);
+                    if (good) strings.Add((new Vector3(v[0], v[1], v[2]), new Vector3(v[3], v[4], v[5]), new Vector3(v[6], v[7], v[8]), count));
+                }
+            }
+        int pooledStrings = 0;
+        foreach (var str in strings)
+        {
+            Vector3 ab = str.c - str.a;
+            float length2 = ab.sqrMagnitude;
+            if (length2 < 1e-4f) { ab = Vector3.zero; length2 = 0f; }
+            Vector3 light = str.color * (GlowFairyPower * str.bulbs * GlowMapScale);
+            int ix0 = Mathf.FloorToInt((Mathf.Min(str.a.x, str.c.x) - GlowStringRange - X0) * perX), ix1 = Mathf.CeilToInt((Mathf.Max(str.a.x, str.c.x) + GlowStringRange - X0) * perX);
+            int iz0 = Mathf.FloorToInt((Mathf.Min(str.a.z, str.c.z) - GlowStringRange - Z0) * perZ), iz1 = Mathf.CeilToInt((Mathf.Max(str.a.z, str.c.z) + GlowStringRange - Z0) * perZ);
+            bool any = false;
+            for (int iz = Mathf.Max(0, iz0); iz <= Mathf.Min(H - 1, iz1); iz++)
+                for (int ix = Mathf.Max(0, ix0); ix <= Mathf.Min(W - 1, ix1); ix++)
+                {
+                    float wx = X0 + (ix + 0.5f) / perX, wz = Z0 + (iz + 0.5f) / perZ, wy = heightAt(new Vector2(wx, wz));
+                    if (float.IsNaN(wy)) continue;
+                    Vector3 lit = Throw(new Vector3(wx, wy, wz), str.a, ab, length2 > 0f ? 1f / length2 : 0f, length2 * 0.25f, 1f / (GlowStringRange * GlowStringRange), light);
+                    if (lit.x + lit.y + lit.z <= 0f) continue;
+                    pool[iz * W + ix] += lit;
+                    any = true;
+                }
+            if (any) pooledStrings++;
+        }
+        Debug.Log("[BWM] Winter Isle light strings: " + strings.Count + " stretches (" + ownStrings + " the island's own, the rest from " + stringFiles + " puzzles' lists), " + pooledStrings + " of them with light on the island's ground");
         // ...and each lamp's, in the map's alpha (the ground's shader gives it the lamps' colour, and shows it only
         // where a lamp is too far from the camera to be lit for real): as tight as a real lamp's light on level snow,
         // which is a third of its brightest 3 m out and nearly nothing at 6 m, so the dark lies between the lamps
@@ -1035,7 +1116,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
         ground.SetTexture("_GlowMap", UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(poolPath));
         ground.SetVector("_GlowBox", new Vector4(X0, Z0, 1f / (X1 - X0), 1f / (Z1 - Z0)));
         UnityEditor.EditorUtility.SetDirty(ground);
-        Debug.Log("[BWM] Winter Isle tiny lights: " + onMountain + " on the mountain's spiral, " + onPistes + " along the ski runs and the cat track, " + onRail + " along the railway; their light on the snow baked into a " + W + " x " + H + " map");
+        Debug.Log("[BWM] Winter Isle tiny lights: " + onMountain + " on the mountain's spiral, " + onPistes + " along the ski runs and the cat track, " + onRail + " along the railway (written to WinterIsle.glow); " + pooledBulbs + " with a pool on the snow, baked into a " + W + " x " + H + " map");
     }
 
     public override void Build(PuzzleBuilder b)

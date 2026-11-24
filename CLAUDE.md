@@ -170,7 +170,7 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   (`BwmSnowCommon.hlsl`: the sky's light straight up over 0.3, clamped), so after dark only lamps light anything: the
   garlands' pools, the island's lamps, room lights, torches (the ground, `BWM/Fir`, `BWM/Snowy`, `BWM/SnowOverlay` and
   `BWM/Picture` take additional lights). A new lit shader of ours must do the same, and take the island's lamps from
-  `BwmLamps.hlsl` (below). Compare with `shots\night-*.png`.
+  `BwmLamps.hlsl` and the Christmas lights from `BwmGlow.hlsl` (both below). Compare with `shots\night-*.png`.
 - **Night vision** (`winterwalk\NightVision.cs`): the game's night-vision goggles are an unfinished item (kept switched
   off in its "SecretZone"; `PostProcessingManager.SetNightVision` moves none of its volumes and changes no pixel, on
   the mainland either), but the SDK hands them out and Island Gear has them. Winter Walk watches goggles whose
@@ -240,13 +240,40 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   bulb every 6 m), except across the ski face, where bulbs line both edges of each of the three runs and the cat
   track instead (the user: strings across the slope looked awkward), and puts bulbs both sides of the open railway, in runs of red, green, red, green,
   gold. All are one mesh drawn by `BWM/TinyLight` (squares turned to the camera, never under a pixel or two, so
-  the strings show from across the island); the light they throw on the snow is a map of the island baked by the
-  build (`LightPools.png`, each bulb's colour spread 4 m) that the ground's shader adds at night (`_GlowMap`,
-  `_GlowStrength`), so no real lights are used. The fog veil carries long stretches of red and green that swell and
-  fade in turn (`BWM/Veil`: `_Festive`, `_FestiveBand`), and the blooms over lit places are a third of their first
-  size (`BloomSize` in `Veil`). All of it is lit by `_BwmNight`, which Winter Walk's `WeatherDriver` sets from the
+  the strings show from across the island); the light they throw is the next point's. The fog veil carries long
+  stretches of red and green that swell and fade in turn (`BWM/Veil`: `_Festive`, `_FestiveBand`), and the blooms over
+  lit places are a third of their first size (`BloomSize` in `Veil`) and faint (`BWM/VeilGlow` `_Strength` 0.2; it was
+  0.55 until 2026-11-24, balls of red and green over the woods that no light of that size could make). All of it is lit by `_BwmNight`, which Winter Walk's `WeatherDriver` sets from the
   hour (up from 17 to 19 h, down from 5.5 to 7.5 h, half in a blizzard); `WeatherDriver.ForceNight` 0..1 holds it for
   tests. It is the same at every quality level (checked at Low and Very High).
+- **The light the Christmas lights throw** (the user, 2026-11-24: "a natural amount of illumination"): every bulb is a
+  small light with a real light's falloff. Before, each staked bulb's colour was baked onto the snow spread 4 m round
+  it at a third of full light (bands of red and green ten metres wide down the pistes and along the railway), and the
+  strings between posts at the puzzles (`Kit.LightString`, `BWM/FairyLight`) threw no light at all: black snow under a
+  ring of lights. Now `BwmGlow.hlsl` has one rule for both: a bulb is a point (power over distance squared: 0.8 m up
+  its stake it lights a pool of snow a metre or two across), a stretch of string a line (power over
+  d x sqrt(d x d + (length / 2) squared): an even band under it, a point's falloff from afar), each fading to nothing
+  at its range; no shadows. `winterwalk\IsleGlow.cs` hands the 24 nearest the camera (within `Reach` 48 m, or as far
+  as the 25th where they are dense: 20 m in the middle of a strung site) to our shaders as global arrays
+  (`_BwmGlowA/B/C`, `_BwmGlowCount`): the ground, Snowy, Fir, SnowOverlay and Picture (outdoors) light themselves from
+  them. On the nearest 8 stretches it also sets a real point light without shadows for the game's own surfaces
+  (players, puzzle parts), all of one odd range (`RealRange` 9.0731 m) by which our shaders know them and leave them
+  out (`BwmIsGlowLight`: same brightness with them on, off and unmasked). Beyond the nearest 24 the ground shows the
+  same light from the island's baked map (`LightPools.png` rgb: the light times `GlowMapScale` 2; `_BwmGlowReach` says
+  where one hands over to the other; with the globals off the ground is as bright from the map alone).
+  Where they come from: the staked bulbs from `WinterIsle.glow` beside the plugin (x y z r g b, the island's build
+  writes it); the strings from empty objects named `String Glow <hex colour> <bulbs> <length>` that `Kit.LightString`
+  leaves under each string at the middle of each stretch, turned along it (a stretch is 8 m at most; a ring under 2 m
+  across is one point), found pack by pack, one a frame. A string that is not shown (a lobby group for another number
+  of players) throws nothing. Each puzzle's build also lists its stretches in `unity\Land\Strings\<Name>.strings`,
+  which the island's build bakes (not those in a group): **after changing a puzzle's light strings, build WinterIsle
+  again.** The strengths are the same numbers in `WinterIslePuzzle.cs` (`GlowBulbPower` 0.16 to `GlowBulbRange` 3.6 m,
+  `GlowFairyPower` 0.05 a string bulb to `GlowStringRange` 9 m; a lantern is 1.6) and in `IsleGlow` (live:
+  `BulbPower`, `BulbRange`, `FairyPower`, `StringRange`, `Count`, `RealLights`, `RealScale`, `NoGlobals`, `Off`,
+  `State`). With a bulb counted to 5 m, three red bulbs in a row ran together into a red wash over the railway's bed.
+  The night's auto-exposure shows whatever light there is, so judge by what is lit and how far, not by how bright a
+  screenshot is. At the bell ringers' site (24 stretches lit), Very High, uncapped: 128 fps with and without.
+  `shots\xl-*.png` (a: before, b to e: after).
 - **The island's lamps** (the user, 2026-11-24: "some additional, sparse lighting throughout the island now that it is
   sufficiently dark"): every lantern, porch lamp and station lamp throws light at night. The island's build gathers
   them in `WinterIslePuzzle.Lamps` (`Lamp(world, power, seen)`; the mine, the railway and the airport add theirs): 115
@@ -348,7 +375,8 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   clear like its site (`LookoutsPuzzle.cs`, whose four lookouts are kilometres apart). No paths are drawn to sites
   west of x = -2300; the train, the mine and the planes reach them.
 - `Kit` (`Assets\Editor\Bwm\Kit.cs`) holds ready-made pieces: `Kit.LightString` / `Kit.LightRing` (Christmas
-  lights between posts; every winter site should have some), `Kit.Ball` (snowballs), `Kit.Mound` (drifts), and
+  lights between posts; every winter site should have some; they throw light at night, see "The light the Christmas
+  lights throw"), `Kit.Ball` (snowballs), `Kit.Mound` (drifts), and
   flat-shaded building into a `MeshBuilder`: `Kit.AddBox` (posts, walls, roofs, plinths), `Kit.AddDisc`,
   `Kit.AddPine`, `Kit.AddRock`, `Kit.AddStar`. Build a puzzle's structures into one `MeshBuilder`, add it with
   `b.MeshPiece(name, mb.ToMesh(), b.ShaderMaterial("BWM/Snowy", "Snowy"))` and move it with

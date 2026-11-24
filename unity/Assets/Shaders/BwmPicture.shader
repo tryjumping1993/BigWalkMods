@@ -69,6 +69,7 @@ Shader "BWM/Picture"
             #include "BwmSunShadowKeywords.hlsl"      // the sun's shadow, the same at every quality setting (BwmSunShadow.hlsl)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "BwmSunShadow.hlsl"
+            #include "BwmGlow.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tangentOS : TANGENT; float2 uv : TEXCOORD0; half4 color : COLOR; };
             struct Varyings
@@ -134,13 +135,18 @@ Shader "BWM/Picture"
                     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
                     uint lightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(lightCount)
-                        Light lamp = GetAdditionalLight(lightIndex, i.positionWS, half4(1, 1, 1, 1));
-                        float reach = lamp.distanceAttenuation * lamp.shadowAttenuation;
-                        color += albedo * lamp.color * (reach * saturate(dot(n, lamp.direction) * 0.65 + 0.35));
-                        color += lamp.color * reach * shine * pow(saturate(dot(n, normalize(lamp.direction + v))), power);
+                        if (!BwmIsGlowLight(lightIndex))      // (the light strings outside come from BwmGlow's globals, below)
+                        {
+                            Light lamp = GetAdditionalLight(lightIndex, i.positionWS, half4(1, 1, 1, 1));
+                            float reach = lamp.distanceAttenuation * lamp.shadowAttenuation;
+                            color += albedo * lamp.color * (reach * saturate(dot(n, lamp.direction) * 0.65 + 0.35));
+                            color += lamp.color * reach * shine * pow(saturate(dot(n, normalize(lamp.direction + v))), power);
+                        }
                     LIGHT_LOOP_END
                 }
                 #endif
+                // the Christmas lights outside light what is outdoors (a room has its own lamps, and no light of ours has a shadow)
+                color += albedo * BwmGlowLight(i.positionWS, n, 0.35) * (1.0 - _Indoor);
                 color = MixFog(color, i.fogFactor);
                 return half4(color, alpha);
             }

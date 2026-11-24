@@ -824,7 +824,7 @@ namespace WinterWalk
                 + " | swim " + SwimDriver.State
                 + " | riders " + Riders.State
                 + " | night vision " + NightVision.State
-                + " | lamps " + IsleLamps.State
+                + " | lamps " + IsleLamps.State + " | glow " + IsleGlow.State
                 + " | puzzles " + PuzzleSleep.State;
         }
 

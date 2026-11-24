@@ -6,7 +6,7 @@ Shader "BWM/VeilGlow"
 {
     Properties
     {
-        _Strength ("Strength", Range(0, 2)) = 0.55
+        _Strength ("Strength", Range(0, 2)) = 0.2
         _FarFrom ("Begins to show from (m)", Float) = 160
         _FarFull ("Full strength from (m)", Float) = 520
     }

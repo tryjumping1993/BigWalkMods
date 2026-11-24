@@ -953,6 +953,7 @@ namespace Bwm
             var tris = new List<int>();
             var random = new System.Random(seed * 7919 + 17);
             int bulb = 0;
+            var spans = new List<(Vector3 a, Vector3 c, Color sum, int bulbs)>();      // for the light the string throws (below)
             for (int i = 0; i + 1 < tops.Count; i++)
             {
                 Vector3 a = tops[i], c = tops[i + 1];
@@ -979,6 +980,10 @@ namespace Bwm
                 }
                 // bulbs: small drops hanging just under the wire
                 int count = Mathf.Max(2, Mathf.RoundToInt(length / spacing));
+                Color spanSum = Color.black;
+                for (int n = 0; n < count; n++) spanSum += palette[(bulb + n) % palette.Length];
+                Vector3 dip = Vector3.down * (sag * length / 6f + 0.06f);      // (the bulbs' mean height: the wire dips sag x length / 4 at its middle)
+                spans.Add((a + dip, c + dip, spanSum, count));
                 for (int n = 0; n < count; n++)
                 {
                     Vector3 p = Point((n + 0.5f) / count) + Vector3.down * 0.06f;
@@ -999,7 +1004,69 @@ namespace Bwm
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-            return b.MeshPiece(name, mesh, b.ShaderMaterial("BWM/FairyLight", "FairyLight"), false);
+            Piece piece = b.MeshPiece(name, mesh, b.ShaderMaterial("BWM/FairyLight", "FairyLight"), false);
+            AddGlow(b, piece, spans);
+            return piece;
+        }
+
+        // The light a string throws. The bulbs themselves are only drawn bright; what they light is worked out from
+        // these: the string as a few straight stretches (or one point, for a small ring), each an empty object under the
+        // string named "String Glow <colour> <bulbs> <length>", at the stretch's middle and turned along it. Winter Walk
+        // (IsleGlow.cs) finds them in the game and lights what is near them at night, as long as the string is shown;
+        // and the builder keeps them (PuzzleBuilder.Strings), for the island to bake into its ground for far views.
+        // A stretch is 8 m at most, so that one point light at its middle can stand for it on the game's own surfaces.
+        const float GlowStretch = 8f, GlowBend = 0.5f, GlowSmall = 2f;
+        static void AddGlow(PuzzleBuilder b, Piece piece, List<(Vector3 a, Vector3 c, Color sum, int bulbs)> spans)
+        {
+            if (spans.Count == 0) return;
+            Transform root = b.Root.transform;
+            var made = new List<(Vector3 a, Vector3 c, Color mean, int bulbs)>();
+            // a ring or knot no more than a couple of metres across shines as one point at its middle
+            Vector3 middle = Vector3.zero; int all = 0; Color allSum = Color.black;
+            foreach (var s in spans) { middle += (s.a + s.c) * 0.5f * s.bulbs; all += s.bulbs; allSum += s.sum; }
+            middle /= Mathf.Max(1, all);
+            float across = 0f;
+            foreach (var s in spans) across = Mathf.Max(across, Mathf.Max((s.a - middle).magnitude, (s.c - middle).magnitude));
+            if (across <= GlowSmall) made.Add((middle, middle, allSum / Mathf.Max(1, all), all));
+            else
+                for (int i = 0; i < spans.Count;)
+                {
+                    // as many spans in a row as stay within half a metre of the straight line between their ends
+                    int j = i;
+                    while (j + 1 < spans.Count && (spans[j + 1].a - spans[j].c).sqrMagnitude < 0.01f)
+                    {
+                        Vector3 from = spans[i].a, to = spans[j + 1].c;
+                        if ((to - from).magnitude > GlowStretch) break;
+                        bool straight = true;
+                        for (int k = i; k <= j && straight; k++)
+                        {
+                            Vector3 along = (to - from).normalized, joint = spans[k].c - from;
+                            if ((joint - along * Vector3.Dot(joint, along)).magnitude > GlowBend) straight = false;
+                        }
+                        if (!straight) break;
+                        j++;
+                    }
+                    Color sum = Color.black; int bulbs = 0;
+                    for (int k = i; k <= j; k++) { sum += spans[k].sum; bulbs += spans[k].bulbs; }
+                    // (a single span longer than a stretch is cut into equal parts)
+                    int parts = Mathf.Max(1, Mathf.CeilToInt((spans[j].c - spans[i].a).magnitude / GlowStretch));
+                    for (int part = 0; part < parts; part++)
+                        made.Add((Vector3.Lerp(spans[i].a, spans[j].c, (float)part / parts), Vector3.Lerp(spans[i].a, spans[j].c, (float)(part + 1) / parts),
+                            sum / Mathf.Max(1, bulbs), Mathf.Max(1, Mathf.RoundToInt((float)bulbs / parts))));
+                    i = j + 1;
+                }
+            foreach (var m in made)
+            {
+                Vector3 wa = root.TransformPoint(m.a), wc = root.TransformPoint(m.c);
+                Color mean = m.mean;
+                float length = (wc - wa).magnitude;
+                string hex = Mathf.RoundToInt(Mathf.Clamp01(mean.r) * 255f).ToString("X2") + Mathf.RoundToInt(Mathf.Clamp01(mean.g) * 255f).ToString("X2") + Mathf.RoundToInt(Mathf.Clamp01(mean.b) * 255f).ToString("X2");
+                var mark = new GameObject("String Glow " + hex + " " + m.bulbs + " " + length.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+                mark.transform.SetParent(piece.Transform, false);
+                mark.transform.position = (wa + wc) * 0.5f;
+                if (length > 0.05f) mark.transform.rotation = Quaternion.LookRotation((wc - wa) / length);
+                b.Strings.Add(new PuzzleBuilder.GlowStretch { a = wa, b = wc, color = mean, bulbs = m.bulbs, piece = piece.Go });
+            }
         }
 
         // A light string round a rectangle (local centre and size), one post at each corner

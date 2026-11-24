@@ -57,9 +57,9 @@ Shader "BWM/Snow"
         _SandTiling ("Sand tiling (per metre)", Float) = 0.3
         _GameGround ("The game's ground is lent (0 or 1)", Float) = 0
         _PisteCentre ("Pistes fall away from (world x, -, z)", Vector) = (0, 0, 0, 0)
-        _GlowMap ("Light strings' pools of light on the snow (the build bakes it)", 2D) = "black" {}
+        _GlowMap ("The Christmas lights' light on the snow (the build bakes it: rgb the bulbs and strings, twice over; alpha the lamps)", 2D) = "black" {}
         _GlowBox ("Light pools: world x0, z0, 1 / width, 1 / depth", Vector) = (0, 0, 0, 0)
-        _GlowStrength ("Light pools: strength at night", Range(0, 2)) = 0.5
+        _GlowStrength ("Light pools: one over what the map's light is multiplied by", Range(0, 2)) = 0.5
         _LampGlow ("Lamps' pools (the map's alpha): colour times strength", Color) = (0.3, 0.24, 0.165, 1)
     }
 
@@ -204,6 +204,7 @@ Shader "BWM/Snow"
             #include "BwmSunShadow.hlsl"
             #include "BwmSnowCommon.hlsl"
             #include "BwmLamps.hlsl"
+            #include "BwmGlow.hlsl"
 
             struct Attributes
             {
@@ -490,7 +491,7 @@ Shader "BWM/Snow"
                     inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
                     uint lightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(lightCount)
-                        if (!BwmIsLampLight(lightIndex))      // (the island's lamps come from BwmLamps' globals, below: no four to an object)
+                        if (!BwmIsLampLight(lightIndex) && !BwmIsGlowLight(lightIndex))      // (the island's lamps and Christmas lights come from globals, below: no four to an object)
                         {
                             Light lamp = GetAdditionalLight(lightIndex, positionWS, half4(1, 1, 1, 1));
                             color += snowColor * lamp.color * (lamp.distanceAttenuation * lamp.shadowAttenuation * saturate(dot(n, lamp.direction) * 0.7 + 0.3));
@@ -498,7 +499,7 @@ Shader "BWM/Snow"
                     LIGHT_LOOP_END
                 }
                 #endif
-                color += snowColor * BwmLampLight(positionWS, n, 0.3);
+                color += snowColor * (BwmLampLight(positionWS, n, 0.3) + BwmGlowLight(positionWS, n, 0.3));
 
                 float snowOnly = (1.0 - path * 0.5) * (1.0 - rock) * (1.0 - earthy);
                 color += BwmSnowSheen(n, v, sun.direction, saturate(windH.b + icy * 3.0)) * snowOnly * sun.color * sun.shadowAttenuation;
@@ -508,11 +509,13 @@ Shader "BWM/Snow"
                 color += pow(1.0 - saturate(dot(n, v)), 4.0) * _Rim * (ambient + 0.1 * BwmDaylight()) * (1.0 - earthy);
                 if (_BwmNight > 0.001 && _GlowBox.z > 0.0)
                 {
-                    // the light strings' pools (rgb), and the lamps' own (alpha): those are for lamps too far off to be lit
-                    // for real (BwmLamps.hlsl), so they fade out towards the camera as the real ones fade in
+                    // the Christmas lights' light (rgb), and the lamps' own (alpha), as the build baked them: for the ones
+                    // too far off to be lit for real (BwmGlow.hlsl, BwmLamps.hlsl), so each fades out towards the camera as
+                    // the real ones fade in
                     half4 glow = SAMPLE_TEXTURE2D(_GlowMap, sampler_GlowMap, (positionWS.xz - _GlowBox.xy) * _GlowBox.zw);
                     float far = _BwmLampReach.x > 0.0 ? smoothstep(_BwmLampReach.x - _BwmLampReach.y, _BwmLampReach.x, viewDistance) : 1.0;
-                    color += snowColor * (glow.rgb * _GlowStrength + _LampGlow.rgb * (glow.a * far)) * _BwmNight;
+                    float farGlow = _BwmGlowReach.x > 0.0 ? smoothstep(_BwmGlowReach.x - _BwmGlowReach.y, _BwmGlowReach.x, viewDistance) : 1.0;
+                    color += snowColor * (glow.rgb * (_GlowStrength * farGlow) + _LampGlow.rgb * (glow.a * far)) * _BwmNight;
                 }
                 color = MixFog(color, i.fogFactor);
                 return half4(color, 1);
