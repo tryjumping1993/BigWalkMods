@@ -1,21 +1,25 @@
-// Big Air, "Judges' Call": a Big Air final on the right-hand run (run 2). Three big kickers stand side by side, Red
-// on the left looking downhill, Green in the middle, Gold on the right, and each throws a rider into its own window:
-// a counted box 6 m over the landing, framed in flags under a finish gantry.
+// Big Air: fly through all three windows. Three big kickers stand side by side on the right-hand run (run 2), Red on
+// the left looking downhill, Green in the middle, Gold on the right, and each throws a rider into its own window: a
+// counted box 6 m over the landing, framed in flags under a finish gantry.
 //
-// A judge is shut in a windowless, soundproof cabin on a pad beside the course. Each round one of three coloured
-// lamps lights in there, and the riders must fly the matching window. The judge's only link out is a one-way
-// intercom to the start hut 90 m up the run, where the riders gear up and where the clock and the start switch are.
-// A wrong window fails the run; 4 / 6 / 8 clean calls (2 / 3 / 4 players) inside the 5-minute clock win the gourd, so
-// riders take turns from the hut and must never both fly the same call.
+// One rider can win it alone and any number can share it. Gear up at the start hut 90 m up the run, pull the start
+// switch there, and ride a lane off its kicker. A window counts the first time anyone flies through it, in any order:
+// the lamp of its colour lights over it on the gantry, facing up the run so it shows from the hut and the in-run, and
+// the bars at the hut and beside the gantry go up one. Three lamps lit win the gourd, which waits at the site: the
+// clearing beside the terrain park where the island's path arrives. There is no clock, nobody is shut in, and a miss costs nothing but the walk back up;
+// stopping the puzzle puts the lamps out.
 //
-// Parts only (Press In Order, Presence Sensors, Intercom, soundproof Door, No Items Gate, Radio Dead Zone, Timer,
-// Progress Bars, PuzzleHider); no custom script. Jetpacks do not fire over the course (the "Calm Air Big Air" box,
-// read by Winter Walk). The hut's racks and the removal of two terrain-park kickers from the in-run are the island's
-// (WinterIslePuzzle step 11c), not this pack's.
+// Kept from the first design ("Judges' Call"): the kickers, the windows and the flight model that places them, the
+// gantry, the dye lines, the start hut, Calm Air and the site. Its judge's cabin, calls and clock are gone; the
+// site keeps the gourd's corner (a start switch, the vice, the pillow, confetti).
 //
-// Frames: the course is in run coordinates, C(along, u) = RunCentre(2, along) + right * u, u to the rider's right
-// looking downhill (the pad's side). The pad is turned by padYaw (the run's heading at along 1112): x' points away
-// from the run, z' downhill. The root keeps yaw 0.
+// Parts: Presence Sensors (the windows), Light 6 lamps, Progress Bars, and one script of ours, Tally (PuzzleScripts),
+// which marks each window once, lights its lamp, fills the bars and wins when all three are marked. Jetpacks do not
+// fire over the course (the "Calm Air Big Air" box, read by Winter Walk). The hut's racks and the removal of two
+// terrain-park kickers from the in-run are the island's (WinterIslePuzzle step 11c), not this pack's.
+//
+// Frame: the course is in run coordinates, C(along, u) = RunCentre(2, along) + right * u, u to the rider's right
+// looking downhill (the side the site is on). The root keeps yaw 0.
 using System;
 using System.Collections.Generic;
 using Bwm;
@@ -24,17 +28,18 @@ using UnityEngine;
 public sealed class BigAirPuzzle : PuzzleDef
 {
     public override string Name => "BigAir";
-    public override Vector2 Footprint => new Vector2(18f, 18f);      // the 14 x 12 pad turned about 30 degrees
+    public override Vector2 Footprint => new Vector2(18f, 18f);      // the ground the island levels at the site (it held the judge's pad)
     public const int Run = 2;
 
-    // ---- the site: the pad beside the terrain park, its levelling stopping short of the run ----
-    const float PadAlong = 1112f, PadOut = 30f;
+    // ---- the site: beside the terrain park, off the run's edge, where the first design's pad stood (kept, so the
+    //      island's layout and paths do not move); nothing of the course stands on it ----
+    const float SiteAlong = 1112f, SiteOut = 30f;
     public override Vector2? FixedSite
     {
         get
         {
-            Vector2 mid = RC(PadAlong, out float half);
-            return mid + Right(Down(PadAlong)) * (half + PadOut);
+            Vector2 mid = RC(SiteAlong, out float half);
+            return mid + Right(Down(SiteAlong)) * (half + SiteOut);
         }
     }
 
@@ -55,17 +60,12 @@ public sealed class BigAirPuzzle : PuzzleDef
     const float ReachMargin = 0.5f;       // a (DesignSpeed - 1) rider's probe over a window's bottom
     // ---- the rest ----
     const float HutAlong = 1030f;
-    const float Floor = 0.3f;             // the cabin's floor over the root's level
-    const float ClockSeconds = 300f;
+    const float LampBoard = 0.9f;         // the dark square board behind each window's lamp, on top of the gantry's truss
     const float CalmAlong = 1095f, CalmHalfAlong = 105f, CalmHalfAcross = 45f, CalmUp = 150f, CalmUnder = 10f;
-    // the cabin's door (in the +x' wall) and the partition's opening (z')
-    const float DoorZ0 = -1.82f, DoorZ1 = -0.58f, DoorH = 2.04f, Cover = 0.06f;
-    const float GateZ0 = 0.28f, GateZ1 = 2.40f;
 
     static readonly string[] LaneNames = { "Red", "Green", "Gold" };
     static readonly float[] LaneU = { -5f, 0f, 5f };
     static readonly Color[] LaneColours = { IsleKit.Red, IsleKit.Green, IsleKit.Gold };
-    static readonly Color[] LampColours = { new Color(0.85f, 0.12f, 0.1f), new Color(0.15f, 0.6f, 0.25f), new Color(0.95f, 0.75f, 0.2f) };
     static readonly Color Snow = new Color(0.94f, 0.96f, 1f);
     static readonly Color Steel = new Color(0.32f, 0.33f, 0.36f);
     static readonly Color Cord = new Color(0.12f, 0.12f, 0.13f);
@@ -78,7 +78,6 @@ public sealed class BigAirPuzzle : PuzzleDef
 
     PuzzleBuilder b;
     Vector3 site;
-    float padYaw;
 
     // ground height (world) from the island's land grid; the build stops if there is none
     float G(Vector2 w)
@@ -91,29 +90,13 @@ public sealed class BigAirPuzzle : PuzzleDef
     Vector3 AtAbs(Vector2 w, float y) => new Vector3(w.x - site.x, y - site.y, w.y - site.z);
     Piece PartAbs(string prefab, Vector2 w, float y, float yaw) => b.Part(prefab, w.x - site.x, w.y - site.z, y - site.y, yaw, false);
     Piece PartOnGround(string prefab, Vector2 w, float h, float yaw) => b.Part(prefab, w.x - site.x, w.y - site.z, h, yaw, true);
-    // the pad's frame: local offsets, parts at the cabin's floor
-    Vector2 Pad(float x, float z) => IsleKit.Turn(x, z, padYaw);
-    Piece PadPart(string prefab, float x, float z, float h, float yawOff)
-    {
-        Vector2 p = Pad(x, z);
-        return b.Part(prefab, p.x, p.y, Floor + h, padYaw + yawOff, false);
-    }
-    // a block in the pad's frame from (x0, z0) to (x1, z1), heights over the root's level
-    void PadBox(MeshBuilder mb, float x0, float x1, float z0, float z1, float y0, float y1, Color c)
-    {
-        Vector2 mid = Pad((x0 + x1) / 2f, (z0 + z1) / 2f);
-        Kit.AddBox(mb, new Vector3(mid.x, y0, mid.y), new Vector3(x1 - x0, y1 - y0, z1 - z0), c, padYaw);
-    }
 
     public override void Build(PuzzleBuilder builder)
     {
         b = builder;
         site = b.Root.transform.position;
-        padYaw = YawOf(Down(PadAlong));
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
         b.ClearGround(18f, 18f);
-        Vector2 tp = Pad(4f, -2f);
-        b.DebugTeleport(tp.x, tp.y);
 
         // ================= the course: three kickers, their windows, the dye lines =================
         Vector2 kFoot0 = RC(KickerFoot);
@@ -121,7 +104,7 @@ public sealed class BigAirPuzzle : PuzzleDef
         float laneYaw = YawOf(kDown);
         var kickers = new MeshBuilder();
         var flags = new MeshBuilder();
-        var gateComps = new Component[3];
+        var gates = new Piece[3];
         var boxCentres = new Vector2[3];
         var bottoms = new float[3];
         var failures = new List<string>();
@@ -228,14 +211,14 @@ public sealed class BigAirPuzzle : PuzzleDef
                 if (st == KickerSteps - 1) kickers.Quad(OnGround(a1 - hw, -0.3f), cL, cR, OnGround(a1 + hw, -0.3f), Snow);      // the lip's face
             }
 
-            // the counted window: a player-presence box, its drawn frame added with the gantry below
+            // the counted window: a player-presence box that one player sets off, its drawn frame added with the gantry below
             Piece gate = PartAbs("Presence Sensor", bc, bottom + WinTall / 2f, laneYaw).Named("Gate " + LaneNames[i]);
             BoxCollider box = gate.Go.GetComponent<BoxCollider>();
             if (box == null) box = gate.Go.AddComponent<BoxCollider>();
             box.size = new Vector3(WinAcross, WinTall, WinAlong);
             box.center = Vector3.zero;
             gate.Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
-            gateComps[i] = gate.Component("PuzzlePresenceSensor");
+            gates[i] = gate;
             boxCentres[i] = bc;
             bottoms[i] = bottom;
 
@@ -288,7 +271,7 @@ public sealed class BigAirPuzzle : PuzzleDef
             Kit.AddBox(masts, AtAbs(m, foot), new Vector3(0.9f, 0.6f, 0.9f), IsleKit.Stone, laneYaw);      // its footing
         }
         b.MeshPiece("Big Air Masts", masts.ToMesh(), snowy, true);
-        // truss, banners and window frames: no collider, so nothing over the windows can be stood on
+        // truss, banners, lamp boards and window frames: no collider, so nothing over the windows can be stood on
         var truss = new MeshBuilder();
         Kit.AddBox(truss, AtAbs((mastL + mastR) / 2f, trussBottom), new Vector3((mastR - mastL).magnitude + 0.35f, 0.5f, 0.5f), Steel, laneYaw);
         for (int i = 0; i < 3; i++)
@@ -296,6 +279,12 @@ public sealed class BigAirPuzzle : PuzzleDef
             Vector2 bc = boxCentres[i];
             Vector2 onTruss = gMid + kRight * Vector2.Dot(bc - gMid, kRight);
             Kit.AddBox(truss, AtAbs(onTruss, bannerBottom), new Vector3(3.6f, 1f, 0.08f), LaneColours[i], laneYaw);
+            // the window's lamp, of its lane's colour, on a dark board on top of the truss and facing up the run: Tally
+            // lights it when the window has been flown through (a Light 6 is 0.48 m across; its back is 0.142 m
+            // behind its pivot, its middle 0.017 m under it)
+            Kit.AddBox(truss, AtAbs(onTruss, trussTop), new Vector3(LampBoard, LampBoard, 0.08f), IsleKit.Board, laneYaw);
+            PartAbs("Light 6", onTruss - kDown * (0.04f + 0.142f), trussTop + LampBoard / 2f + 0.017f, laneYaw + 180f)
+                .Named("Window Lamp " + (i + 1)).Set("PuzzleLight", "color", new Color(1f, 0.92f, 0.75f));      // near white: a strong colour tints the lens the same lit or not; the banner under it says whose it is
             // the drawn frame at the box's middle: sides at its sides, from 1 m under its bottom to 0.3 m under its top
             float low = bottoms[i] - 1f, high = bottoms[i] + WinTall - 0.3f;
             Vector2 left = bc - kRight * (WinAcross / 2f), right = bc + kRight * (WinAcross / 2f);
@@ -317,16 +306,28 @@ public sealed class BigAirPuzzle : PuzzleDef
         Vector3 lightL = AtAbs(mastL + uphill, trussBottom - 0.05f), lightR = AtAbs(mastR + uphill, trussBottom - 0.05f);
         Kit.LightString(b, "Gantry Lights", new List<Vector3> { lightL, lightR }, 0.02f, 0.5f, false, false, 41);
 
-        // the Gantry Bar on its own board outside the piste, beyond the +u mast, facing uphill
+        // the gantry's tally bar on its own board outside the piste, beyond the +u mast, facing uphill
         Vector2 boardAt = gMid + kRight * (runOff + mastU + 3f);
         float boardYaw = laneYaw + 180f;
         IsleKit.BoardOnPosts(b, "Gantry Board", boardAt.x - site.x, boardAt.y - site.z, boardYaw, 4.4f, 2.4f, 3.6f, IsleKit.Board);
-        Piece gantryBar = PartOnGround("Progress Bar", boardAt - kDown * (IsleKit.FaceZ + 0.03f), 3.0f, boardYaw).Named("Gantry Bar").Scaled(1.15f, 1.15f, 1.15f);
-        gantryBar.Set("PuzzleProgressBar", "total", 6);
+        PartOnGround("Progress Bar", boardAt - kDown * (IsleKit.FaceZ + 0.03f), 3.0f, boardYaw).Named("Tally Bar Gantry").Scaled(1.15f, 1.15f, 1.15f)
+            .Set("PuzzleProgressBar", "total", 3);
         PartOnGround("Confetti", gMid + kRight * (runOff - mastU + 0.8f) + kDown * 2f, 0.2f, 0f).Named("Gantry Confetti L");
         PartOnGround("Confetti", gMid + kRight * (runOff + mastU - 0.8f) + kDown * 2f, 0.2f, 0f).Named("Gantry Confetti R");
 
-        // ================= the start hut up the run: speaker, clock, bars, switch =================
+        // ================= the gourd's corner, on the site =================
+        // The site is the level, cleared ground beside the terrain park where the island's path arrives (30 m off the
+        // run's edge; the first design's cabin stood here). The gourd's vice, the pillow, a start switch and the
+        // confetti stand on a low stone flag there, under a ring of lights. At the gantry's foot they stood inside
+        // the wall of firs the island plants along the run.
+        float cornerYaw = YawOf(-Right(Down(SiteAlong)));      // facing the run
+        var flag = new MeshBuilder();
+        Kit.AddBox(flag, new Vector3(0f, -1f, 0f), new Vector3(8f, 1.06f, 5f), IsleKit.Stone, cornerYaw);
+        b.MeshPiece("Corner Flag", flag.ToMesh(), snowy, true).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
+        IsleKit.StartCorner(b, 0f, 0f, cornerYaw, true, 0.06f, false);
+        Kit.LightRing(b, "Corner Lights", 0f, 0f, 9f, 6f, 2.6f, true, 44);
+
+        // ================= the start hut up the run: the tally bar and the start switch =================
         Vector2 hO = RC(HutAlong, out float hHalf);
         Vector2 hD = Down(HutAlong), hS = Right(hD);
         float hutYaw = YawOf(-hS);      // facing the run (its local x runs down the run)
@@ -367,127 +368,29 @@ public sealed class BigAirPuzzle : PuzzleDef
         Vector2 hutLocal = HW(0f, 5f) - new Vector2(site.x, site.z);
         b.ClearGround(10f, 10f, hutLocal.x, hutLocal.y);
         const float WallFace = 6.425f;      // the back wall's inner face, from the run's edge
-        Piece hutBar = PartAbs("Progress Bar", HW(0f, WallFace - 0.09f), deck + 2.5f, hutYaw).Named("Hut Bar").Scaled(0.8f, 0.8f, 0.8f);
-        hutBar.Set("PuzzleProgressBar", "total", 6);
-        Piece clockBar = PartAbs("Progress Bar", HW(0f, WallFace - 0.11f), deck + 2.0f, hutYaw).Named("Clock Bar");
-        Piece clock = PartAbs("Timer", HW(-1.1f, WallFace - 0.1f), deck + 1.35f, hutYaw).Named("Clock").Scaled(1.5f * PuzzleBuilder.TimerScale, 1.5f * PuzzleBuilder.TimerScale, 1.5f * PuzzleBuilder.TimerScale);
+        PartAbs("Progress Bar", HW(0f, WallFace - 0.09f), deck + 2.5f, hutYaw).Named("Tally Bar Hut").Scaled(0.8f, 0.8f, 0.8f)
+            .Set("PuzzleProgressBar", "total", 3);
         PartAbs("Switch Start", HW(0.5f, WallFace - 0.073f), deck + 1.25f, hutYaw).Named("Hut Switch");
         PartAbs("Live Light", HW(0.5f, WallFace - 0.006f), deck + 1.42f, hutYaw).Named("Hut Live");
-        Piece speaker = PartAbs("Intercom Speaker", HW(1.35f, WallFace - 0.1f), deck + 1.3f, hutYaw).Named("Hut Speaker");
         var eaves = new List<Vector3>();
         foreach (var (da, u) in new[] { (-2.3f, 3.05f), (2.3f, 3.05f), (2.3f, 6.95f), (-2.3f, 6.95f), (-2.3f, 3.05f) })
             eaves.Add(AtAbs(HW(da, u), deck + 2.98f));
         Kit.LightString(b, "Hut Lights", eaves, 0.1f, 0.5f, false, false, 43);
+        // the tester lands on the snow at the foot of the hut's steps, beside the run
+        Vector2 tp = HW(0f, 0.6f) - new Vector2(site.x, site.z);
+        b.DebugTeleport(tp.x, tp.y);
 
-        // ================= the Judges' Cabin on the pad =================
-        // the soundproof skin: slab, outer walls, roof and the door-frame cover, all under one PuzzleSoundProof parent
-        Vector2 cabinMid = Pad(-3.3f, 0f);
-        Piece cabin = b.Empty("Judges Cabin", cabinMid.x, cabinMid.y, Floor, false);
-        Sdk.Set(b.AddScript(cabin, "PuzzleSoundProof"), "material", 0);
-        var shell = new MeshBuilder();
-        float wallLow = Floor - 0.05f, wallTop = Floor + 2.6f;
-        PadBox(shell, -6.0f, -0.6f, -2.6f, 2.6f, -1.0f, Floor, IsleKit.Stone);                              // the floor slab, sunk 1 m
-        PadBox(shell, -6.0f, -5.8f, -2.6f, 2.6f, wallLow, wallTop, IsleKit.Wood);                            // back (the mic's wall)
-        PadBox(shell, -5.8f, -0.8f, -2.6f, -2.4f, wallLow, wallTop, IsleKit.Wood);                           // sides
-        PadBox(shell, -5.8f, -0.8f, 2.4f, 2.6f, wallLow, wallTop, IsleKit.Wood);
-        PadBox(shell, -0.8f, -0.6f, -2.6f, DoorZ0, wallLow, wallTop, IsleKit.Wood);                          // the door wall, round the door
-        PadBox(shell, -0.8f, -0.6f, DoorZ1, 2.6f, wallLow, wallTop, IsleKit.Wood);
-        PadBox(shell, -0.8f, -0.6f, DoorZ0, DoorZ1, Floor + DoorH, wallTop, IsleKit.Wood);
-        // the door-frame cover: soundproof strips inside the door wall over the frame, up to the leaves' edges
-        PadBox(shell, -0.86f, -0.8f, DoorZ0, DoorZ0 + Cover, Floor, Floor + DoorH, IsleKit.DarkWood);
-        PadBox(shell, -0.86f, -0.8f, DoorZ1 - Cover, DoorZ1, Floor, Floor + DoorH, IsleKit.DarkWood);
-        PadBox(shell, -0.86f, -0.8f, DoorZ0, DoorZ1, Floor + DoorH - Cover, Floor + DoorH, IsleKit.DarkWood);
-        PadBox(shell, -6.15f, -0.45f, -2.75f, 2.75f, wallTop, wallTop + 0.2f, IsleKit.Red);                  // the roof
-        Piece shellPiece = b.MeshPiece("Judges Cabin Shell", shell.ToMesh(), snowy, true);
-        shellPiece.Transform.position = b.WorldPoint(0f, 0f, 0f, false);
-        shellPiece.Under(cabin);
-        // inside (not soundproof): the full-height partition with the turnstile's opening, closed above the gate, and a
-        // return fin on its far face; and a step up to the door outside
-        var fittings = new MeshBuilder();
-        PadBox(fittings, -2.675f, -2.525f, -2.4f, GateZ0, Floor, wallTop, IsleKit.Cream);
-        PadBox(fittings, -2.675f, -2.525f, GateZ0, GateZ1, Floor + 2.3f, wallTop, IsleKit.Cream);
-        PadBox(fittings, -3.075f, -2.675f, GateZ0 - 0.1f, GateZ0, Floor, wallTop, IsleKit.Cream);
-        PadBox(fittings, -0.6f, 0f, DoorZ0 - 0.1f, DoorZ1 + 0.1f, -0.4f, 0.15f, IsleKit.Stone);
-        b.MeshPiece("Judges Cabin Fittings", fittings.ToMesh(), snowy, true);
-        var frames = new MeshBuilder();      // a painted frame of each lamp's colour, so it reads while off
-        for (int i = 0; i < 3; i++)
-        {
-            float z = -0.8f + 0.3f * i;
-            PadBox(frames, -2.695f, -2.675f, z - 0.14f, z + 0.14f, Floor + 1.5f - 0.14f, Floor + 1.5f + 0.14f, LaneColours[i]);
-        }
-        b.MeshPiece("Judges Lamp Frames", frames.ToMesh(), bare, false);
-
-        // the lamps on the partition's far face, facing into the judge's room (small panel lamps: 0.24 m, so they fit
-        // 0.3 m apart; light reaching 0.4 m, every lamp 1.8 m or more from the outside)
-        var lampComps = new Component[3];
-        for (int i = 0; i < 3; i++)
-        {
-            Piece lamp = PadPart("Light 8", -2.795f, -0.8f + 0.3f * i, 1.5f, -90f).Named("Lamp " + LaneNames[i]);
-            lamp.Set("PuzzleLight", "color", LampColours[i]).Set("PuzzleLight", "range", 0.4f);
-            lampComps[i] = lamp.Component("PuzzleLight");
-        }
-        Piece judgeBar = PadPart("Progress Bar", -2.75f, -1.0f, 2.1f, -90f).Named("Judge Bar").Scaled(0.7f, 0.7f, 0.7f);
-        judgeBar.Set("PuzzleProgressBar", "total", 6);
-        Piece mic = PadPart("Intercom Mic", -5.78f, 0f, 1.4f, 90f).Named("Judge Mic");
-        mic.Add("PuzzleIntercom", "speakers", speaker.Component("PuzzleIntercomSpeaker"));
-        // a dim white room lamp while the puzzle runs (white tells nothing; it reaches no outer wall)
-        Piece roomLamp = PadPart("Light 2", -4.3f, 0f, 2.6f, 0f).Named("Cabin Light");
-        roomLamp.Set("PuzzleLight", "range", 1.5f);
-        PadPart("Door", -0.7f, (DoorZ0 + DoorZ1) / 2f, 0f, 90f).Named("Cabin Door")
-            .Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", true);      // shut while the puzzle runs
-        PadPart("Gate No items", -2.6f, GateZ0 + 1.11f, 0f, -90f).Named("Judge Turnstile")      // its model runs -1.11 .. +1.01 m across
-            .Set("PuzzleNoItemsGate", "oneWay", false).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-        Piece dead = PadPart("Radio Dead Zone", -3.3f, 0f, 1.4f, 0f).Named("Cabin Dead Zone");
-        BoxCollider deadBox = dead.Go.GetComponent<BoxCollider>();
-        if (deadBox == null) deadBox = dead.Go.AddComponent<BoxCollider>();
-        deadBox.size = new Vector3(5.6f, 3.2f, 5.4f);
-        deadBox.center = Vector3.zero;
-        // the judge's own quit, in the vestibule on the door wall's inner face (no turnstile between)
-        PadPart("Switch Start", -0.873f, 1.6f, 1.25f, -90f).Named("Cabin Switch");
-        PadPart("Live Light", -0.806f, 1.6f, 1.42f, -90f).Named("Cabin Live");
-        var cabinLights = new List<Vector3>();
-        foreach (var (x, z) in new[] { (-0.45f, -2.75f), (-0.45f, 2.75f), (-6.15f, 2.75f), (-6.15f, -2.75f), (-0.45f, -2.75f) })
-        {
-            Vector2 p = Pad(x, z);
-            cabinLights.Add(new Vector3(p.x, Floor + 2.78f, p.y));
-        }
-        Kit.LightString(b, "Cabin Lights", cabinLights, 0.1f, 0.5f, false, false, 47);
-
-        // the third quit point and the gourd, outside by the cabin, facing the run
-        Vector2 corner = Pad(4f, 3f);
-        IsleKit.StartCorner(b, corner.x, corner.y, padYaw - 90f);
-
-        // ================= the clock, the three finals and the wiring =================
-        clock.Set("PuzzleTimer", "duration", ClockSeconds);
-        clock.Add("PuzzleTimer", "progressBars", clockBar.Component("PuzzleProgressBar"));
-        Component clockC = clock.Component("PuzzleTimer");
-        Component gantryC = gantryBar.Component("PuzzleProgressBar"), judgeC = judgeBar.Component("PuzzleProgressBar"), hutC = hutBar.Component("PuzzleProgressBar");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", clockC, "StartTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", roomLamp.Component("PuzzleLight"), "TurnOn");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", roomLamp.Component("PuzzleLight"), "TurnOff");
-        foreach (var (group, two, three, four, rounds, name) in new[]
-        {
-            ("Two Rider Final", true, false, false, 4, "Final 4"),
-            ("Three Rider Final", false, true, false, 6, "Final 6"),
-            ("Four Rider Final", false, false, true, 8, "Final 8"),
-        })
-        {
-            Piece lobby = IsleKit.Lobby(b, group, two, three, four);
-            Piece order = b.Empty(name, 0f, 0f, 0.5f).Under(lobby);
-            Component pio = b.AddScript(order, "PuzzlePressInOrder");
-            Sdk.Add(pio, "lights", lampComps);
-            Sdk.Add(pio, "buttons", gateComps);
-            Sdk.Add(pio, "progressBars", gantryC, judgeC, hutC);
-            Sdk.Set(pio, "rounds", rounds);
-            Sdk.Set(pio, "holdAtEnd", false);
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStart", pio, "Begin");
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pio, "End");
-            clock.On("PuzzleTimer", "onFinished", pio, "End");
-            Sdk.Wire(pio, "onEnd", clockC, "PauseTimer");
-        }
-        // the clock's reset last of all on a stop, after the finals' End (whose onEnd pauses it)
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", clockC, "ResetTimer");
-        gantryBar.On("PuzzleProgressBar", "onFull", b.Puzzle, "Win");
+        // ================= the tally: each window counts once, in any order; three lamps lit win =================
+        // Tally finds "Window Lamp 1..3" and every "Tally Bar..." by name, and wins the puzzle itself. A stop clears it
+        // (a stop also runs when the puzzle spawns; the start is not wired, since the SDK's checks reject a start and a
+        // stop that do the same thing)
+        Piece tallyPiece = b.Empty("Window Tally", gMid.x - site.x, gMid.y - site.z, trussBottom - site.y, false);
+        Component tally = b.AddCustomScript(tallyPiece, "Tally");
+        Sdk.Set(tally, "count", 3);
+        Sdk.Set(tally, "lampPrefix", "Window Lamp ");
+        Sdk.Set(tally, "barPrefix", "Tally Bar");
+        for (int i = 0; i < 3; i++) gates[i].On("PuzzlePresenceSensor", "onPressed", tally, "Hit", i + 1);
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", tally, "Clear");
 
         // ================= Calm Air: no jetpack thrust over the course =================
         // along 990 -> 1200, 45 m either side of the run's middle; level, so it reaches from 10 m under the lowest
@@ -507,7 +410,7 @@ public sealed class BigAirPuzzle : PuzzleDef
         IsleKit.CalmAir(b, "Big Air", cMid.x - site.x, cMid.y - site.z, new Vector3(2f * CalmHalfAcross, calmTop - calmBottom, 2f * CalmHalfAlong),
             YawOf(cDown), calmBottom - site.y, false);
         Debug.Log("[BWM] Big Air: Calm Air from " + Sdk.F(calmBottom) + " to " + Sdk.F(calmTop) + " m (ground " + Sdk.F(lowest) + " to " + Sdk.F(highestG)
-            + "); gantry at along " + Sdk.F(gAlong) + ", masts " + Sdk.F(mastU) + " m out (run half-width " + Sdk.F(gHalf) + "); hut deck at "
-            + Sdk.F(deck) + " m; site " + Sdk.F(site.x) + ", " + Sdk.F(site.z) + ", pad yaw " + Sdk.F(padYaw));
+            + "); gantry at along " + Sdk.F(gAlong) + ", masts " + Sdk.F(mastU) + " m out (run half-width " + Sdk.F(gHalf) + "), lamps at "
+            + Sdk.F(trussTop + LampBoard / 2f) + " m; hut deck at " + Sdk.F(deck) + " m; site " + Sdk.F(site.x) + ", " + Sdk.F(site.z));
     }
 }

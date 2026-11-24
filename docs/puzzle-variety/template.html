@@ -1,0 +1,477 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Winter Isle Puzzle Variety</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: a review sheet. Findings first (what repeats, to scale), then a trait grid, then one card per puzzle
+   whose centre is the chain of who knows, who relays and who acts. Family colours are the island's own kit
+   colours: lantern gold, berry red, spruce green, ice blue. */
+:root {
+  --bg: #edf2f5; --panel: #fbfdfe; --soft: #e1e9ee; --line: #cbd7de;
+  --ink: #13232b; --muted: #536770; --bar: #3a5663;
+  --lit: #9a6200; --lit-bg: #f5e6c6;
+  --hold: #ad2a37; --hold-bg: #f5d8db;
+  --match: #1b6849; --match-bg: #d3ebde;
+  --tune: #1d679f; --tune-bg: #d4e6f4;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d171e; --panel: #14222b; --soft: #1c2e39; --line: #2a3f4b;
+    --ink: #e4edf1; --muted: #9db1bb; --bar: #8fb3c2;
+    --lit: #e8b24a; --lit-bg: #3a2c0f;
+    --hold: #f08b93; --hold-bg: #3e1c21;
+    --match: #6ecca2; --match-bg: #143427;
+    --tune: #86c2ee; --tune-bg: #133041;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d171e; --panel: #14222b; --soft: #1c2e39; --line: #2a3f4b;
+  --ink: #e4edf1; --muted: #9db1bb; --bar: #8fb3c2;
+  --lit: #e8b24a; --lit-bg: #3a2c0f;
+  --hold: #f08b93; --hold-bg: #3e1c21;
+  --match: #6ecca2; --match-bg: #143427;
+  --tune: #86c2ee; --tune-bg: #133041;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body); margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 44px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(1.8rem, 4.6vw, 2.7rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.4rem; font-weight: 600; }
+h3 { font-size: 1.02rem; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-size: 0.74rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.lede { font-size: 1.06rem; max-width: 66ch; color: var(--ink); }
+.prose { max-width: 68ch; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+header { display: flex; flex-direction: column; gap: 14px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 0; margin: 4px 0 0; list-style: none; }
+.facts li { display: flex; flex-direction: column; }
+.facts b { font: 600 1.5rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.facts span { font-size: 0.8rem; color: var(--muted); max-width: 24ch; }
+
+/* findings */
+.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.points li { border-top: 2px solid var(--ink); padding-top: 10px; }
+.points b { font-family: var(--display); font-size: 1.02rem; display: block; margin-bottom: 4px; }
+
+.split { display: flex; height: 34px; border-radius: 6px; overflow: hidden; gap: 2px; }
+.split div { display: flex; align-items: center; justify-content: center; font: 600 0.95rem var(--display); min-width: 0; font-variant-numeric: tabular-nums; }
+.fam-lit { background: var(--lit-bg); color: var(--lit); }
+.fam-hold { background: var(--hold-bg); color: var(--hold); }
+.fam-match { background: var(--match-bg); color: var(--match); }
+.fam-tune { background: var(--tune-bg); color: var(--tune); }
+.legend { display: grid; gap: 10px 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); margin: 0; padding: 0; list-style: none; }
+.legend li { display: grid; grid-template-columns: 14px 1fr; gap: 2px 8px; align-items: baseline; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; transform: translateY(1px); }
+.sw-lit { background: var(--lit); } .sw-hold { background: var(--hold); } .sw-match { background: var(--match); } .sw-tune { background: var(--tune); }
+.legend b { font-family: var(--display); }
+.legend span.d { grid-column: 2; font-size: 0.86rem; color: var(--muted); }
+
+.barsets { display: grid; gap: 28px 40px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); }
+.barset { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.barset h3 { margin-bottom: 4px; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 13.5rem) minmax(40px, 1fr) 2.6rem; gap: 10px; align-items: center; font-size: 0.88rem; }
+.bar { height: 10px; background: var(--soft); border-radius: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--bar); border-radius: 5px; }
+.bar-row .n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.scale { display: grid; grid-template-columns: minmax(0, 13.5rem) minmax(40px, 1fr) 2.6rem; gap: 10px; font-size: 0.72rem; color: var(--muted); }
+.scale div { display: flex; justify-content: space-between; grid-column: 2; }
+
+.pairs { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.pairs li { display: grid; grid-template-columns: 5.2rem 1fr; gap: 12px; align-items: start; border-top: 1px solid var(--line); padding-top: 10px; }
+.pairs .score { font: 600 1.05rem var(--display); font-variant-numeric: tabular-nums; }
+.pairs .score small { display: block; font: 400 0.72rem var(--body); color: var(--muted); }
+.pairs b { font-family: var(--display); }
+.two { display: grid; gap: 28px 40px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.two ul { margin: 8px 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 7px; }
+
+.zones { display: flex; flex-direction: column; gap: 10px; }
+.zone { display: grid; grid-template-columns: minmax(0, 9.5rem) 1fr; gap: 12px; align-items: start; }
+.zone .zn { font: 600 0.92rem var(--display); padding-top: 3px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+button.pill { font: 500 0.8rem var(--body); border: 0; border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+button.pill:hover { filter: brightness(0.96); }
+
+/* the rework */
+.shift { display: grid; gap: 10px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.shift-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; border-top: 1px solid var(--line); padding-top: 8px; font-size: 0.9rem; }
+.shift-row b { font: 600 1.05rem var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shift-row b s { color: var(--muted); font-weight: 500; text-decoration-thickness: 1px; }
+table.plan { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+table.plan th { text-align: left; font: 600 0.72rem var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 10px 12px 6px; white-space: nowrap; }
+table.plan td { padding: 9px 12px; border-top: 1px solid var(--soft); vertical-align: top; }
+table.plan td.nm { font: 600 0.93rem var(--display); white-space: nowrap; }
+table.plan td.nm button { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+table.plan td.nm button:hover { text-decoration: underline; }
+table.plan td.idea { min-width: 260px; }
+table.plan td.c { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kind { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.kind-keep { background: var(--hold-bg); color: var(--hold); }
+.kind-small { background: var(--tune-bg); color: var(--tune); }
+.kind-group { background: var(--match-bg); color: var(--match); }
+.state { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.state.done { color: var(--match); font-weight: 600; }
+
+/* grid */
+.gridwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table.grid { border-collapse: collapse; font-size: 0.82rem; }
+table.grid th, table.grid td { padding: 0; }
+table.grid thead th.grp { font: 600 0.72rem var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 8px 6px 2px; border-left: 1px solid var(--line); white-space: nowrap; }
+table.grid thead th.col { vertical-align: bottom; height: 12.4rem; width: 27px; min-width: 27px; }
+table.grid thead th.col button { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font: 500 0.76rem var(--body); color: var(--ink); background: none; border: 0; cursor: pointer; padding: 6px 4px; width: 100%; text-align: left; }
+table.grid thead th.col.first, table.grid td.first { border-left: 1px solid var(--line); }
+table.grid thead th.col .cnt { color: var(--muted); font-variant-numeric: tabular-nums; }
+table.grid tbody th { position: sticky; left: 0; background: var(--panel); text-align: left; white-space: nowrap; padding: 0 12px 0 10px; font-weight: 500; z-index: 1; }
+table.grid tbody th button { font: 500 0.82rem var(--body); color: var(--ink); background: none; border: 0; cursor: pointer; padding: 5px 0; display: inline-flex; gap: 7px; align-items: center; }
+table.grid tbody th button:hover { text-decoration: underline; }
+table.grid tbody tr { border-top: 1px solid var(--soft); }
+table.grid td { text-align: center; height: 27px; }
+table.grid td i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: middle; }
+table.grid .on-lit i { background: var(--lit); } table.grid .on-hold i { background: var(--hold); }
+table.grid .on-match i { background: var(--match); } table.grid .on-tune i { background: var(--tune); }
+table.grid .hl { background: var(--soft); }
+table.grid thead th.corner { position: sticky; left: 0; background: var(--panel); z-index: 2; }
+
+/* catalogue */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+button.chip { font: 500 0.84rem var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; }
+button.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+label.sel { font-size: 0.8rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+select { font: 500 0.84rem var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: 100%; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--tune); outline-offset: 2px; }
+.count { font-size: 0.84rem; color: var(--muted); }
+.cards { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 13px; min-width: 0; }
+.card.flash { outline: 2px solid var(--ink); outline-offset: 2px; }
+.card-head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+.card-head img { width: 150px; height: auto; border-radius: 6px; display: block; background: var(--soft); }
+.famtag { display: inline-flex; gap: 6px; align-items: center; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; }
+.card h3 { font-size: 1.22rem; }
+.card .tag { color: var(--muted); font-size: 0.9rem; margin-top: 3px; }
+.chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.node { flex: 1 1 128px; min-width: 0; background: var(--soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.node b { font: 600 0.93rem var(--display); }
+.node .at { font-size: 0.78rem; color: var(--muted); }
+.node .has { font-size: 0.8rem; }
+.link { flex: 0 1 96px; min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 2px; font-size: 0.72rem; line-height: 1.25; color: var(--muted); }
+.link .arrow { font-size: 1.15rem; line-height: 1; color: var(--ink); }
+dl.facts2 { margin: 0; display: grid; grid-template-columns: 6.6rem 1fr; gap: 6px 12px; font-size: 0.88rem; }
+dl.facts2 dt { color: var(--muted); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 3px; }
+dl.facts2 dd { margin: 0; min-width: 0; }
+.traits { display: flex; flex-wrap: wrap; gap: 5px; }
+.traits span { font-size: 0.74rem; background: var(--soft); border-radius: 4px; padding: 2px 7px; }
+.card-foot { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--soft); padding-top: 10px; }
+.card-foot b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-foot button { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.notes { font-size: 0.86rem; color: var(--muted); max-width: 78ch; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 640px) {
+  .chain { flex-direction: column; }
+  .node { flex: 0 0 auto; }
+  .link { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 8px; padding-left: 10px; text-align: left; }
+  .link .arrow { transform: rotate(90deg); }
+  .card-head { grid-template-columns: 1fr; }
+  .card-head img { width: 100%; max-width: 420px; }
+  .bar-row, .scale { grid-template-columns: minmax(0, 9.2rem) minmax(40px, 1fr) 2.4rem; font-size: 0.82rem; }
+  .zone { grid-template-columns: 1fr; gap: 4px; }
+  dl.facts2 { grid-template-columns: 1fr; gap: 1px 0; }
+  dl.facts2 dd { margin-bottom: 7px; }
+  .pairs li { grid-template-columns: 4.4rem 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Big Christmas Walk · the Winter Isle · as released in 2026.11.24</p>
+  <h1>Twenty-nine puzzles, side by side</h1>
+  <p class="lede">What each puzzle asks of its players, what the puzzles share, and where they differ. Written from each puzzle's design notes and its build. No group has played any of them yet.</p>
+  <ul class="facts">
+    <li><b>29</b><span>puzzles in five districts</span></li>
+    <li><b>3</b><span>players is the size each is built for, with versions for two and four</span></li>
+    <li><b class="num">{{hours}}</b><span>hours for three players, adding up each design's own first-solve guess</span></li>
+    <li><b>{{n_code}}</b><span>use a script of their own; the other {{n_nocode}} are SDK parts only</span></li>
+  </ul>
+</header>
+
+<section id="rework">
+  <h2>The rework</h2>
+  <p class="prose">Your rules of 24 November: sealed rooms should be seldom, most puzzles should be for three or four players working together, some should be within reach of one or two, and far fewer should lean on a timer. This is the plan for each puzzle, and how far it has got. The sections after it describe the puzzles as they were before the rework; a card marked Reworked shows that puzzle as it is now.</p>
+  <div class="shift" id="shift"></div>
+  <div class="gridwrap"><table class="plan" id="plan"></table></div>
+</section>
+
+<section>
+  <h2>Before the rework, in short</h2>
+  <ul class="points">
+    <li><b>One kind of puzzle, 29 times.</b>In every puzzle the answer is shown to one player who cannot act on it, the acting is done by a player who cannot see it, and the work is getting it across. None asks the group to work an answer out, explore, or build something.</li>
+    <li><b>Two engines underneath.</b>{{n_pio}} follow the SDK's Press In Order: a lamp picks a target, someone calls it, and a player must be on it, through it or holding it when time is up. The other {{n_board}} run on Display and Peg Board: pictures or tunes are described and the matching tiles are hung.</li>
+    <li><b>The same three walls.</b>{{n:hut}} of 29 show the cue only inside a closed hut. {{n:quiet}} also restrict voices (one-way lines, soundproofing, radio dead zones). {{n:middle}} pass the answer through a middle player who retells it.</li>
+    <li><b>Every failure costs everything.</b>In all 29 a failed attempt starts again from nothing, with new pictures where it has any; four allow two or three wrong checks first. {{n:streak}} are streaks where one miss resets the count. Every design was written to be harder than the base game's nearest puzzle, and none is short.</li>
+    <li><b>The variety is in the body and the channel.</b>Skis, snowballs, mazes, blindfolds, invisible ink, humming and mime change what it feels like. Seven puzzles break the pattern in some real way; they are named further down.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>The four families, before</h2>
+  <div class="split" role="img" aria-label="13 lit-target puzzles, 3 timed holds, 11 picture matches, 2 tune matches">
+    <div class="fam-lit" style="flex: {{fam:lit}}">{{fam:lit}}</div>
+    <div class="fam-hold" style="flex: {{fam:hold}}">{{fam:hold}}</div>
+    <div class="fam-match" style="flex: {{fam:match}}">{{fam:match}}</div>
+    <div class="fam-tune" style="flex: {{fam:tune}}">{{fam:tune}}</div>
+  </div>
+  <ul class="legend">
+    <li><i class="sw sw-lit"></i><b>Be at the lit one · {{fam:lit}}</b><span class="d">A lamp picks one of several targets. Stand on it ({{n:pad}}), ski through it ({{n:ski}}), throw into it ({{n:throw}}) or carry the snowman to it (1).</span></li>
+    <li><i class="sw sw-hold"></i><b>Hold the lit one · {{fam:hold}}</b><span class="d">The same engine with hold buttons: hold yours when it is called, and let go when it is not.</span></li>
+    <li><i class="sw sw-match"></i><b>Describe it, hang it · {{fam:match}}</b><span class="d">A display shows pictures. They reach a peg board as words, pointing or a tile through a hatch.</span></li>
+    <li><i class="sw sw-tune"></i><b>Hum it, hang it · {{fam:tune}}</b><span class="d">The same with sound: a tune heard in headphones is hummed along to whoever has the speaking tiles.</span></li>
+  </ul>
+</section>
+
+<section>
+  <h2>How often each ingredient is used</h2>
+  <p class="prose muted">Bars are to scale: a full bar is all 29 puzzles.</p>
+  <div class="barsets" id="barsets"></div>
+</section>
+
+<section>
+  <h2>The most alike</h2>
+  <p class="prose">Seventeen of the 29 fall into eight groups built on the same idea. The figure is how many of this page's traits the two share, out of all the traits either has. Where it is low, the place and the jobs are the same and the rules round them differ.</p>
+  <ul class="pairs">
+    <li><div class="score num">{{pair:AdventTrail:RadioSilence}}<small>traits shared</small></div><div><b>Advent Trail and Radio Silence</b><br>Three pictures in one sealed room and two in the next, passed down a one-way microphone-to-headphones line, merged into order by the middle player, hung from a rack of scribbles against a clock. Radio Silence seals all three rooms and adds a lamp button back up the line. They stand about 150 m apart in the Plaza hub. Stocking Sort is close to both ({{pair:AdventTrail:StockingSort}}).</div></li>
+    <li><div class="score num">{{pair:Footprints:ThinIce}}<small>traits shared</small></div><div><b>Footprints and Thin Ice</b><br>A lamp board in a soundproof hut, heard in the headphones of a raised seat, called on by voice to a walker on a grid, ten in a row. Thin Ice blindfolds the walker and cuts holes in the grid; Footprints hides the pads.</div></li>
+    <li><div class="score num">{{pair:HoldTheStar:MidnightFinale}}<small>traits shared</small></div><div><b>Hold the Star and Midnight Finale</b><br>A caller in a soundproof room, a one-way push-to-talk line, stations of three hold buttons, 5 s rounds, a streak, then everyone acting at once. Midnight Finale calls scribbles that change places; Hold the Star calls colours.</div></li>
+    <li><div class="score num">{{pair:BlizzardWalk:WhiteoutMaze}}<small>traits shared</small></div><div><b>Blizzard Walk and Whiteout Maze</b><br>A snow maze, a reader in a hut who cannot see it, a guide high above who can, and a walker sent to dead ends. Whiteout Maze blindfolds the walker and names the dead ends by picture; Blizzard Walk puts the reader 300 m away and times every phase.</div></li>
+    <li><div class="score num">{{pair:Downhill:Slalom}}<small>traits shared</small></div><div><b>Downhill and Slalom</b><br>Both are called "the Called Slalom": six rows of three coloured gates, with the live one shown only on a lamp map in a timing hut. Downhill has one skier, two callers and a ball to deliver; Slalom needs two skiers in the lane together.</div></li>
+    <li><div class="score num">{{pair:SnowballRange:SummitShot}}<small>traits shared</small></div><div><b>Snowball Range and Summit Shot</b><br>A caller with lamps beside pictures, a spotter who can see the targets, and a thrower who cannot. Summit Shot adds the blindfold and the wall and makes misses free; the Range rations the snowballs.</div></li>
+    <li><div class="score num">{{pair:BlindCarols:WhisperingChimney}}<small>traits shared</small></div><div><b>Blind Carols and Whispering Chimney</b><br>A tune heard only in a headphone chair, hummed to a go-between, matched among the same nine speaking tiles. Blind Carols has blind hands and a clock; Whispering Chimney has neither, and lets the matcher hum back.</div></li>
+    <li><div class="score num">{{pair:BaubleHunt:SnowBridge}}<small>traits shared</small></div><div><b>Bauble Hunt, Blind Sculptor and Snow Bridge</b><br>The three invisible-ink puzzles: one player reads a display, one sees the tiles' pictures through the ink telescope, and the hands see only blanks. Bauble Hunt fetches and posts, Blind Sculptor blindfolds the hands, Snow Bridge has two boards.</div></li>
+  </ul>
+</section>
+
+<section>
+  <div class="two">
+    <div>
+      <h2>The ones that break the pattern</h2>
+      <ul>
+        <li><b>Light the Tree.</b> No caller and nobody shut in: all three players watch a neighbour's lamps and press their own.</li>
+        <li><b>Reindeer Count.</b> Reversed: the spotters are outside and many, the doer is the one shut in, and the first question is who can see the lamp at all.</li>
+        <li><b>Sleigh Run.</b> The player carrying the load is also the one describing; the others open doors for them.</li>
+        <li><b>Glass Booth.</b> The first link has no words, only pointing.</li>
+        <li><b>Lookouts.</b> The only one that uses the island's size: its players are up to 1.4 km apart and talk by radio.</li>
+        <li><b>Whispering Chimney and Snow Bridge.</b> With Bauble Hunt, the only three with no clock and no streak (a wrong check still ends the attempt). Whispering Chimney is also the one design in which the answer is hummed back to be checked.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>What no puzzle asks for</h2>
+      <ul>
+        <li><b>Working something out.</b> No deduction, counting, pattern, riddle or code to crack. The answer is always on show to somebody.</li>
+        <li><b>Exploring or travelling.</b> Bauble Hunt's search stays inside one fenced wood, and only Lookouts sends anyone across the island. The railway, the mine, the planes, the gondola, the map, the compass and the GPS are never part of a puzzle.</li>
+        <li><b>Building or balancing.</b> Snowballs are carried and thrown; nothing is stacked, bridged or assembled.</li>
+        <li><b>The whole group together.</b> Every puzzle parts the group: somebody is always sent off to a hut, a tower or a booth. Pairs work together in a few (Slalom's two skiers, Snowman's builders, the runners in Fairy Lights), never everyone.</li>
+        <li><b>A gentle one.</b> Every puzzle ends the attempt on a failure. Four allow two or three wrong checks first, and Summit Shot lets a throw miss for free. The shortest guess is 8 to 15 minutes.</li>
+        <li><b>The island's own weather and night.</b> None uses the hour, the dark, a blizzard, the sea, or the dinosaurs.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Where they stand</h2>
+  <p class="prose muted">In walking order from the landing. Colours are the four families.</p>
+  <div class="zones" id="zones"></div>
+</section>
+
+<section>
+  <h2>Every puzzle against every trait</h2>
+  <p class="prose muted">Press a column heading to show only the puzzles with that trait in the list below. Press a name to go to its card.</p>
+  <div class="gridwrap"><table class="grid" id="grid"></table></div>
+</section>
+
+<section id="catalogue">
+  <h2>The puzzles</h2>
+  <div class="controls">
+    <div class="chips" id="famchips"></div>
+    <label class="sel" for="f-trait">Trait <select id="f-trait"></select></label>
+    <label class="sel" for="f-zone">District <select id="f-zone"></select></label>
+    <label class="sel" for="f-sort">Order <select id="f-sort">
+      <option value="fam">By family</option><option value="name">By name</option><option value="short">Shortest first</option><option value="zone">By district</option>
+    </select></label>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="cards" id="cards"></div>
+</section>
+
+<div class="notes">
+  <p><b>Where this comes from.</b> Each puzzle's design spec and build notes from the redesign of 22 November, checked against the puzzle code in release 2026.11.24. On 22 November each of the 29 started, stopped and won by test command in the running game. None has been played by a group, so the times are the designs' own guesses for a first solve by three players, and nothing here says how any of them feels to play.</p>
+  <p><b>How the traits were tagged.</b> By reading the design notes. "Voices restricted" is counted only where the design guards sound itself (soundproofing, a one-way line, or a radio dead zone); where a puzzle is split by sight alone and talk is free, it is not.</p>
+  <p><b>Pictures.</b> Each site from the south at eye height, captured in the game on 22 November, before the lowland's trees were thinned and the lights were changed. The small mark in the middle is the game's reticle.</p>
+</div>
+
+</div>
+
+<script>
+const P = /*DATA*/[];
+const FAM = {
+  lit: { name: 'Be at the lit one' }, hold: { name: 'Hold the lit one' },
+  match: { name: 'Describe it, hang it' }, tune: { name: 'Hum it, hang it' }
+};
+const FAM_ORDER = ['lit', 'hold', 'match', 'tune'];
+const ZONES = ['Plaza hub', 'East Lowland', 'North shore', 'South-east', 'High and west'];
+const GROUPS = [
+  ['What the doer does', [['pad', 'Stands on the lit spot'], ['ski', 'Skis the lit line'], ['throw', 'Throws at the lit target'], ['hold', 'Holds the lit button'], ['pics', 'Hangs picture tiles'], ['tunes', 'Hangs tunes'], ['haul', 'Carries something as part of it']]],
+  ['How the answer travels', [['hut', 'Cue shown only inside a hut'], ['quiet', 'Voices restricted'], ['name', 'Pictures put into words'], ['middle', 'A middle player retells'], ['chair', 'Headphone chair'], ['split', 'Answer split between sources'], ['scope', 'Telescope'], ['blind', 'Blindfold'], ['radio', 'Walkie-talkies in the plan'], ['ink', 'Invisible ink'], ['mime', 'Pointing or mime']]],
+  ['What the pressure is', [['streak', 'In a row; a miss resets'], ['clock', 'One clock over the try'], ['beat', 'Timer on every round'], ['check', 'A wrong check ends it'], ['sync', 'An all-hands moment']]],
+  ['The ground', [['far', 'Players 90 m or more apart'], ['maze', 'A maze']]]
+];
+const LABEL = {};
+GROUPS.forEach(g => g[1].forEach(t => { LABEL[t[0]] = t[1]; }));
+const N = P.length;
+const count = key => P.filter(p => p.tags.includes(key)).length;
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const byId = {};
+P.forEach(p => { byId[p.id] = p; });
+
+function alike(p) {
+  return P.filter(q => q !== p).map(q => {
+    const shared = p.tags.filter(t => q.tags.includes(t)).length;
+    const all = new Set(p.tags.concat(q.tags)).size;
+    return { q, shared, all, s: shared / all };
+  }).sort((a, b) => b.s - a.s || a.q.name.localeCompare(b.q.name));
+}
+
+/* the rework */
+const KIND = { keep: 'Sealed rooms stay', small: 'One or two can do it', group: 'Three or four together' };
+(function () {
+  const timedNow = P.filter(p => p.tags.includes('beat') || p.tags.includes('clock') || p.id === 'SleighRun').length;
+  const shutNow = P.filter(p => p.tags.includes('hut') || p.tags.includes('quiet')).length;
+  const kinds = k => P.filter(p => p.plan.kind === k).length;
+  const rows = [
+    ['Puzzles that shut a player in a hut or restrict voices', shutNow, kinds('keep')],
+    ['Puzzles with a clock or a timer on every round', timedNow, P.filter(p => p.plan.timer).length],
+    ['Puzzles one or two players can finish', 0, kinds('small')],
+    ['Puzzles for three or four working together in the open', 0, kinds('group')]
+  ];
+  const changing = P.filter(p => p.plan.kind !== 'keep').length, built = P.filter(p => p.plan.done).length;
+  document.getElementById('shift').innerHTML = rows.map(r => '<div class="shift-row"><span>' + esc(r[0]) + '</span><b><s>' + r[1] + '</s> \u2192 ' + r[2] + '</b></div>').join('');
+  const order = { small: 0, group: 1, keep: 2 };
+  const list = P.slice().sort((a, b) => order[a.plan.kind] - order[b.plan.kind] || a.name.localeCompare(b.name));
+  document.getElementById('shift').insertAdjacentHTML('beforeend', '<div class="shift-row"><span>Reworked, built and tested in the game so far</span><b>' + built + ' of ' + changing + '</b></div>');
+  document.getElementById('plan').innerHTML = '<thead><tr><th>Puzzle</th><th>Becomes</th><th>What changes</th><th>Fewest players</th><th>Timer</th><th>Built</th></tr></thead><tbody>' +
+    list.map(p => '<tr><td class="nm"><button type="button" data-go="' + p.id + '">' + esc(p.name) + '</button></td><td><span class="kind kind-' + p.plan.kind + '">' + esc(KIND[p.plan.kind]) + '</span></td><td class="idea">' + esc(p.plan.idea) + '</td><td class="c">' + esc(p.plan.least) + '</td><td class="c">' + (p.plan.timer ? 'Yes' : 'No') + '</td><td><span class="state' + (p.plan.done ? ' done' : '') + '">' + (p.plan.kind === 'keep' ? 'No change' : p.plan.done ? 'Built' : 'Not yet') + '</span></td></tr>').join('') + '</tbody>';
+})();
+
+/* bars */
+(function () {
+  const host = document.getElementById('barsets');
+  host.innerHTML = GROUPS.slice(0, 3).map(g => {
+    const rows = g[1].map(t => [t[1], count(t[0])]).sort((a, b) => b[1] - a[1]);
+    return '<div class="barset"><h3>' + esc(g[0]) + '</h3>' +
+      rows.map(r => '<div class="bar-row"><span>' + esc(r[0]) + '</span><span class="bar"><i style="width:' + (100 * r[1] / N).toFixed(1) + '%"></i></span><span class="n">' + r[1] + '</span></div>').join('') +
+      '<div class="scale"><div><span>0</span><span>' + N + '</span></div></div></div>';
+  }).join('');
+})();
+
+/* districts */
+(function () {
+  const host = document.getElementById('zones');
+  host.innerHTML = ZONES.map(z => {
+    const list = P.filter(p => p.zone === z).sort((a, b) => FAM_ORDER.indexOf(a.fam) - FAM_ORDER.indexOf(b.fam) || a.name.localeCompare(b.name));
+    return '<div class="zone"><div class="zn">' + esc(z) + ' <span class="muted num">' + list.length + '</span></div><div class="pills">' +
+      list.map(p => '<button type="button" class="pill fam-' + p.fam + '" data-go="' + p.id + '">' + esc(p.name) + '</button>').join('') + '</div></div>';
+  }).join('');
+})();
+
+/* trait grid */
+const state = { fam: 'all', trait: '', zone: '', sort: 'fam' };
+function drawGrid() {
+  const cols = [];
+  GROUPS.forEach(g => g[1].forEach((t, k) => cols.push({ key: t[0], label: t[1], first: k === 0 })));
+  let h = '<thead><tr><th class="corner"></th>' + GROUPS.map(g => '<th class="grp" colspan="' + g[1].length + '">' + esc(g[0]) + '</th>').join('') + '</tr><tr><th class="corner"></th>' +
+    cols.map(c => '<th class="col' + (c.first ? ' first' : '') + (state.trait === c.key ? ' hl' : '') + '"><button type="button" data-trait="' + c.key + '" aria-pressed="' + (state.trait === c.key) + '">' + esc(c.label) + ' <span class="cnt">' + count(c.key) + '</span></button></th>').join('') + '</tr></thead><tbody>';
+  const rows = P.slice().sort((a, b) => FAM_ORDER.indexOf(a.fam) - FAM_ORDER.indexOf(b.fam) || a.name.localeCompare(b.name));
+  rows.forEach(p => {
+    h += '<tr><th scope="row"><button type="button" data-go="' + p.id + '"><i class="sw sw-' + p.fam + '"></i>' + esc(p.name) + '</button></th>' +
+      cols.map(c => {
+        const on = p.tags.includes(c.key);
+        return '<td class="' + (c.first ? 'first ' : '') + (on ? 'on-' + p.fam : '') + (state.trait === c.key ? ' hl' : '') + '">' + (on ? '<i title="' + esc(p.name + ': ' + c.label) + '"></i>' : '') + '</td>';
+      }).join('') + '</tr>';
+  });
+  document.getElementById('grid').innerHTML = h + '</tbody>';
+}
+
+/* cards */
+const ARROW = { fwd: '⟶', back: '⟵', both: '⟷' };
+function card(p0) {
+  const redone = p0.plan.done && p0.now;
+  const p = redone ? Object.assign({}, p0, p0.now) : p0;
+  const near = alike(p0).slice(0, 2);
+  const chain = p.chain.map(c => c.r
+    ? '<div class="node"><b>' + esc(c.r) + '</b><span class="at">' + esc(c.at) + '</span><span class="has">' + esc(c.has) + '</span></div>'
+    : '<div class="link"><span class="arrow" aria-hidden="true">' + ARROW[c.dir] + '</span><span>' + esc(c.via) + (c.dir === 'both' ? ' (both ways)' : '') + '</span></div>').join('');
+  return '<article class="card" id="card-' + p.id + '">' +
+    '<div class="card-head"><div><span class="famtag fam-' + p.fam + '">' + esc(FAM[p.fam].name) + '</span>' + (redone ? ' <span class="kind kind-' + p.plan.kind + '">Reworked</span>' : '') + '<h3>' + esc(p.name) + '</h3><p class="tag">' + esc(p.tag) + '</p></div>' +
+    '<img src="img/' + p.id + '.jpg" width="420" height="199" loading="lazy" alt="' + esc(p.name) + ' seen from the south"></div>' +
+    '<div class="chain">' + chain + '</div>' +
+    '<dl class="facts2"><dt>To win</dt><dd>' + esc(p.win) + '</dd><dt>A mistake</dt><dd>' + esc(p.cost) + '</dd><dt>Only here</dt><dd>' + esc(p.own) + '</dd>' +
+    (p.lobby ? '<dt>Other sizes</dt><dd>' + esc(p.lobby) + '</dd>' : '') + '</dl>' +
+    (redone ? '' : '<div class="traits">' + p.tags.map(t => '<span>' + esc(LABEL[t]) + '</span>').join('') + '</div>') +
+    '<div class="card-foot">' + (redone ? '<span>Fewest players: <b>' + esc(p.plan.least) + '</b></span>' : '<span><b>' + p.time[0] + ' to ' + p.time[1] + ' min</b> guessed for three</span>') + '<span>' + esc(p.zone) + '</span><span>' + (p.code ? 'Script: ' + esc(p.code) : 'SDK parts only') + '</span>' +
+    (redone ? '' : '<span>Most alike: ' + near.map(n => '<button type="button" data-go="' + n.q.id + '">' + esc(n.q.name) + '</button> (' + n.shared + ' of ' + n.all + ')').join(', ') + '</span>') + '</div></article>';
+}
+function drawCards() {
+  let list = P.filter(p => (state.fam === 'all' || p.fam === state.fam) && (!state.trait || p.tags.includes(state.trait)) && (!state.zone || p.zone === state.zone));
+  const famOrder = (a, b) => FAM_ORDER.indexOf(a.fam) - FAM_ORDER.indexOf(b.fam) || a.name.localeCompare(b.name);
+  if (state.sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+  else if (state.sort === 'short') list.sort((a, b) => a.time[0] - b.time[0] || a.time[1] - b.time[1] || a.name.localeCompare(b.name));
+  else if (state.sort === 'zone') list.sort((a, b) => ZONES.indexOf(a.zone) - ZONES.indexOf(b.zone) || famOrder(a, b));
+  else list.sort(famOrder);
+  document.getElementById('cards').innerHTML = list.map(card).join('') || '<p class="muted">No puzzle has all of that. Clear a filter.</p>';
+  document.getElementById('count').textContent = 'Showing ' + list.length + ' of ' + N;
+}
+function drawControls() {
+  document.getElementById('famchips').innerHTML = [['all', 'All', N]].concat(FAM_ORDER.map(f => [f, FAM[f].name, P.filter(p => p.fam === f).length]))
+    .map(c => '<button type="button" class="chip" data-fam="' + c[0] + '" aria-pressed="' + (state.fam === c[0]) + '">' + (c[0] === 'all' ? '' : '<i class="sw sw-' + c[0] + '"></i>') + esc(c[1]) + ' <span class="num">' + c[2] + '</span></button>').join('');
+  const ft = document.getElementById('f-trait');
+  ft.innerHTML = '<option value="">Any</option>' + GROUPS.map(g => '<optgroup label="' + esc(g[0]) + '">' + g[1].map(t => '<option value="' + t[0] + '">' + esc(t[1]) + ' (' + count(t[0]) + ')</option>').join('') + '</optgroup>').join('');
+  ft.value = state.trait;
+  const fz = document.getElementById('f-zone');
+  fz.innerHTML = '<option value="">Any</option>' + ZONES.map(z => '<option>' + esc(z) + '</option>').join('');
+  fz.value = state.zone;
+  document.getElementById('f-sort').value = state.sort;
+}
+function redraw() { drawControls(); drawGrid(); drawCards(); }
+function go(id) {
+  const p = byId[id];
+  if (!p) return;
+  if ((state.fam !== 'all' && p.fam !== state.fam) || (state.trait && !p.tags.includes(state.trait)) || (state.zone && p.zone !== state.zone)) {
+    state.fam = 'all'; state.trait = ''; state.zone = ''; redraw();
+  }
+  const el = document.getElementById('card-' + id);
+  if (!el) return;
+  const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1600);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.go) go(b.dataset.go);
+  else if (b.dataset.fam) { state.fam = b.dataset.fam; redraw(); }
+  else if (b.dataset.trait) { state.trait = state.trait === b.dataset.trait ? '' : b.dataset.trait; redraw(); }
+});
+document.getElementById('f-trait').addEventListener('change', e => { state.trait = e.target.value; redraw(); });
+document.getElementById('f-zone').addEventListener('change', e => { state.zone = e.target.value; redraw(); });
+document.getElementById('f-sort').addEventListener('change', e => { state.sort = e.target.value; redraw(); });
+redraw();
+</script>

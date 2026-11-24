@@ -60,13 +60,57 @@ code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-N
 - `world\` — the world index and part metrics.
 - `vendor\` — the SDK's `.unitypackage`, and `BigPuzzleSDK-src\` (its source: `Mod\` is the in-game code,
   `Unity\BigPuzzleSDK\Internal\` the editor stubs and checks, `docs\components.txt` the component reference).
-- `docs\` — plans.
+- `docs\` — plans. `docs\puzzle-variety\` is the review of all the puzzles and the plan for reworking them (see
+  "What kind of puzzle" below).
 
 ## Writing a puzzle
 
 Add a class in `unity\Assets\Editor\Puzzles\`. `GlassBoothPuzzle.cs` is the model for a real puzzle (pad,
 walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the minimal smoke test.
 
+- **What kind of puzzle (the user, 2026-11-24):** "there aren't enough puzzles that don't rely on timers or
+  isolation. Isolation should be seldom; the majority of the puzzles should be completable by 3-4 players and shouldn't
+  always isolate them and include some puzzles that 1 or 2 players could complete (like the basketball puzzle in the
+  base game)". The redesign of 2026-11-22 had made all 29 the same thing: a player shut in a hut with the answer,
+  one-way voice to the others, a clock or a streak that resets (24 hid the cue in a hut, 26 had a timer, every one
+  needed three players with fixed jobs). So by default players work together in the open, in sight and earshot of each
+  other, with no clock and little to lose on a miss; sealed rooms, one-way lines and timers are the exception. Five
+  relays stay as they were (Glass Booth, Radio Silence, Snow Globe, Lookouts, Midnight Finale), about ten puzzles are
+  for one or two players (skill, counting, logic), the rest are for three or four together. The plan for each puzzle,
+  and which are built (`done`), is `plan` in `docs\puzzle-variety\puzzles.json`; `python docs\puzzle-variety\build.py`
+  writes the review page (`shots\puzzle-variety\puzzle-variety.html`), which is published as the artifact "Winter Isle
+  Puzzle Variety". The base game's own puzzles for any number of players are the model: `LandmarksPlayerCountAny` in
+  `world\world-index.tsv` (BasketballChallenge, EggHunt, PerspectiveCounting, MemoryBombs, CannonBallCarry, Fielding,
+  KickUpPits and more).
+- **Scripts for puzzles with no clock** (`unity\Assets\PuzzleScripts\`; each finds its parts by name under the
+  puzzle's root, and only the host decides):
+  - **`Tally`**: targets that each count once, in any order (a basket hit, a window flown through). Wire each target's
+    event to `Hit(k)` (k from 1, as the event's int argument) and the root's `onPuzzleStop` to `Clear()`; the lamp named
+    `<lampPrefix>k` lights, every bar named `<barPrefix>...` goes up, all marked wins. `SnowballRangePuzzle.cs`,
+    `BigAirPuzzle.cs`.
+  - **`Seek`**: one spot of a set is lit; stand on it for `dwell` seconds and it counts and another lights; `rounds`
+    found win. Spots are the Presence Sensors named `<sensorPrefix><tag>`, each with the lamp `<lampPrefix><tag>`. Wire
+    `onPuzzleStart` to `Begin()` and `onPuzzleStop` to `End()`. It exists because the SDK's Press In Order cannot do
+    this: untimed, it fails on the first other sensor a walker crosses; timed, it needs a phase clock.
+    `ThinIcePuzzle.cs`, `FootprintsPuzzle.cs`.
+  - **`ItemReturn`**: lays an item that has come to rest in a catching box back at a home spot (Snowball Range's
+    baskets). **The game pins a prop that stops moving**, so no sloped floor empties a basket: on 15 and on 48 degrees
+    the snowballs stayed where they landed. It reads the item's place and moves it through the SDK mod's own
+    `PuzzleItem` (`prop`, `SendTo`) by reflection; an SDK update can rename them, and the log then says so.
+- **A lamp's `color` tints its lens whether it is lit or not.** Slalom's gate lamps in a strong green looked the same
+  on and off in daylight (only the glow on the snow told them apart). Keep a lamp whose state must be read near white
+  (1, 0.92, 0.75): off it is a dull olive disc, lit a bright white one, readable at 50 m by day. Say whose lamp it is
+  with a painted board or banner beside it.
+- **The gourd's corner stands on the puzzle's own site** (the level, cleared ground where the island's path arrives),
+  not beside a ski run: the island plants a wall of firs along every run's edge, and Big Air's vice at its gantry's
+  foot stood inside it.
+- **How far players throw is not measured.** The companion's `press` picks an item up (`use`, looking at it within
+  2 m: `stickLookY` -1 for a second looks 40 degrees down) but nothing it presses lets go of it again (`drop`, a held
+  `use`, the wave buttons), so no test throw has been made. Known: the hand holds an item 1.24 m up, a jump lifts
+  1.03 m (`jumpForce` 4.5), a throw winds up for at most a second (`PlayerTunings.maxWindUpDuration`), and the base
+  game's own basketball hoop (`BasketballChallenge`) has its ring 3.1 m up and its funnel's mouth about 4.6 m.
+  Snowball Range's baskets (rims 3.0 to 3.6 m, players standing where they like) are set from that. Ask the user how a
+  throwing puzzle plays before building another on it.
 - Coordinates are local metres from the puzzle's centre, `+z` forward. `height` is measured from the terrain
   under that point; pass `onGround: false` to measure from the root's level instead. For anything with walls,
   build one level pad (`b.Box`, sunk about 1.5 m) and place everything `onGround: false` on it.

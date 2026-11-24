@@ -1,20 +1,17 @@
 // Thin Ice: a frozen pond of 25 floes in a 5 x 5 grid on a raised stone basin behind a tall picket fence, five of them
-// broken to open black water (spec: puzzle-specs/ThinIce.md, revision 2, 2026-11-22).
+// broken to open black water. A puzzle for two, in the open, with no clock.
 //
-// The crosser puts on the blindfold on the roofed entry landing and goes through the blind turnstile onto the ice.
-// Every phase a lamp lights on a map of the pond, and when the phase runs out the crosser must stand on that floe and
-// nobody on any other (the SDK's Press In Order in timed mode, the floes its Presence Sensor buttons). The map hangs
-// inside the ice-master's lodge: soundproof, windowless, entered through a baffled vestibule, its door shut while the
-// puzzle runs. The spotter there sees the lamp but never the pond and speaks only into an intercom, which plays into the
-// headphones of the listening chair on the watch tower. The watcher in the chair hears only the spotter, sees the pond
-// and talks the blind crosser round the holes. Ten floes in a row win the gourd; the lit floe is random every phase.
+// The crosser puts on the blindfold on the roofed entry landing and goes through the blind turnstile onto the ice. The
+// guide climbs the watch tower. On the tower's rear wall, behind the guide as they watch the pond, hangs a lamp map of
+// the floes: one lamp is lit. The guide reads it, turns back to the pond and talks the blind crosser to that floe,
+// round the holes. When the crosser has stood on it for a moment it counts, its lamp goes out and another lights
+// (Seek, in PuzzleScripts). Six floes win the gourd. Stepping on other floes on the way costs nothing; a fall into a
+// hole costs the climb out (a stone step on each pit's south side). The two talk freely: nobody is shut in.
 //
-// Lobby sizes: three players as above (Map 3); four split the map between the lodge (west half) and the Far Hut (east
-// half), each with its own intercom into the same chair (Map 4, eight rounds); two players get a 20-lamp board on the
-// back of the tower's solid rear wall, facing away from the pond, which the watcher reads and turns round to call
-// (Map 2, 15 s phases). The IceWarden script (Assets/PuzzleScripts) ends a run when anyone on the ice is not
-// blindfolded, or anyone in a hut holds a walkie-talkie or megaphone. A miss (or the warden) ends the run with the
-// puzzle still switched on; any start switch off and on deals a new run.
+// The ice is blind-only: BlindWatch (PuzzleScripts) puts anyone on the pond who is not wearing the blindfold back
+// outside, so the crosser's half cannot be done by looking. That makes two players the fewest who can finish it.
+// (Before the user's rules of 2026-11-24 this was a three-link relay on a 17 s phase clock: a spotter shut in a
+// soundproof lodge with the map, an intercom into the headphones of a chair on the tower, the watcher's voice.)
 //
 // Coordinates: local metres from the root, x east, z north (+z forward); heights from the root's level, every piece
 // onGround: false (the island levels the site). Yaw: 0 faces +z, 180 -z, 90 +x, -90 -x.
@@ -34,12 +31,9 @@ public sealed class ThinIcePuzzle : PuzzleDef
     const float Sunk = -1.5f;           // foundations start this far under the root's level
     const float TowerDeck = 4.0f;
     const float TowerRoof = 6.6f;
-    const float HutWall = 2.6f;
-    const float HutFloor = 0.02f;       // 2 cm proud of the ground (coplanar faces z-fight)
-    const float DoorTop = 2.02f;        // the Door part: 1.24 wide, -0.02..2.02 high
-    const float LampRange = 0.15f;      // map lamps: the light ends inside the wall
-    const int Rounds3 = 10, Rounds4 = 8, Rounds2 = 10;
-    const float Phase3 = 17f, Phase4 = 17f, Phase2 = 15f;
+    const float LampRange = 0.15f;      // map lamps: the light stays on the board
+    const int Rounds = 6;               // floes to reach
+    const float Dwell = 1.5f;           // seconds on the lit floe before it counts
 
     // Holes (column, row), no floe, no sensor, no lamp
     static readonly Vector2Int[] Holes = { new Vector2Int(4, 1), new Vector2Int(2, 2), new Vector2Int(3, 3), new Vector2Int(1, 4), new Vector2Int(4, 5) };
@@ -62,9 +56,6 @@ public sealed class ThinIcePuzzle : PuzzleDef
         foreach (Vector2Int h in Holes) if (h.x == c && h.y == r) return true;
         return false;
     }
-    // The 4-player split: west half = columns 1-2 plus (3,1), (3,2); east half = columns 4-5 plus (3,4), (3,5)
-    static bool WestHalf(int c, int r) => c <= 2 || (c == 3 && r <= 2);
-
     // A block between two corners (local x, y, z) added to a mesh being built
     static void Block(MeshBuilder mb, float x0, float x1, float y0, float y1, float z0, float z1, Color color)
     {
@@ -103,14 +94,10 @@ public sealed class ThinIcePuzzle : PuzzleDef
     // An SDK part, measured from the root's level
     Piece P(string prefab, float x, float z, float height, float yaw = 0f) => b.Part(prefab, x, z, height, yaw, false);
 
-    // A map lamp (Light 8) with its light kept on the board
-    Component Lamp(string name, float x, float z, float height, float yaw, Piece group)
-        => P("Light 8", x, z, height, yaw).Named(name).Set("PuzzleLight", "range", LampRange).Under(group).Component("PuzzleLight");
-
     // A Progress Bar (the only scalable kind of part with Glass and Timer)
-    Component Bar(string name, float x, float z, float height, float yaw, Vector3 scale, int total, Piece group)
+    void Bar(string name, float x, float z, float height, float yaw, Vector3 scale, int total)
         => P("Progress Bar", x, z, height, yaw).Named(name).Scaled(scale.x, scale.y, scale.z)
-            .Set("PuzzleProgressBar", "total", total).Set("PuzzleProgressBar", "style", 0).Under(group).Component("PuzzleProgressBar");
+            .Set("PuzzleProgressBar", "total", total).Set("PuzzleProgressBar", "style", 0);
 
     public override void Build(PuzzleBuilder builder)
     {
@@ -119,134 +106,69 @@ public sealed class ThinIcePuzzle : PuzzleDef
         b.DebugTeleport(-8.5f, -5.5f, 1.5f);
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
         Material ice = b.ShaderMaterial("BWM/Snowy", "Ice", m => m.SetFloat("_SnowLine", 2f));
-        // No jetpacks over the puzzle: nobody flies onto the ice, the tower or the huts' roofs
+        // No jetpacks over the puzzle: nobody flies onto the ice
         IsleKit.CalmAir(b, "Thin Ice", 0f, 1.5f, new Vector3(44f, 120f, 40f), 0f, -10f, false);
 
         BuildPond(snowy, bare, ice);
         BuildTower(snowy, bare);
 
-        // ---- shared by every lobby size ----
-        var floes = new List<Vector2Int>();      // floe order: every map pairs its i-th lamp with the i-th floe
-        var sensors = new List<Component>();
+        // ---- the floes: one Presence Sensor each (the holes have none) ----
         for (int r = 1; r <= 5; r++)
             for (int c = 1; c <= 5; c++)
-            {
-                if (IsHole(c, r)) continue;
-                floes.Add(new Vector2Int(c, r));
-                Piece floe = IsleKit.Sensor(b, "Floe " + c + "-" + r, CellX(c), CellZ(r), new Vector3(1.9f, 2.6f, 1.9f), Deck, false);
-                sensors.Add(floe.Component("PuzzlePresenceSensor"));
-            }
+                if (!IsHole(c, r))
+                    IsleKit.Sensor(b, "Floe " + c + "-" + r, CellX(c), CellZ(r), new Vector3(1.9f, 2.6f, 1.9f), Deck, false);
         IsleKit.BlindfoldHook(b, -5.4f, -4.4f, 90f, Deck, false);
-        IsleKit.BlindGate(b, -4.4f, -2.5f, 0f, Deck, false);
-
-        Piece chairGroup = IsleKit.Lobby(b, "Chair", false, true, true);
-        Piece chair = P("Listening Chair", 0f, -7.4f, TowerDeck, 0f).Named("Watch Chair").Under(chairGroup);      // no microphone: only the intercoms
-        Component chairC = chair.Component("PuzzleListeningChair");
+        Piece gate = IsleKit.BlindGate(b, -4.4f, -2.5f, 0f, Deck, false);
 
         IsleKit.StartCorner(b, 6.5f, -9.5f, 0f, true, 0f, false);
-        P("Switch Start", -1.0f, -9.227f, TowerDeck + 1.25f, 0f).Named("Tower Switch");
-        P("Live Light", -0.6f, -9.294f, TowerDeck + 1.42f, 0f).Named("Tower Live");
+        P("Switch Start", 0.38f, -9.227f, TowerDeck + 1.05f, 0f).Named("Tower Switch");
+        P("Live Light", 0.38f, -9.294f, TowerDeck + 1.42f, 0f).Named("Tower Live");
 
-        Piece dead = P("Radio Dead Zone", 0f, 1.5f, 3f).Named("Dead Ice");
-        BoxCollider zone = dead.Go.GetComponent<BoxCollider>();
-        if (zone == null) zone = dead.Go.AddComponent<BoxCollider>();
-        zone.size = new Vector3(40f, 12f, 36f);
-        zone.center = Vector3.zero;
-
-        Piece warden = b.Empty("Ice Warden", 0f, 0f, 0f, false);
-        Component wardenC = b.AddCustomScript(warden, "IceWarden");
-        Sdk.Set(wardenC, "pondCentre", new Vector3(0f, 15.75f, 4f));      // the basin x -6.5..6.5, z -2.5..10.5, from 0.5 m (a pit's floor rider) to 31 m
-        Sdk.Set(wardenC, "pondSize", new Vector3(13f, 30.5f, 13f));
-        Sdk.Set(wardenC, "jettyCentre", new Vector3(0f, 16.4f, 11.7f));    // the jetty x -0.8..0.8, z 10.5..12.9, from 1.8 m (its first step is 2.1) up
-        Sdk.Set(wardenC, "jettySize", new Vector3(1.6f, 29.2f, 2.4f));
-        Sdk.Set(wardenC, "lodgeCentre", new Vector3(-13.25f, 1.4f, -2f));
-        Sdk.Set(wardenC, "lodgeSize", new Vector3(4.9f, 2.8f, 3.6f));
-        Sdk.Set(wardenC, "farCentre", new Vector3(13.25f, 1.4f, 12f));
-        Sdk.Set(wardenC, "farSize", new Vector3(4.9f, 2.8f, 3.6f));
-        Sdk.Set(wardenC, "interval", 0.3f);
-        Sdk.Set(wardenC, "checkHat", true);
-        Sdk.Set(wardenC, "checkRadios", true);
-
-        // ---- the huts (lodge: 3 and 4 players; Far Hut: 4 players) ----
-        Piece lodge = IsleKit.Lobby(b, "Lodge", false, true, true);
-        Component lodgeLamp = BuildHut(lodge, "Lodge", "Lodge Walls", "Lodge Door", "Lodge Switch", "Lodge Live", "Lodge Intercom", "Lodge Lamp",
-            "Room Light 1 FFD8A8 2.5 0.5", "Room Light 2 FFD8A8 1.5 0.3", -1f, 0f, chairC, snowy, bare);
-        Piece farHut = IsleKit.Lobby(b, "Far Hut", false, false, true);
-        Component farLamp = BuildHut(farHut, "Far Hut", "Far Hut Walls", "Far Door", "Far Switch", "Far Live", "Far Intercom", "Far Hut Lamp",
-            "Room Light 3 FFD8A8 2.5 0.5", "Room Light 4 FFD8A8 1.5 0.3", 1f, 14f, chairC, snowy, bare);
-
-        // ---- the three maps: one shown per lobby size ----
-        Vector3 eave = new Vector3(0.45f, 1f, 1f), hut = new Vector3(0.4f, 0.5f, 1f), board = new Vector3(0.3f, 0.5f, 1f);
-
-        // Map 2: the board on the south face of the tower's rear wall, read from the rear landing
-        Piece map2 = IsleKit.Lobby(b, "Map 2", true, false, false);
-        var lamps2 = new List<Component>();
-        foreach (Vector2Int f in floes)
-            lamps2.Add(Lamp("Tower Lamp " + f.x + "-" + f.y, -0.5f + (f.x - 3) * 0.3f, -9.6f, TowerDeck + 0.5f + (f.y - 1) * 0.3f, 180f, map2));
-        Component rounds2 = Bar("Rounds (2)", 0f, -6.9f, 6.15f, 180f, eave, Rounds2, map2);
-        Component phase2 = Bar("Phase (2)", 0f, -6.9f, 5.65f, 180f, eave, (int)Phase2, map2);
-        Component rounds2Board = Bar("Rounds (2) Board", -0.5f, -9.601f, 6.2f, 180f, board, Rounds2, map2);
-        Component phase2Board = Bar("Phase (2) Board", -0.5f, -9.601f, 4.25f, 180f, board, (int)Phase2, map2);
-        var paint2 = new MeshBuilder();
+        // ---- the lamp map on the tower's rear wall, facing the deck: the guide turns round to read it ----
+        // Row 1 (the tower's side of the pond) is the bottom row. The board is read facing south, so its columns are
+        // mirrored (column 1, the pond's west, hangs at the east end): what is on the left of the board is on the
+        // left of the pond when the guide turns back to it.
+        const float boardX = -0.6f, wallFace = -9.3f;
+        var paint = new MeshBuilder();
         for (int r = 1; r <= 5; r++)
         {
             float h = TowerDeck + 0.5f + (r - 1) * 0.3f;
-            Block(paint2, -1.27f, 0.27f, h - 0.14f, h + 0.14f, -9.525f, -9.505f, RowColours[r - 1]);
+            Block(paint, boardX - 0.77f, boardX + 0.77f, h - 0.14f, h + 0.14f, wallFace, wallFace + 0.02f, RowColours[r - 1]);
             for (int c = 1; c <= 5; c++)
-                if (IsHole(c, r))
-                {
-                    float x = -0.5f + (c - 3) * 0.3f;
-                    Block(paint2, x - 0.12f, x + 0.12f, h - 0.12f, h + 0.12f, -9.535f, -9.52f, HoleMark);
-                }
+            {
+                float x = boardX + (3 - c) * 0.3f;
+                if (IsHole(c, r)) Block(paint, x - 0.12f, x + 0.12f, h - 0.12f, h + 0.12f, wallFace + 0.02f, wallFace + 0.035f, HoleMark);
+                else P("Light 8", x, wallFace + 0.1f, h, 0f).Named("Tower Lamp " + c + "-" + r).Set("PuzzleLight", "range", LampRange);
+            }
         }
-        OnRoot("Tower Map Paint", paint2, bare, false).Under(map2);
-        Component pio2 = Order("Ice Map (2)", map2, lamps2, sensors, new[] { rounds2, rounds2Board }, new[] { phase2, phase2Board }, Rounds2, Phase2);
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", pio2, "Begin");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pio2, "End");
-        WireWin(rounds2);
+        OnRoot("Tower Map Paint", paint, bare, false);
+        Bar("Seek Bar Board", boardX, wallFace + 0.101f, TowerDeck + 2.2f, 0f, new Vector3(0.3f, 0.5f, 1f), Rounds);
+        Bar("Seek Bar Tower", 0f, -6.9f, 6.15f, 180f, new Vector3(0.45f, 1f, 1f), Rounds);
 
-        // Map 3: the lodge's east wall holds all 20 lamps
-        Piece map3 = IsleKit.Lobby(b, "Map 3", false, true, false);
-        var lamps3 = new List<Component>();
-        foreach (Vector2Int f in floes)
-            lamps3.Add(Lamp("Lodge Lamp " + f.x + "-" + f.y, -11.1f, -2.0f + (3 - f.x) * 0.3f, 1.0f + (f.y - 1) * 0.3f, -90f, map3));
-        Component rounds3Lodge = Bar("Rounds (3) Lodge", -12.2f, -0.501f, 2.05f, 180f, hut, Rounds3, map3);
-        Component phase3Lodge = Bar("Phase (3) Lodge", -12.2f, -0.501f, 1.75f, 180f, hut, (int)Phase3, map3);
-        Component rounds3Tower = Bar("Rounds (3) Tower", 0f, -6.9f, 6.15f, 180f, eave, Rounds3, map3);
-        Component phase3Tower = Bar("Phase (3) Tower", 0f, -6.9f, 5.65f, 180f, eave, (int)Phase3, map3);
-        Component pio3 = Order("Ice Map (3)", map3, lamps3, sensors, new[] { rounds3Lodge, rounds3Tower }, new[] { phase3Lodge, phase3Tower }, Rounds3, Phase3);
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", pio3, "Begin");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pio3, "End");
-        WireWin(rounds3Tower);
+        // ---- the rule: go to the lit floe; six found win (Seek.cs). Start deals, stop clears ----
+        Component seek = b.AddCustomScript(b.Empty("Ice Seek", 0f, 4f, Deck, false), "Seek");
+        Sdk.Set(seek, "sensorPrefix", "Floe ");
+        Sdk.Set(seek, "lampPrefix", "Tower Lamp ");
+        Sdk.Set(seek, "barPrefix", "Seek Bar");
+        Sdk.Set(seek, "rounds", Rounds);
+        Sdk.Set(seek, "dwell", Dwell);
+        Sdk.Set(seek, "need", 1);
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", seek, "Begin");
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", seek, "End");
 
-        // Map 4: the lodge's west-half lamps and the Far Hut's east-half lamps, each paired with its floe
-        Piece map4 = IsleKit.Lobby(b, "Map 4", false, false, true);
-        var lamps4 = new List<Component>();
-        foreach (Vector2Int f in floes)
-        {
-            if (WestHalf(f.x, f.y))
-                lamps4.Add(Lamp("Lodge Lamp " + f.x + "-" + f.y + " (4)", -11.1f, -2.0f + (3 - f.x) * 0.3f, 1.0f + (f.y - 1) * 0.3f, -90f, map4));
-            else
-                lamps4.Add(Lamp("Far Lamp " + f.x + "-" + f.y, 11.1f, 12.0f + (f.x - 3) * 0.3f, 1.0f + (f.y - 1) * 0.3f, 90f, map4));
-        }
-        Component rounds4Lodge = Bar("Rounds (4) Lodge", -12.2f, -0.501f, 2.05f, 180f, hut, Rounds4, map4);
-        Component phase4Lodge = Bar("Phase (4) Lodge", -12.2f, -0.501f, 1.75f, 180f, hut, (int)Phase4, map4);
-        Component rounds4Far = Bar("Rounds (4) Far", 12.2f, 13.499f, 2.05f, 180f, hut, Rounds4, map4);
-        Component phase4Far = Bar("Phase (4) Far", 12.2f, 13.499f, 1.75f, 180f, hut, (int)Phase4, map4);
-        Component rounds4Tower = Bar("Rounds (4) Tower", 0f, -6.9f, 6.15f, 180f, eave, Rounds4, map4);
-        Component phase4Tower = Bar("Phase (4) Tower", 0f, -6.9f, 5.65f, 180f, eave, (int)Phase4, map4);
-        Component pio4 = Order("Ice Map (4)", map4, lamps4, sensors, new[] { rounds4Lodge, rounds4Far, rounds4Tower },
-            new[] { phase4Lodge, phase4Far, phase4Tower }, Rounds4, Phase4);
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", pio4, "Begin");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pio4, "End");
-        WireWin(rounds4Tower);
-
-        // The huts' lamps: on while the puzzle runs (start and stop do different things, as the SDK's checks require)
-        foreach (Component lamp in new[] { lodgeLamp, farLamp })
-        {
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStart", lamp, "TurnOn");
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStop", lamp, "TurnOff");
-        }
+        // ---- the ice is blind-only: anyone on the pond or the jetty without the blindfold is put back outside ----
+        Piece putOut = b.Empty("Put Out", -8.3f, -3.4f, 1.0f, false);
+        putOut.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, -90f, 0f);      // facing west, away from the pond
+        Component watch = b.AddCustomScript(b.Empty("Blind Watch", 0f, 0f, 0f, false), "BlindWatch");
+        Sdk.Set(watch, "boxMin", new Vector3(-6.5f, 0.5f, -2.5f));      // the basin x -6.5..6.5, z -2.5..10.5 and the jetty to z 12.9,
+        Sdk.Set(watch, "boxMax", new Vector3(6.5f, 31f, 12.9f));        // from 0.5 m (someone in a pit rides at about 0.8) up
+        Sdk.Set(watch, "putOut", putOut.Transform);
+        Sdk.Add(watch, "gates", gate.Transform);
+        Sdk.Set(watch, "gateSkip", 1.2f);
+        Sdk.Set(watch, "cooldown", 1.5f);
+        Sdk.Set(watch, "interval", 0.25f);
+        Sdk.Set(watch, "dropHeld", true);
+        Sdk.Set(watch, "onlyWhileRunning", false);
 
         // ---- decoration ----
         Kit.LightRing(b, "Site Lights", 0f, 1.5f, 36f, 32f, 2.6f, true, 211);
@@ -261,10 +183,6 @@ public sealed class ThinIcePuzzle : PuzzleDef
         }, 0.05f, 0.5f, false, false, 213);
         Kit.LightString(b, "Tower Lights", new List<Vector3> { new Vector3(-1.8f, TowerRoof - 0.05f, -6.48f), new Vector3(1.8f, TowerRoof - 0.05f, -6.48f) },
             0.05f, 0.4f, false, false, 214);
-        Kit.LightString(b, "Lodge Lights", new List<Vector3> { new Vector3(-15.88f, HutWall + 0.12f, -3.95f), new Vector3(-15.88f, HutWall + 0.12f, -0.05f) },
-            0.05f, 0.4f, false, false, 215).Under(lodge);
-        Kit.LightString(b, "Far Hut Lights", new List<Vector3> { new Vector3(15.88f, HutWall + 0.12f, 10.05f), new Vector3(15.88f, HutWall + 0.12f, 13.95f) },
-            0.05f, 0.4f, false, false, 216).Under(farHut);
     }
 
     // The basin (rim, bed, floes, the five pits), the fence, the roofed entry landing, the exit jetty, the row posts and
@@ -376,8 +294,8 @@ public sealed class ThinIcePuzzle : PuzzleDef
         OnRoot("Column Flags", flags, bare, false);
     }
 
-    // The watch tower: a deck at 4.0 on posts, see-through picket parapets, the solid rear wall (the 2-player board on
-    // its far side), the rear landing, the roof with its eave beam and bar board, and the stair down to the east
+    // The watch tower: a deck at 4.0 on posts, see-through picket parapets, the solid rear wall (the lamp map on its
+    // pond side), the rear landing, the roof with its eave beam and bar board, and the stair down to the east
     void BuildTower(Material snowy, Material bare)
     {
         var mb = new MeshBuilder();
@@ -403,87 +321,4 @@ public sealed class ThinIcePuzzle : PuzzleDef
         OnRoot("Watch Tower", mb, snowy);
     }
 
-    // One hut, described as the lodge (s = -1, dz = 0: outer x -15.7..-10.8, z -3.8..-0.2) and mirrored in x and moved
-    // dz north for the Far Hut (s = 1). A soundproof shell (walls, roof, floor, the vestibule's baffle) under its own
-    // "... Walls" object, which holds nothing else (PuzzleSoundProof turns every collider under it into a voice wall);
-    // the door, switch, live lamp, intercom, ceiling lamp, room lights and the map's painted rows go under the hut's
-    // group. The map is on the wall nearest the pond, out of every line from the door. Returns the ceiling lamp.
-    Component BuildHut(Piece group, string label, string wallsName, string doorName, string switchName, string liveName, string intercomName,
-        string lampName, string room1, string room2, float s, float dz, Component chair, Material snowy, Material bare)
-    {
-        float X(float x) => -s * x;
-        float Z(float z) => z + dz;
-        void H(MeshBuilder mb, float x0, float x1, float y0, float y1, float z0, float z1, Color c) => Block(mb, X(x0), X(x1), y0, y1, Z(z0), Z(z1), c);
-
-        var shell = new MeshBuilder();
-        Color wall = IsleKit.Wood, roof = IsleKit.DarkWood;
-        const float y0 = -0.1f;
-        // west wall with the door opening exactly the Door's size (z -3.42..-2.18, up to 2.02)
-        H(shell, -15.7f, -15.5f, y0, HutWall, -3.8f, -3.42f, wall);
-        H(shell, -15.7f, -15.5f, y0, HutWall, -2.18f, -0.2f, wall);
-        H(shell, -15.7f, -15.5f, DoorTop, HutWall, -3.42f, -2.18f, wall);
-        H(shell, -11.0f, -10.8f, y0, HutWall, -3.8f, -0.2f, wall);          // east: the map's wall
-        H(shell, -15.5f, -11.0f, y0, HutWall, -3.8f, -3.6f, wall);          // south: switch, live lamp, intercom
-        H(shell, -15.5f, -11.0f, y0, HutWall, -0.4f, -0.2f, wall);          // north: the bars
-        H(shell, -15.85f, -10.65f, HutWall, HutWall + 0.2f, -3.95f, -0.05f, roof);
-        H(shell, -14.1f, -13.9f, HutFloor, HutWall, -3.6f, -1.2f, wall);     // the baffle: the way in is the 0.8 m gap at its north end
-        var floor = new MeshBuilder();
-        H(floor, -15.7f, -10.8f, -0.3f, HutFloor, -3.8f, -0.2f, IsleKit.DarkWood);      // under the whole footprint: no voice gap under the walls
-
-        Piece walls = b.Empty(wallsName, X(-13.25f), Z(-2.0f), 0f, false).Under(group);
-        Sdk.Set(b.AddScript(walls, "PuzzleSoundProof"), "material", 0);
-        OnRoot(label + " Shell", shell, snowy).Under(walls);
-        OnRoot(label + " Floor", floor, bare).Under(walls);
-
-        // outside: a red door frame and a stone chimney (not soundproofing, so not under the walls)
-        var outside = new MeshBuilder();
-        H(outside, -15.78f, -15.7f, 0f, 2.12f, -3.52f, -3.42f, IsleKit.Red);
-        H(outside, -15.78f, -15.7f, 0f, 2.12f, -2.18f, -2.08f, IsleKit.Red);
-        H(outside, -15.78f, -15.7f, 2.02f, 2.12f, -3.52f, -2.08f, IsleKit.Red);
-        H(outside, -11.85f, -11.35f, HutWall + 0.2f, HutWall + 1.1f, -1.25f, -0.75f, IsleKit.Stone);
-        OnRoot(label + " Trim", outside, snowy).Under(group);
-
-        // the map's painted rows on the inside of the map wall (row colours, black squares at the holes), 1 cm off it
-        var paint = new MeshBuilder();
-        for (int r = 1; r <= 5; r++)
-        {
-            float h = 1.0f + (r - 1) * 0.3f;
-            H(paint, -11.025f, -11.005f, h - 0.14f, h + 0.14f, -2.77f, -1.23f, RowColours[r - 1]);
-            for (int c = 1; c <= 5; c++)
-                if (IsHole(c, r))
-                {
-                    float z = -2.0f - s * (3 - c) * 0.3f;      // lodge: column 1 to the north (the reader's left); Far Hut: to the south
-                    Block(paint, X(-11.035f), X(-11.02f), h - 0.12f, h + 0.12f, z + dz - 0.12f, z + dz + 0.12f, HoleMark);
-                }
-        }
-        OnRoot(label + " Map Paint", paint, bare, false).Under(group);
-
-        P("Door", X(-15.6f), Z(-2.8f), 0f, -s * 90f).Named(doorName)
-            .Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", true).Under(group);
-        P("Switch Start", X(-13.2f), Z(-3.527f), 1.25f, 0f).Named(switchName).Under(group);
-        P("Live Light", X(-12.8f), Z(-3.594f), 1.42f, 0f).Named(liveName).Under(group);
-        P("Intercom Mic", X(-12.0f), Z(-3.58f), 1.35f, 0f).Named(intercomName).Add("PuzzleIntercom", "speakers", chair).Under(group);
-        Piece lamp = P("Light 2", X(-12.45f), Z(-2.0f), HutWall, 0f).Named(lampName).Under(group);
-        // always on, the same whatever the puzzle does: the room is never dark (Winter Walk's RoomLights)
-        b.Empty(room1, X(-12.45f), Z(-2.0f), 2.2f, false).Under(group);
-        b.Empty(room2, X(-14.8f), Z(-1.8f), 2.2f, false).Under(group);
-        return lamp.Component("PuzzleLight");
-    }
-
-    void WireWin(Component rounds) => Sdk.Wire(rounds, "onFull", b.Puzzle, "Win");
-
-    // A Press In Order in timed mode on an empty in its map group
-    Component Order(string name, Piece group, List<Component> lamps, List<Component> buttons, Component[] rounds, Component[] phases, int roundCount, float seconds)
-    {
-        Piece order = b.Empty(name, 0f, 0f, 0.5f, false).Under(group);
-        Component pio = b.AddScript(order, "PuzzlePressInOrder");
-        Sdk.Add(pio, "lights", lamps.ToArray());
-        Sdk.Add(pio, "buttons", buttons.ToArray());
-        Sdk.Add(pio, "progressBars", rounds);
-        Sdk.Add(pio, "phaseBars", phases);
-        Sdk.Set(pio, "rounds", roundCount);
-        Sdk.Set(pio, "holdAtEnd", true);
-        Sdk.Set(pio, "phaseSeconds", seconds);
-        return pio;
-    }
 }
