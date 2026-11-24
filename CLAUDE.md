@@ -596,6 +596,17 @@ The repo is on GitHub (`origin`), public since 2026-11-22 by the user's choice (
 the work forms a meaningful commit (a feature working in game, a spike answered, notes updated); do not ask
 each time, and do not commit broken or half-built states.
 
+**Releasing and installing are standing too** (the user, 2026-11-24, after the firework posts were released and
+installed on this PC at their word: "You can make that a standing rule for this project whenever we make any
+improvements/additions"). So once an improvement or addition works in the running game and is committed and pushed,
+without asking: `bwm.ps1 package`; check the zip's packs and plugin against the tested build; `bwm.ps1 release
+<version> -Notes <file>` with notes written for players (what changed, what is not tested); then update this PC's
+installed copy with that release's own `Install.ps1 -Yes` (the game closed), check the `CpuAffinity` line is still in
+the game folder's config, and start it once from Steam (`tools\perf\startup.ps1 -Mode install`) to see it reach the
+menu. Say afterwards what was released and installed. Claude's reading of its scope: changes players get (packs or
+the Winter Walk plugin), not notes-only or test-tool-only commits, and never a broken or half-built state. The user
+still copies the zip to Google Drive themselves, and the repo's visibility stays theirs.
+
 ## Known open problems
 
 - (Probably fixed 2026-11-22: the flat Glass sheet, see Glass above.) Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
