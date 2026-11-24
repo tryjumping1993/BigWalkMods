@@ -245,7 +245,7 @@ namespace BwmCompanion
                 case "": case "help":
                     yield return "commands: status | teleport?x&y&z or ?puzzle=Name | reload | shot?file=name[&cx&cy&cz&tx&ty&tz][&fov] | "
                         + "puzzle?name=Name&do=start|stop|win | time?hour=12 | weather[?set=Name] | season?set=Winter | snow?amount=1 | "
-                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | sit?path=Full/Path/To/Seat (or ?stand) | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | player[?do=jump|dud] | press?action=jump[,moveY...][&value=1][&ms=200] | crest[?kind=Level][&off=N|&on=N] | quit";
+                        + "find?name=text[&max=40] | host[?slot=BWM Test][&players=2] | menu | call?type=T&method=M | use[?name=Object] | env | terrain[?filter=Snow][&trees] | global?name=_X&value=1 | terrainset?prop=_X&value=1 | snowtest[?undo] | move?name=N[&nx&ny&nz]&x&y&z | look?x&y&z[&n=12] | ground?x&z[&all=1] | sit?path=Full/Path/To/Seat (or ?stand) | walk?x&z[&speed=1.5] | get?path=Type.member... | set?path=...&value=v | player[?do=jump|dud] | press?action=jump[,moveY...][&value=1][&ms=200] | crest[?kind=Level][&off=N|&on=N] | quit";
                     break;
                 case "status": yield return Status(); break;
                 case "teleport": yield return Teleport(r); break;
@@ -280,6 +280,8 @@ namespace BwmCompanion
                 case "look": yield return Look(r); break;
                 case "ground": yield return GroundHeight(r); break;
                 case "sit": yield return Sit(r); break;
+                case "use": yield return Use(r); break;
+                case "flare": yield return Flare(r); break;
                 case "walk": { IEnumerator<string> e = Walk(r); while (e.MoveNext()) yield return e.Current; break; }
                 case "obj": yield return Objects.Describe(r); break;
                 case "clone": yield return Objects.Clone(r); break;
@@ -1129,6 +1131,98 @@ namespace BwmCompanion
         // Seats the local player in a seat (an SDK Custom Chair, or any object with the game's PlayerPose under it),
         // as clicking it would: sit?path=Winter Isle root/.../Seat Left. sit?stand gets up. For testing what
         // carries a seated player (the gondola).
+        // What this PC's player's reach sees under the crosshair (the game's PlayerCaster), and with a name or path,
+        // a click on that object's CastableTarget as the game makes one (PlayerDecisions.UseCastableTarget), whatever
+        // the distance: use?name=Plaza Fireworks Button. For pressing buttons in tests.
+        static string Use(Request r)
+        {
+            NetworkIdentity player = NetworkClient.localPlayer;
+            if (player == null) return "ERROR not in a walk";
+            PlayerCharacter pc = player.GetComponent<PlayerCharacter>();
+            if (pc == null) return "ERROR the player has no PlayerCharacter";
+            var sb = new StringBuilder();
+            try
+            {
+                PlayerCaster caster = pc.caster;
+                CastableTarget seen = caster.castableTarget;
+                sb.Append("cast: target ").Append(seen != null ? PathOf(seen.transform) : "none").Append(", prop ").Append(caster.castProp != null ? "yes" : "none")
+                    .Append(", distance ").Append(F(caster.castDistance)).Append(", reach ").Append(F(caster.raycastMaxDistance)).Append(" (up ").Append(F(caster.raycastMaxDistanceUp))
+                    .Append("), layers ").Append(caster.layerMask.value);
+            }
+            catch (Exception e) { sb.Append("cast: ").Append(e.GetType().Name).Append(": ").Append(e.Message); }
+            if (!r.Has("name") && !r.Has("path")) return sb.ToString();
+            Transform t = Objects.Locate(r);
+            if (t == null) return sb + "\nERROR no object at that path or name";
+            CastableTarget target = t.GetComponentInChildren<CastableTarget>(true);
+            if (target == null) return sb + "\nERROR no CastableTarget under " + t.name;
+            PlayerDecisions decisions = pc.decisions;
+            if (decisions == null) return sb + "\nERROR the player has no PlayerDecisions";
+            var all = typeof(PlayerDecisions).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            MethodInfo use = all.FirstOrDefault(m => m.Name == "UseCastableTarget");
+            if (use == null) return sb + "\nERROR no UseCastableTarget";
+            ParameterInfo[] ps = use.GetParameters();
+            var args = new object[ps.Length];
+            for (int i = 0; i < ps.Length; i++)
+                args[i] = ps[i].ParameterType == typeof(CastableTarget) ? target : ps[i].ParameterType.IsValueType ? Activator.CreateInstance(ps[i].ParameterType) : null;
+            MethodInfo safe = all.FirstOrDefault(m => m.Name == "IsSafeToUseCastableTarget" && m.GetParameters().Length == 1);
+            if (safe != null) try { sb.Append("\nsafe to use: ").Append(safe.Invoke(decisions, new object[] { target })); } catch (Exception e) { sb.Append("\nsafe to use: ").Append(e.GetType().Name); }
+            use.Invoke(decisions, args);
+            return sb.Append("\nused ").Append(PathOf(target.transform)).Append(" by UseCastableTarget(").Append(string.Join(", ", ps.Select(q => q.ParameterType.Name + " " + q.Name))).Append(")").ToString();
+        }
+
+        // An SDK firework launcher's insides: flare?name=Plaza Fireworks Launcher (its states, its flare's particle
+        // system, its timer, its network object); &fire=1 calls its Fire() first. For finding out why a flare does
+        // or does not go up.
+        static string Flare(Request r)
+        {
+            Transform t = Objects.Locate(r);
+            if (t == null) return "ERROR no object at that path or name";
+            var sb = new StringBuilder(PathOf(t));
+            PuzzleFireworkLauncher launcher = t.GetComponent<PuzzleFireworkLauncher>();
+            sb.Append(launcher != null ? " | PuzzleFireworkLauncher enabled " + launcher.enabled : " | no PuzzleFireworkLauncher").Append(" | host ").Append(PuzzleSDK.IsHost);
+            if (r.Has("fire") && launcher != null)
+            {
+                try { launcher.Fire(); sb.Append(" | Fire() called"); } catch (Exception e) { sb.Append(" | Fire(): ").Append(e.GetType().Name).Append(": ").Append(e.Message); }
+            }
+            foreach (Component c in t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<TrackedPeckState>(), true))
+            {
+                TrackedPeckState st = c != null ? c.TryCast<TrackedPeckState>() : null;
+                if (st == null) continue;
+                sb.Append("\n  state ").Append(st.name).Append(st.gameObject.activeInHierarchy ? "" : " (inactive)").Append(": ");
+                try { sb.Append(st.currentPeckContext.state).Append(", predicted ").Append(st.peckContextForPrediction.state); } catch (Exception e) { sb.Append(e.GetType().Name); }
+            }
+            foreach (Component c in t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<PeckEffectParticleNetworked>(), true))
+            {
+                PeckEffectParticleNetworked fx = c != null ? c.TryCast<PeckEffectParticleNetworked>() : null;
+                if (fx == null) continue;
+                sb.Append("\n  particle effect ").Append(fx.name).Append(fx.gameObject.activeInHierarchy ? "" : " (inactive)").Append(fx.enabled ? "" : " (disabled)").Append(" at ").Append(V(fx.transform.position)).Append(": ");
+                try
+                {
+                    ParticleSystem ps = fx.targetParticleSystem;
+                    if (ps == null) sb.Append("no target particle system");
+                    else sb.Append("plays ").Append(PathOf(ps.transform)).Append(" at ").Append(V(ps.transform.position)).Append(ps.gameObject.activeInHierarchy ? "" : " (inactive)")
+                        .Append(", playing ").Append(ps.isPlaying).Append(", particles ").Append(ps.particleCount);
+                }
+                catch (Exception e) { sb.Append(e.GetType().Name).Append(": ").Append(e.Message); }
+            }
+            foreach (Component c in t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<PeckEffectTimerNetworked>(), true))
+            {
+                PeckEffectTimerNetworked timer = c != null ? c.TryCast<PeckEffectTimerNetworked>() : null;
+                if (timer == null) continue;
+                sb.Append("\n  timer ").Append(timer.name).Append(timer.gameObject.activeInHierarchy ? "" : " (inactive)").Append(": ");
+                try { sb.Append("active ").Append(timer.timerActive).Append(", ends ").Append(timer.endTime.ToString("0.0", CultureInfo.InvariantCulture)).Append(", network time ").Append(NetworkTime.time.ToString("0.0", CultureInfo.InvariantCulture)); }
+                catch (Exception e) { sb.Append(e.GetType().Name); }
+            }
+            foreach (Component c in t.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<NetworkIdentity>(), true))
+            {
+                NetworkIdentity id = c != null ? c.TryCast<NetworkIdentity>() : null;
+                if (id == null) continue;
+                sb.Append("\n  network object ").Append(id.name).Append(id.gameObject.activeInHierarchy ? "" : " (inactive)").Append(": ");
+                try { sb.Append("netId ").Append(id.netId).Append(", server ").Append(id.isServer).Append(", client ").Append(id.isClient); } catch (Exception e) { sb.Append(e.GetType().Name); }
+            }
+            return sb.ToString();
+        }
+
         static string Sit(Request r)
         {
             NetworkIdentity player = NetworkClient.localPlayer;

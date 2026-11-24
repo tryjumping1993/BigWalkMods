@@ -16,7 +16,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `build <Puzzle> -Resite` | Same, but searches for a new site instead of reusing the remembered one. |
 | `build-all` / `list` | All puzzle definitions. |
 | `play` | Starts the game with mods if needed and hosts a solo walk on the "BWM Test" save, capped at 30 fps (`BWM_FPS` overrides, 0 = no cap). Unattended, about 80 s. |
-| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `'press?action=jump'` / `'press?action=crouch,moveY&ms=1500'` (pretends the game's input, Rewired, has those actions held: the test player jumps, crouches and walks as a player would), `player` (the local player's ground, grip, pose, jump and crouch state), `render` (quality levels and renderer features; `'render?quality=2'` switches level, `'render?feature=HBAO&on=0'` one feature, `'render?awake=1'` keeps the player from falling asleep so the view holds still), `quit`; `game help` lists all. |
+| `game <command>` | Asks the running game's companion: `status`, `reload`, `'teleport?puzzle=X'`, `'shot?file=x&cx=..&cy=..&cz=..&tx=..&ty=..&tz=..'`, `'puzzle?name=X&do=start'` (or `stop`, `win`), `'time?hour=12'`, `'look?x=..&y=..&z=..'` (how far the level view is open in 12 directions), `'walk?x=..&z=..&speed=1.5'` (moves the player over the ground in a line), `'get?path=Type.member.member'` / `'set?path=...&value=v'` (read or change any game object's fields live), `'press?action=jump'` / `'press?action=crouch,moveY&ms=1500'` (pretends the game's input, Rewired, has those actions held: the test player jumps, crouches and walks as a player would), `player` (the local player's ground, grip, pose, jump and crouch state), `render` (quality levels and renderer features; `'render?quality=2'` switches level, `'render?feature=HBAO&on=0'` one feature, `'render?awake=1'` keeps the player from falling asleep so the view holds still), `'use?name=Plaza Fireworks Button'` (clicks that object as the game does, `PlayerDecisions.UseCastableTarget`, whatever the distance; with no name, says what the player's reach sees under the crosshair), `'flare?name=Plaza Fireworks Launcher'` (an SDK firework launcher's states, flare and timer; `&fire=1` fires it), `quit`; `game help` lists all. |
 | `companion` | Rebuilds the companion and Winter Walk plugins (the game must be closed). |
 | `launch` | Starts the game with mods without hosting. A normal Steam launch stays vanilla. `play` and `launch` tell Doorstop on the command line to load the dev profile, so they work even while a players' install sits in the game folder (a plain Steam start then runs the install). |
 | `log` | The puzzle-related lines of the last game run. |
@@ -205,6 +205,16 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Island Gear** (`IslandGearPuzzle.cs`, a scenery pack): five stations of the game's own tools (binoculars,
   walkie-talkies, megaphone, torches, GPS, map, compass, laser, night vision, a backpack and belt on hooks), at
   the landing, the plaza, the summit, the lodge and the mining yard. Items are not saved: a reload resets them.
+  **Firework posts** (the user, 2026-11-24: "fire-work stations similar to the base game", for a lost player to show the
+  others where they are): 13 of them, one beside each gear station and one on the flat of each of the railway's eight
+  stations out from the plaza (`FireworkPost`). Each is the SDK's Firework Launcher (the game's Flare Run launcher) on
+  a red and white post, with a Button Poke wired to its `Fire()`, a sign with a gold burst and a night lamp. The
+  launcher is tilted back 37 degrees so the flare goes straight up (as the game aims it, 53 degrees, the trail runs off
+  across the sky): a green column about 130 m tall that hangs for half a minute. The launcher cools down for 40 s and
+  ignores a press meanwhile, so the button comes back after 41 (`ButtonBack`). The island does not know where the
+  posts are, so they look for level ground clear of its dressing themselves (`PostSpot` reads `WinterIsle.dressing`:
+  build WinterIsle first). Pressed with the test player's own input at the plaza (reach 0.87 m), seen at midnight
+  from the frozen lake 245 m off: `shots\fire-7*.png`.
 - **The fog box** (`BWM/FogBox`, built in `Veil`): drawn on the outer faces of a box round the whole island (to 760 m)
   while the camera is outside it (fading over the last 60 m). The eye's ray is stepped through a round field of fog
   (dense to 150 m, thinning by e every `_Ceiling` 180 m above, fading over the outer half of an ellipse in the box) up
@@ -530,8 +540,9 @@ are in `Z:\Temp\claude\BigWalkMods\puzzle-specs\<Name>.md` with `<Name>.impl.md`
 An idle test player falls asleep about 12 s after the walk loads (red screen); asleep it reports no ground and ignores
 `press`, so movement tests must start within those seconds of `play`.
 
-What this cannot do: pick things up or hang them on snap points, press buttons as a player, or anything
-with two players. Those go to
+A button is pressed by the test player with `press?action=use` when the crosshair is on it within 2 m (aim with
+`stickLookY`, about 41 degrees a second; `use` with no name says what the reach sees), or from anywhere with
+`use?name=`. What this cannot do: hang things on snap points, or anything with two players. Those go to
 the user and friends, who must all have the same packs and SDK version.
 
 ## Things that are easy to get wrong

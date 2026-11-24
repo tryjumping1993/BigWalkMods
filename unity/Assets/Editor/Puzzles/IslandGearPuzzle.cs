@@ -4,6 +4,11 @@
 // Each station is a little roofed table with lights along its eave: at the causeway's landing, beside the plaza,
 // at the gondola's top station, by the ski lift at the lodge, and at the mining yard. A scenery pack (nothing to
 // win); its items are not saved, so a reload puts every one back on its table.
+//
+// Firework posts (the user, 2026-11-24: "fire-work stations similar to the base game that lets players who got lost
+// ... provide a location that the other players can easily see"): the game's flare launcher on a striped post with a
+// button that fires it, under a sign with a gold burst and a lamp. One stands beside every gear station and one by
+// each of the railway's outlying stations, so wherever a walker is lost there is one to walk to.
 using System.Collections.Generic;
 using Bwm;
 using UnityEngine;
@@ -56,7 +61,95 @@ public sealed class IslandGearPuzzle : PuzzleDef
 
     // A station at world (x, z) facing 'yaw': posts, a pitched roof, a table with the items on it, a back rail with a
     // backpack and a belt on hooks, and lights along the front eave
-    int lamps;
+    int lamps, posts;
+
+    // A firework post at world (x, z), its button towards 'yaw' + 180 (the front is -z, as a gear station's is)
+    void FireworkPost(string name, Vector2 at, float yaw)
+    {
+        float lx = at.x - site.x, lz = at.y - site.z;
+        Quaternion t = Quaternion.Euler(0f, yaw, 0f);
+        Vector3 L(float x, float y, float z) => t * new Vector3(x, y, z);
+        var mb = new MeshBuilder();
+        Color timber = new Color(0.42f, 0.29f, 0.18f), red = new Color(0.72f, 0.09f, 0.08f), white = new Color(0.93f, 0.92f, 0.88f), gold = new Color(0.95f, 0.72f, 0.2f);
+        Kit.AddBox(mb, L(0f, -0.3f, 0f), new Vector3(0.24f, 1.5f, 0.24f), timber, yaw);                    // the post, 1.2 m out of the ground
+        for (int band = 0; band < 4; band++)                                                               // painted red and white, as a firework is
+            Kit.AddBox(mb, L(0f, 0.62f + band * 0.14f, 0f), new Vector3(0.27f, 0.14f, 0.27f), band % 2 == 0 ? red : white, yaw);
+        Kit.AddBox(mb, L(0f, 1.2f, 0f), new Vector3(0.56f, 0.05f, 0.56f), timber * 0.85f, yaw);            // the launcher's tray
+        Kit.AddBox(mb, L(0f, -0.3f, 0.36f), new Vector3(0.1f, 2.95f, 0.1f), timber, yaw);                   // a mast behind it for the sign
+        Kit.AddBox(mb, L(0f, 2.1f, 0.3f), new Vector3(0.84f, 0.56f, 0.05f), red, yaw);                      // the sign's board
+        // on the board, a rocket's trail and its burst, in gold
+        Kit.AddBox(mb, L(0f, 2.15f, 0.265f), new Vector3(0.035f, 0.2f, 0.02f), gold, yaw);
+        Kit.AddBox(mb, L(0f, 2.37f, 0.265f), new Vector3(0.07f, 0.07f, 0.02f), gold, yaw);
+        for (int ray = 0; ray < 8; ray++)
+        {
+            float a = ray * Mathf.PI / 4f + Mathf.PI / 8f;
+            foreach (float r in new[] { 0.12f, 0.2f })
+                Kit.AddBox(mb, L(Mathf.Cos(a) * r, 2.405f + Mathf.Sin(a) * r - 0.02f, 0.265f), new Vector3(0.04f, 0.04f, 0.02f), r > 0.15f ? white : gold, yaw);
+        }
+        Piece post = b.MeshPiece(name, mb.ToMesh(), IsleKit.Snowy(b));
+        post.Transform.position = b.WorldPoint(lx, lz);
+        // a lamp under the sign, lit at night, so the post and its button can be found in the dark
+        var lampGlass = new MeshBuilder();
+        Kit.AddGlow(lampGlass, L(0f, 1.98f, 0.3f), new Vector3(0.18f, 0.2f, 0.18f), yaw, new Color(1f, 0.78f, 0.42f), (name.Length * 0.17f) % 1f);
+        Piece lamp = b.MeshPiece(name + " Lamp", lampGlass.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+        lamp.Transform.position = post.Transform.position;
+        var lampMark = new GameObject("Room Light Night " + (++lamps) + " FFCB8C 6.0 1.1");
+        lampMark.transform.SetParent(post.Go.transform, false);
+        lampMark.transform.localPosition = L(0f, 1.85f, 0.05f);
+        // the game's flare launcher on the tray, and the button on the post's front that fires it. (Fire() runs on the
+        // host whoever presses; the launcher has its own cool-down, and the button comes back after it)
+        Vector3 lp = L(0f, 1.25f + 0.21f, 0f), bp = L(0f, 1.0f, -0.135f);
+        Piece launcher = b.Part("Firework Launcher", lx + lp.x, lz + lp.z, lp.y, yaw + 180f).Named(name + " Launcher");
+        // The game's launcher aims 53 degrees up, forwards, and its flare's trail then runs off across the sky; tilted
+        // back the rest of the way it goes straight up, and the trail stands over the post for all to see where it is
+        launcher.Transform.rotation = Quaternion.Euler(-37f, yaw + 180f, 0f);
+        Piece button = b.Part("Button Poke", lx + bp.x, lz + bp.z, bp.y, yaw + 180f).Named(name + " Button").Set("PuzzlePokeButton", "autoEnableSeconds", ButtonBack);
+        button.On("PuzzlePokeButton", "onPressed", launcher.Component("PuzzleFireworkLauncher"), "Fire");
+        posts++;
+    }
+    // Seconds until a pressed button can be pressed again: the launcher's own cool-down is 40 s (measured in the game,
+    // 2026-11-24) and a press during it does nothing, so the button stays dark until the launcher is ready
+    const float ButtonBack = 41f;
+
+    // The island's trees, rocks and plants (WinterIsle.dressing, written by the island's build beside the Winter Walk
+    // plugin): the island does not know where this pack's posts stand, so a post looks for ground they left free.
+    // (The first post stood with its sign in a bush's branches.)
+    List<(Vector2 at, float keep)> dressing;
+    bool DressingClear(Vector2 p)
+    {
+        if (dressing == null)
+        {
+            dressing = new List<(Vector2, float)>();
+            string file = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "..", "profile", "BepInEx", "plugins", "WinterWalk", "WinterIsle.dressing"));
+            if (System.IO.File.Exists(file))
+                foreach (string line in System.IO.File.ReadLines(file))
+                {
+                    if (line.Length == 0 || line[0] == '#' || line[0] == '@') continue;
+                    string[] f = line.Split('\t');
+                    if (f.Length < 8) continue;
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    if (!float.TryParse(f[1], System.Globalization.NumberStyles.Float, inv, out float x) || !float.TryParse(f[3], System.Globalization.NumberStyles.Float, inv, out float z)
+                        || !float.TryParse(f[7], System.Globalization.NumberStyles.Float, inv, out float scale)) continue;
+                    // (a rock is about 1.3 m from its middle to its edge for each unit of its scale: the largest, at 20 and more, are cliffs 50 m long)
+                    dressing.Add((new Vector2(x, z), f[0].StartsWith("rock") ? 1.2f + scale * 1.3f : f[0].StartsWith("fir") ? 3f : f[0].Contains("Litter") || f[0].Contains("Grass") || f[0].Contains("Rush") ? 1.4f : 2.4f));
+                }
+            else Debug.LogWarning("[BWM] Island Gear: no WinterIsle.dressing (build WinterIsle first): the firework posts cannot keep clear of the island's trees and rocks");
+        }
+        foreach (var d in dressing) if ((d.at - p).sqrMagnitude < d.keep * d.keep) return false;
+        return true;
+    }
+    // Whether a firework post can stand at p: level island ground that the dressing left free
+    bool PostSpot(Vector2 p)
+    {
+        float lo = float.MaxValue, hi = float.MinValue;
+        foreach (var o in new[] { Vector2.zero, Vector2.right, Vector2.left, Vector2.up, Vector2.down })
+        {
+            if (!b.Ground.At(p.x + o.x, p.y + o.y, out float y)) return false;
+            lo = Mathf.Min(lo, y); hi = Mathf.Max(hi, y);
+        }
+        return lo >= 1f && hi - lo <= 0.6f && DressingClear(p);
+    }
+
     void Station(string name, Vector2 at, float yaw, int[] items)
     {
         float lx = at.x - site.x, lz = at.y - site.z;
@@ -102,6 +195,29 @@ public sealed class IslandGearPuzzle : PuzzleDef
         }
         Vector3 e0 = L(-2.3f, 2.3f, -1.15f), e1 = L(2.3f, 2.3f, -1.15f);
         Kit.LightString(b, name + " Lights", new List<Vector3> { new Vector3(lx + e0.x, e0.y, lz + e0.z), new Vector3(lx + e1.x, e1.y, lz + e1.z) }, 0.2f, 0.35f, true, false, name.Length);
+        // a firework post beside it: at either end of the shelter, wherever the island's trees and rocks leave room
+        Vector2 postAt = Vector2.zero;
+        bool postPlaced = false;
+        var places = new List<(float px, float pz)> { (3.7f, -0.5f), (-3.7f, -0.5f) };
+        foreach (float ring in new[] { 4.6f, 5.8f, 7.2f, 8.8f })      // ...or a little further off, round it
+            for (int step = 0; step < 16; step++)
+            {
+                float a = step * Mathf.PI / 8f;
+                places.Add((Mathf.Cos(a) * ring, Mathf.Sin(a) * ring * 0.8f - 0.5f));
+            }
+        foreach (var (px, pz) in places)
+        {
+            if (Mathf.Abs(px) < 3.2f && Mathf.Abs(pz) < 2.2f) continue;      // (the shelter itself)
+            Vector3 beside = L(px, 0f, pz);
+            var candidate = new Vector2(at.x + beside.x, at.y + beside.z);
+            if (!postPlaced) postAt = candidate;      // (failing all, the first)
+            if (!PostSpot(candidate)) continue;
+            postAt = candidate;
+            postPlaced = true;
+            break;
+        }
+        if (!postPlaced) Debug.LogWarning("[BWM] Island Gear: no clear ground for a firework post beside " + name + "; it stands at its first place");
+        FireworkPost(name.Replace(" Gear", "") + " Fireworks", postAt, yaw);
     }
 
     public override void Build(PuzzleBuilder builder)
@@ -138,6 +254,42 @@ public sealed class IslandGearPuzzle : PuzzleDef
             built++;
             Debug.Log("[BWM] Island Gear: " + w.name + " at " + Sdk.F(spot.x) + ", " + Sdk.F(spot.y) + " (" + Sdk.F((spot - w.at).magnitude) + " m from where it was wanted)");
         }
-        Debug.Log("[BWM] Island Gear: " + built + " gear stations");
+        // a firework post by each of the railway's stations out from the plaza (the Plaza Halt is near the plaza's own)
+        if (WinterIsleRail.Load() && WinterIsleRail.Lines.Count > 0)
+        {
+            RailLine loop = WinterIsleRail.Lines[0];
+            for (int s = 1; s < loop.Stops.Count; s++)
+            {
+                int i = loop.Stops[s];
+                Vector3 here = loop.P[i], ahead = loop.P[loop.W(i + 2)];
+                Vector2 station = new Vector2(here.x, here.z), along = new Vector2(ahead.x - here.x, ahead.z - here.z).normalized, across = new Vector2(along.y, -along.x);
+                if (Vector2.Dot(across, WinterIslePuzzle.Plaza - station) < 0f) across = -across;
+                string name = loop.Names[s] + " Fireworks";
+                // on the station's level ground beyond an end of the shelter (it is 14 m long, the level ground 11 m
+                // either side of the line), where it shows from the platform; on the plaza's side first
+                Vector2 spot = Vector2.zero, facing = -across;
+                bool found = false;
+                foreach (float side in new[] { 1f, -1f })
+                {
+                    foreach (float far in new[] { 8.5f, 7.2f, 9.8f })
+                        foreach (float along2 in new[] { 12f, -12f, 16f, -16f, 20f, -20f, 26f, -26f })
+                        {
+                            Vector2 candidate = station + along * along2 + across * (side * far);
+                            if (found || !PostSpot(candidate)) continue;
+                            spot = candidate; facing = -across * side; found = true;
+                        }
+                    if (found) break;
+                }
+                if (!found)
+                {
+                    if (!FindSpot(station + across * 13f, 30f, out spot)) { Debug.LogWarning("[BWM] Island Gear: no room for " + name + " near " + station); continue; }
+                    facing = (station - spot).sqrMagnitude > 1f ? (station - spot).normalized : Vector2.up;
+                    Debug.LogWarning("[BWM] Island Gear: " + name + " found no clear ground on its station's flat; it stands where the gear stations' search put it");
+                }
+                FireworkPost(name, spot, Mathf.Atan2(-facing.x, -facing.y) * Mathf.Rad2Deg);
+                Debug.Log("[BWM] Island Gear: " + name + " at " + Sdk.F(spot.x) + ", " + Sdk.F(spot.y) + " (" + Sdk.F((spot - station).magnitude) + " m from its station's middle)");
+            }
+        }
+        Debug.Log("[BWM] Island Gear: " + built + " gear stations, " + posts + " firework posts");
     }
 }
