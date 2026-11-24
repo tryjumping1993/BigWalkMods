@@ -46,7 +46,8 @@ code 0 and a final `[BWM] OK` mean success. Other build flags: `-NoPreview`, `-N
   its sky and light: near the island's box (kept in step with `WinterIslePuzzle.cs` by hand) it blends the
   game's sky system (Enviro) towards winter for that player, and back on the mainland. It also dresses the island
   with the game's rocks and plants (`Dresser.cs`) and keeps the tracks players leave in the snow (`SnowTrails.cs`).
-  The dressing (95,500 copies: 44,000 of our firs, 24,000 game rocks, 27,000 game plants and logs) is drawn by
+  The dressing (84,500 copies since the lowland's trees were thinned on 2026-11-24: 35,000 of our trees, 23,600 game
+  rocks, 25,900 game plants and logs; it was 91,000 with 40,900 trees) is drawn by
   distance: 64 m cells in three tiers, tier 0 within `NearFar` 600 m (big rocks, one tree in ten), tier 1 within
   `NearMid` 500 m, tier 2 within `NearAll` 200 m (live statics on `Dresser`). With all of it on, the island ran
   about 20 % slower than the base game, and our firs' near meshes were most of that. Each kind (per snow line) is
@@ -126,6 +127,18 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   search keeps new puzzles off it. So after adding or moving a puzzle, rebuild `WinterIsle` too: that is what
   clears its trees and lays its path. `TheTreePuzzle.cs` is the gourd tower in the plaza
   (`WinterIslePuzzle.Plaza`), one plinth per puzzle.
+- **The lowlands' trees are thinner by a third** (the user, 2026-11-24: "decrease the overall tree density in the
+  lowlands by 33% to accommodate walking around"): `WinterIsleDressing.Thinned` leaves out one tree in three on ground
+  below 45 m (fading out by 65 m, where the trees have a gap of their own below the mountain's forest): our firs,
+  spruces, pines and birches, the saplings under them, the stands across the trails, and the game's dead trees; not
+  bushes, logs or rocks, and not the wall of firs right along a ski run. Which trees go is decided by each place's
+  own number, and the build's run of random numbers goes on as if the tree stood, so nothing else on the island moved
+  (the old and new lists compared: 6,105 of 18,133 trees below 45 m gone, 33.7 %; no
+  entry added or moved). **The "ski forest" is most of the lowland's woods:** `Land.Forest` (`SkiForest`) has no outer
+  edge, so east of the mountain it plants everything above 16 m, twice over; leaving it out of the thinning left out
+  1,539 trees of 18,000. The same 100 m straight through the wood at -900, -1512 to -1612 (`tools\perf\walk.ps1`,
+  walking): 116 s and stuck five times before, 91 s and three times after. Rebuild Island Gear after the island
+  (its firework posts read the dressing).
 - **The mine** (`WinterIsleMine.cs`, built by the island's pack): one low single-track line (2.9 m wide, 1.75 m
   high: a seated rider clears it, on foot it is a crouch) that runs under the whole island and surfaces at about
   thirteen stations, plus one big hall under the summit. The stations are placed and the line routed by the
@@ -200,8 +213,19 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Jetpacks** (`winterwalk\JetpackDriver.cs`): walking up to one of the opened presents under The Tree ("Jetpack
   Present...") straps a jetpack on (it never runs out of fuel); jump, let go, press jump again in the air and it fires
   while held. Jump is read from Rewired (the game's input) by the action named with "jump", else the space bar.
-  `game 'set?path=WinterWalk.JetpackDriver.TestFire&value=true'` fires it without a controller; `Up`, `Back` and
-  `Scale` move the worn model live. Other players' jetpacks are not shown.
+  Firing climbs at up to 8 m/s and pushes the way the camera looks at `Push` 16 m/s squared up to `MaxAcross` 24 m/s
+  (seven times a sprint; the user, 2026-11-24: "move the player faster in general (i.e., in the forward direction)");
+  with the stick pulled back (or S) it brakes instead (`Brake`), to a hover. **The speed over the ground has to be
+  written into the game's mover** (`PlayerCharacter.mover.airbourneVelocity`, world space): in the air the mover sets a
+  player's sideways speed every step to what they left the ground with, so until that day the push set on the
+  Rigidbody never moved anyone (a flier went up, and across only as fast as they had jumped). The mover keeps the
+  speed after the jetpack stops, down to the ground, where the driver clears it. A flier stopped by a wall or a trunk
+  keeps only the speed that is left, and inside Calm Air no more than a sprint's 3.5 m/s (`CalmDrift`), or coasting
+  in at 24 m/s would carry them over a puzzle's walls. `game 'set?path=WinterWalk.JetpackDriver.Worn&value=true'`
+  puts one on, `TestFire` fires it without a controller, `TestStick` (1 or -1) is the stick, `Speed` the flight's
+  speed; `Up`, `Back` and `Scale` move the worn model live. Other players' jetpacks are not shown. Flown with these:
+  24 m/s in 2.2 s, a stop in 1.5 s with the stick back, 24 m/s kept through the fall, 3.5 m/s on entering the
+  Whiteout Maze's Calm Air, an ordinary jump afterwards with no speed left over.
 - **Island Gear** (`IslandGearPuzzle.cs`, a scenery pack): five stations of the game's own tools (binoculars,
   walkie-talkies, megaphone, torches, GPS, map, compass, laser, night vision, a backpack and belt on hooks), at
   the landing, the plaza, the summit, the lodge and the mining yard. Items are not saved: a reload resets them.

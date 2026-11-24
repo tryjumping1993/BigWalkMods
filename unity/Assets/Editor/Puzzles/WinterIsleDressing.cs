@@ -83,6 +83,34 @@ public static class WinterIsleDressing
         return list;
     }
 
+    // The lowlands' trees are thinner by a third (the user, 2026-11-24: "decrease the overall tree density in the
+    // lowlands by 33% to accommodate walking around"): of the trees planted on the low shelves, one in three is left
+    // out. That goes for every kind: our firs, spruces, pines and birches, the saplings under them, the stands the
+    // trails run through, and the game's own dead trees. The lowlands are the ground below 45 m, the thinning fading out
+    // by 65 m (the trees have a gap of their own there, between the lowland's woods and the mountain's forest). That
+    // includes what the planting calls the ski forest: its rule (Land.Forest) has no outer edge, so it is what plants
+    // nearly all of the eastern lowland, twice over; leaving it out left out 1,539 trees of some 18,000. Only the wall
+    // of firs right along a ski run is kept whole.
+    // Which trees go is decided by each place's own number, not by the build's run of random numbers, and that run goes
+    // on as if the tree stood (its turn is still drawn, its foot still counts as taken): so every other tree, rock and
+    // plant on the island stands where it did before.
+    public const float Thinning = 1f / 3f, LowlandTo = 45f, LowlandFade = 20f;
+    static int thinned;
+    static bool Thinned(Vector2 p, float ground)
+    {
+        float low = 1f - Smooth01((ground - LowlandTo) / LowlandFade);
+        if (low <= 0f) return false;
+        float piste = WinterIslePuzzle.Piste(p);
+        if (piste > 0.005f && piste <= 0.3f && land.Forest(p) > 0.5f) return false;      // (a run's wall of firs)
+        uint n;
+        unchecked
+        {
+            n = (uint)Mathf.RoundToInt(p.x * 1000f) * 73856093u ^ (uint)Mathf.RoundToInt(p.y * 1000f) * 19349663u;
+            n ^= n >> 13; n *= 0x5bd1e995u; n ^= n >> 15; n *= 0x27d4eb2du; n ^= n >> 16;
+        }
+        return (n & 0xFFFFFF) / 16777216f < Thinning * low;
+    }
+
     // Stands one of our trees at p: the model of that kind nearest in height, scaled to fit
     static void Tree(string kind, Vector2 p, float ground, float tallness, float trunk, float cover)
     {
@@ -90,9 +118,11 @@ public static class WinterIsleDressing
         for (int i = 0; i < TreeModels.Count; i++)
             if (TreeModels[i].kind == kind && (best < 0 || Mathf.Abs(TreeModels[i].height - tallness) < Mathf.Abs(TreeModels[best].height - tallness) - 0.001f)) best = i;
         best += random.Next(2);      // each height comes in two shapes
-        output.Append("fir:").Append(best).Append('\t').Append(F(p.x)).Append('\t').Append(F(ground - 0.05f)).Append('\t').Append(F(p.y)).Append('\t')
-            .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(tallness / TreeModels[best].height)).Append("\t-9\n");
+        float turn = R(0f, 360f);
         solids.Add((p, trunk));
+        if (Thinned(p, ground)) { thinned++; return; }      // (left out: see Thinned)
+        output.Append("fir:").Append(best).Append('\t').Append(F(p.x)).Append('\t').Append(F(ground - 0.05f)).Append('\t').Append(F(p.y)).Append('\t')
+            .Append(F(turn)).Append("\t0\t0\t").Append(F(tallness / TreeModels[best].height)).Append("\t-9\n");
         Cover.Add((p, cover));
         if (kind != "birch") Needles.Add((p, cover * 1.15f));
     }
@@ -170,9 +200,12 @@ public static class WinterIsleDressing
         if ((p - WinterIslePuzzle.Peak).magnitude < 1500f && (land.Height(p) > WinterIslePuzzle.TreeLine - 40f || WinterIslePuzzle.SkiFace(p) > 0.4f) && !kind.Contains("Log") && !kind.Contains("Litter")) return;
         // ...nor on its steep sides higher up (grass tufts and green shrubs on a high rock face read wrong)
         if ((p - WinterIslePuzzle.Peak).magnitude < 1300f && land.Height(p) > 90f && land.Slope(p) > 0.45f) return;
+        float turn = R(0f, 360f);
+        // (the game's dead trees are trees: thinned in the lowlands as ours are; at under half size they are twigs in the snow)
+        if (kind.Contains("_Dead") && scale >= 0.5f && Thinned(p, land.Height(p))) { thinned++; return; }
         Cover.Add((p, Mathf.Max(k.size.x, k.size.z) * scale * 0.4f));
         output.Append("tree:").Append(kind).Append('\t').Append(F(p.x)).Append('\t').Append(F(y)).Append('\t').Append(F(p.y)).Append('\t')
-            .Append(F(R(0f, 360f))).Append("\t0\t0\t").Append(F(scale)).Append('\t').Append(F(snow)).Append('\n');
+            .Append(F(turn)).Append("\t0\t0\t").Append(F(scale)).Append('\t').Append(F(snow)).Append('\n');
         plants++;
     }
 
@@ -242,6 +275,7 @@ public static class WinterIsleDressing
         Scree.Clear();
         Firs.Clear();
         rocks = plants = 0;
+        thinned = 0;
         output.Append("# Winter Isle set dressing, written by WinterIslePuzzle's build. kind, x, y, z, yaw, pitch, roll, scale, snow line\n");
         output.Append("@bounds\t").Append(F(l.X0)).Append('\t').Append(F(l.X1)).Append('\t').Append(F(l.Z0)).Append('\t').Append(F(l.Z1)).Append('\n');
 
@@ -711,6 +745,6 @@ public static class WinterIsleDressing
 
         File.WriteAllText(outputFile, output.ToString());
         Debug.Log("[BWM] Winter Isle dressing: " + Firs.Count + " firs (" + spruces + " of them spruces, " + pines + " pines), " + birches + " birches, " + wooded + " of the trees in " + l.Woods.Count + " woods, " + rocks + " rocks (" + slabs + " slabs, " + trailside + " by the trails, " + fields + " boulder fields, " + massif + " massif, " + tors + " tors, " + bands + " rock bands, " + outcrops + " outcrops, " + coast + " on the coast, " + loose + " loose), "
-            + plants + " plants (" + scattered + " of them scatter); written to " + outputFile);
+            + plants + " plants (" + scattered + " of them scatter); " + thinned + " lowland trees left out (one in three); written to " + outputFile);
     }
 }

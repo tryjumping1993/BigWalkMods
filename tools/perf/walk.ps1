@@ -32,7 +32,8 @@ function Face([double]$yaw) {
         C ("press?action=stickLookX&value=" + $(if ($d -gt 0) { '1' } else { '-1' }) + "&ms=$ms") | Out-Null
     }
 }
-$points = $Route -split ';' | ForEach-Object { $f = $_ -split ','; , @([double]::Parse($f[0].Trim(), $inv), [double]::Parse($f[1].Trim(), $inv)) }
+# (in @( ): with one point the pipeline would hand back that point's two numbers as the list)
+$points = @($Route -split ';' | ForEach-Object { $f = $_ -split ','; , @([double]::Parse($f[0].Trim(), $inv), [double]::Parse($f[1].Trim(), $inv)) })
 C 'render?awake=1' | Out-Null
 if (-not $Capped) { C 'set?path=UnityEngine.Application.targetFrameRate&value=-1' | Out-Null }
 if ($Start) { $f = $Start -split ','; C ("teleport?x=" + $f[0].Trim() + "&y=" + $f[1].Trim() + "&z=" + $f[2].Trim()) | Out-Null; Start-Sleep 4 }

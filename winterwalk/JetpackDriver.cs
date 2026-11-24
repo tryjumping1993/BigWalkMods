@@ -3,11 +3,17 @@
 // Three jetpacks stand among the presents under The Tree ("Jetpack Present", "Jetpack Present 2", ...). Walking up
 // to one straps a jetpack on this PC's player: the model from The Tree's pack ("Jetpack Model") is hung on their
 // back, and its tank is filled. To fly: jump, let go of jump, and press it again in the air; while it is held the
-// jetpack fires (flames under its nozzles), pushing up hard and a little the way the camera looks, and burning fuel.
+// jetpack fires (flames under its nozzles), pushing up hard and forward the way the camera looks, up to 24 m/s (seven
+// times a sprint). Pulling the stick back (or S) turns the push against the flight instead, to stop over a spot.
 // It never runs out of fuel.
 //
-// Only this player is driven, through its own Rigidbody, as the skiing is; the game's networking shows the flight
-// to the others. Other players' jetpacks are not shown on their backs yet (nothing tells one PC what another wears).
+// Only this player is driven; the game's networking shows the flight to the others. The climb goes through the
+// player's Rigidbody, as the skiing does. The speed over the ground cannot: in the air the game's own mover
+// (PlayerMover) sets it every step to what the player had on leaving the ground (PlayerMover.airbourneVelocity), so
+// until 2026-11-24 the push "the way the camera looks" never moved anyone (a flier went up, and over the ground only as
+// fast as they had jumped, 3.5 m/s at most). The flight's speed is now written into that field, so the mover itself
+// flies the player, bumps them into things as it does anyone, and keeps the speed after the jetpack stops, down to
+// the ground. Other players' jetpacks are not shown on their backs yet (nothing tells one PC what another wears).
 // The jump button is read from Rewired, the game's input system, by the action whose name has "jump" in it; if no
 // such action is found it falls back to the space bar.
 //
@@ -27,8 +33,21 @@ namespace WinterWalk
 
         public const float Tank = 40f;          // seconds of firing on a full tank
         const float Lift = 17f;                 // metres a second squared upwards while firing (gravity is 9.81)
-        const float Push = 5f;                  // ... and along where the camera looks
-        const float MaxRise = 8f, MaxAcross = 12f;
+        // ... and along where the camera looks: Push metres a second squared, up to MaxAcross metres a second (both
+        // live). They were 5 and 12 until 2026-11-24 (the user: "move the player faster in general (i.e., in the forward
+        // direction)"): two and a half seconds to reach a speed that crossed the island in four minutes. With the stick
+        // pulled back the push goes against the flight (Brake), down to a hover, so the speed can still be put down
+        // on a spot.
+        public static float Push = 16f, MaxAcross = 24f, Brake = 20f;
+        const float MaxRise = 8f;
+        public static float TestStick;          // for testing without a controller: the stick's forward (1) or back (-1)
+        public static float Speed;              // metres a second over the ground, at the last step (for tests)
+        // In Calm Air a flier keeps no more speed over the ground than a sprint: coasting in at 24 m/s would carry
+        // them over a puzzle's walls, which is what Calm Air is there to stop
+        const float CalmDrift = 3.5f;
+        bool carried;                           // in the air with the jetpack's speed (from the first firing to the ground)
+        Vector3 lastPlace;
+        float lastStep = -1f;
         const float BodyHeight = 0.75f;         // a standing player's origin above the ground
 
         public static bool Worn;                // whether this player has a jetpack on (the companion can set it)
@@ -49,6 +68,7 @@ namespace WinterWalk
         readonly System.Collections.Generic.List<Vector3> presents = new System.Collections.Generic.List<Vector3>();
         float nextLook;
         int jumpAction = -2;                    // Rewired action id; -1 when none was found (space bar instead)
+        int forwardAction = -2;                 // ... and the stick's forward and back (W and S instead)
         bool wasHeld, armed, firing;
 
         // Calm Air boxes: per box its centre and three half-axis vectors (rotation times half the scale), as floats
@@ -193,6 +213,34 @@ namespace WinterWalk
             try { return Input.GetKey(KeyCode.Space); } catch (Exception) { return false; }
         }
 
+        // The stick's forward (1) and back (-1), as the planes read their throttle
+        float Stick()
+        {
+            if (TestStick != 0f) return TestStick;
+            try
+            {
+                if (forwardAction == -2)
+                {
+                    forwardAction = -1;
+                    for (int id = 0; id < 256 && forwardAction < 0; id++)
+                    {
+                        Rewired.InputAction a = Rewired.ReInput.mapping.GetAction(id);
+                        if (a == null || a.name == null) continue;
+                        string n = a.name.ToLowerInvariant().Replace(" ", "");
+                        if (!n.StartsWith("ui") && (n == "movey" || n == "movevertical" || n == "vertical" || n.Contains("forward"))) forwardAction = a.id;
+                    }
+                    Plugin.L.LogInfo("Winter Walk: jetpack reads forward and back from " + (forwardAction >= 0 ? "Rewired action " + forwardAction : "W and S"));
+                }
+                if (forwardAction >= 0)
+                {
+                    Rewired.Player player = Rewired.ReInput.players.GetPlayer(0);
+                    if (player != null) return player.GetAxis(forwardAction);
+                }
+            }
+            catch (Exception) { forwardAction = -1; }
+            try { return (Input.GetKey(KeyCode.W) ? 1f : 0f) - (Input.GetKey(KeyCode.S) ? 1f : 0f); } catch (Exception) { return 0f; }
+        }
+
         void Wear(Transform player)
         {
             if (Worn && worn == null && model != null)
@@ -277,29 +325,68 @@ namespace WinterWalk
                 if (InCalmAir) firing = false;             // Calm Air: no thrust over a puzzle (TestFire included)
                 if (flame != null && flame.activeSelf != firing) flame.SetActive(firing);
                 wasHeld = held;
-                if (!firing)
+                PlayerCharacter pc = me.GetComponent<PlayerCharacter>();
+                PlayerMover mover = pc != null ? pc.mover : null;
+                Rigidbody body = pc != null ? pc.rb : null;
+                if (body == null || mover == null) { State = "no body"; return; }
+                float dt = Time.fixedDeltaTime;
+                // how fast the player really went over the ground in the step before this one
+                float went = -1f;
+                Vector3 wentBy = Vector3.zero;
+                if (lastStep >= 0f && Time.fixedTime - lastStep < dt * 1.5f) { wentBy = (p - lastPlace) / dt; wentBy.y = 0f; went = wentBy.magnitude; }
+                lastPlace = p; lastStep = Time.fixedTime;
+                if (firing) carried = true;
+                else if (grounded && carried)
                 {
+                    // down: the flight is over (the mover takes its speed in the air afresh at the next jump; this makes sure of it)
+                    carried = false;
+                    mover.airbourneVelocity = Vector3.zero;
+                }
+                if (!carried)
+                {
+                    Speed = 0f;
                     State = InCalmAir ? "jetpack: calm air" : "jetpack on" + (grounded ? "" : armed ? ", ready to fire" : "");
                     return;
                 }
-                PlayerCharacter pc = me.GetComponent<PlayerCharacter>();
-                Rigidbody body = pc != null ? pc.rb : null;
-                if (body == null) { State = "no body"; return; }
-                float dt = Time.fixedDeltaTime;
+
+                // The flight over the ground, kept in the game's mover (see the top of this file)
+                Vector3 flight = mover.airbourneVelocity;
+                flight.y = 0f;
+                float speed = flight.magnitude;
+                bool changed = false;
+                // stopped by something (a wall, a trunk, a cliff): the flight has the speed that is left, not a push kept
+                // up against the wall for when the flier turns away
+                if (speed > 4f && went >= 0f && went < speed * 0.5f) { flight = wentBy; speed = went; changed = true; }
+                if (InCalmAir && speed > CalmDrift) { flight *= CalmDrift / speed; speed = CalmDrift; changed = true; }
+                if (firing)
+                {
+                    Camera cam = Camera.main;
+                    Vector3 look = cam != null ? cam.transform.forward : Vector3.zero;
+                    look.y = 0f;
+                    float stick = Stick();
+                    if (stick < -0.3f)
+                    {
+                        // stick back: against the flight, to a stop (never past it: no flying backwards)
+                        float less = Mathf.Min(speed, Brake * -stick * dt);
+                        if (speed > 1e-3f) flight -= flight * (less / speed);
+                    }
+                    else if (look.sqrMagnitude > 1e-4f)
+                    {
+                        flight += look.normalized * (Push * dt);
+                        if (flight.magnitude > MaxAcross) flight = flight.normalized * MaxAcross;
+                    }
+                    changed = true;
+                }
+                if (changed) mover.airbourneVelocity = flight;
+                Speed = flight.magnitude;
+                if (!firing)
+                {
+                    State = InCalmAir ? "jetpack: calm air" : "jetpack on, " + (armed ? "ready to fire" : "in the air");
+                    return;
+                }
                 Vector3 v = body.linearVelocity;
                 v.y = Mathf.Min(MaxRise, v.y + Lift * dt);
-                Camera cam = Camera.main;
-                if (cam != null)
-                {
-                    Vector3 look = cam.transform.forward;
-                    look.y = 0f;
-                    if (look.sqrMagnitude > 1e-4f)
-                    {
-                        Vector3 across = new Vector3(v.x, 0f, v.z) + look.normalized * (Push * dt);
-                        if (across.magnitude > MaxAcross) across = across.normalized * MaxAcross;
-                        v.x = across.x; v.z = across.z;
-                    }
-                }
+                v.x = flight.x; v.z = flight.z;
                 Diag.Touched("jetpack");
                 body.linearVelocity = v;
                 State = "jetpack firing";
