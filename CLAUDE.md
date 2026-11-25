@@ -314,6 +314,27 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   when it sets off is sat in a free seat (its tunnel is lower than a standing player). Other players see a standing
   rider a little behind the vehicle (ordinary position updates); seated ones are exact. The game's own train does
   this with `PlatformingBody` + `StickyPlatform` + `TrainCar` (a proxy body), which we do not copy.
+- **Teleporters** (`winterwalk\Teleporter.cs`, `IsleKit.TeleportBooth` / `TeleportArrival`): an empty named
+  "Teleport Pad <name> to <place>" is a pad, "Teleport Arrival <place>" where its travellers land. Standing on a pad
+  1.2 s moves this PC's own player. Pads beside the landing's and the plaza's gear stations (Island Gear) go to Cast
+  Iron Pizza's door; the one on its terrace (in the Summit Disc Golf pack) goes back to the plaza. Test:
+  `Teleporter.TestPad` 0..2 (the log lists them).
+- **Disc golf and the summit's ski stand** (`winterwalk\DiscGolf.cs`, the Summit Disc Golf pack): baskets nobody holds
+  are stood upright and cannot tip; a "Frisbee nn" let go at 3 m/s or more is flown as a disc (lift, drag, and the roll
+  that makes a throw turn then fade; the game's throw speed times `Power` 1.5, the thrower's turning as they let go
+  tilts it) by whichever PC simulates its body, until it hits something; the host lays discs, "Skis n" and
+  "Snowboard n" back in their places after `RestSeconds` 30 lying with nobody within 30 m. A pair of skis or a board
+  in the hand is on the feet (SkiDriver, no time limit; the walk-up racks still work, 20 s off the piste). Every
+  throw and landing is logged ("disc golf: ..."): the game's real throw speed is not yet known. Test (host):
+  `DiscGolf.TestThrow` m/s with `TestPitch`, `TestBank`, `TestYaw` (-90 throws off the terrace: 20 m/s flew 67 m).
+  The summit's crest stands about 4 m up through the terrace's head between the tee and the baskets (seen 2026-11-24).
+- **Under the island** (Unstuck): a player with the island's ground ("Island i-j") over their head and no roof of ours
+  between is set down on the snow above after `Unstuck.UnderSeconds` 1.5; the log says where they were last in the
+  open (a tester stood on the outside of the summit spur's tunnel, 32 m under the snow, after falling from the summit
+  airstrip's deck near -2286, -1877; the way in is not found).
+- **Planes and mantrips need no gourds** (the user, 2026-11-24): any plane can be boarded and the mantrips always run;
+  the towers only open the hangar's doors and the mine's gates. `winterwalk\TowerLog.cs` logs every gourd placed on
+  or taken from a plinth, each tower's count, and when the SDK's flag and the slot disagree.
 - **Getting unstuck** (`winterwalk\Unstuck.cs`): a player pushing to move or jump for 3 s without moving, on ground
   too steep to use or held up off it, is set down on the game's last safe position or the nearest open spot.
 - **Jetpacks** (`winterwalk\JetpackDriver.cs`): walking up to one of the opened presents under The Tree ("Jetpack
