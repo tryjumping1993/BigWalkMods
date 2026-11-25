@@ -750,6 +750,7 @@ the user and friends, who must all have the same packs and SDK version.
 - **Unity licence:** batch mode only finds the licence while Unity Hub is running and signed in. `bwm.ps1`
   starts the Hub if needed. Only editor 6000.3.17f1 (at `Z:\Unity\6000.3.17f1`) is wanted; never let the Hub
   install another version (it defaults to C:, which is nearly full).
+- **When Steam will not start the game** (2026-11-25: its launch waited on a "playing on another device" prompt that only the user may answer): start the exe itself with `SteamAppId` and `SteamGameId` set to 1478500 in the environment and the Doorstop arguments of `$SteamGameArgs` (none for the installed copy), then `bwm.ps1 play` hosts as usual. The game then says it is offline, which a solo test does not mind.
 - **Steam:** the game launches through Steam. If Steam shows "Refresh Sign In", nothing starts until the
   user signs in.
 - **Shader variants:** never turn URP's variant stripping off to "be safe". The stock Lit shader alone becomes
@@ -777,7 +778,7 @@ the user and friends, who must all have the same packs and SDK version.
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
   Winter Walk also patches `GameRefs.Light.ExactPath` (`SdkSpeedups.cs`, Circle lamps' place) with Harmony.
 - **Game folder:** `Z:\SteamLibrary\steamapps\common\Big Walk` (moved from G:'s Steam library on 2026-11-23: G: is a
-  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.24-d65aaa9, updated in place by each release's own Install.cmd) is in it, so a plain
+  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.25-1219378, updated in place by each release's own Install.cmd) is in it, so a plain
   Steam start runs that; `play`/`launch` still load the dev profile. Tools find the folder through Steam's library list
   (`Find-Game` in `tools\install\Install-Common.ps1`); `World.GameData` (the Unity side) names it.
 - **Disk:** C: is nearly full. Unity, its caches, this repo and the game are on Z:; keep it that way.
@@ -877,6 +878,7 @@ fix (needs a second hosting in one game session and five gourds), anything with 
   leave its visibility alone unless they ask.
 - Nothing has been tested with two players. In particular: a standing rider as other players see them (`Riders`
   moves only this PC's player), and seats clicked by a player who is not the host.
+- **"Players still can't sit in seats"** (the user, 2026-11-25): not reproduced. On the host, standing, with the game's own input (`press?action=use`, crosshair on the seat's box), a Cast Iron Pizza bar stool took the player from 0.94 m on three sides and a train coach's seat from the aisle looking down. Not known: which seats, and whether it is joiners only (a seat's network id is given out by `Tickets.Allocate` on each PC). Needs a player's F8 mark at a seat that fails.
 - A seat is clicked from within about 2 m (the game's reach): from 2.6 m the test player's `use` did nothing, from
   1.4 m it sat. Beside a mantrip that means standing right at its side.
 - Sea cliffs carry big smooth white sheets where the ground shader's "gully" snow lies on 58 degree faces (seen from
