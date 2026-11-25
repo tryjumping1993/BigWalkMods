@@ -103,7 +103,27 @@ public static class IsleKit
         return piece;
     }
 
-    // Words on one of the SDK's Sign parts
+    // Painted words on a board's face: the picture Assets/Textures/Signs/<key>.png (tools/sign_art.py paints them),
+    // 'width' by 'height', its foot 'bottom' above the floor, centred on (x, z) and read from the side 'yaw' faces.
+    // The SDK's Sign shows no text in the game (see HowTo), so every board that says something carries one of these.
+    public static void PaintedWords(PuzzleBuilder b, string name, string key, float x, float z, float yaw, float width, float bottom, float height, bool onGround = true, float baseHeight = 0f)
+    {
+        string path = "Assets/Textures/Signs/" + key + ".png";
+        var importer = UnityEditor.AssetImporter.GetAtPath(path) as UnityEditor.TextureImporter;
+        if (importer == null) throw new System.Exception("No " + path + ": run tools/sign_art.py");
+        if (importer.wrapMode != TextureWrapMode.Clamp || !importer.mipmapEnabled || importer.alphaIsTransparency || importer.maxTextureSize < 1024)
+        { importer.wrapMode = TextureWrapMode.Clamp; importer.mipmapEnabled = true; importer.alphaIsTransparency = false; importer.maxTextureSize = 1024; importer.SaveAndReimport(); }
+        var picture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        var face = new MeshBuilder();
+        Vector2 l = Turn(width / 2f, 0f, yaw), r = Turn(-width / 2f, 0f, yaw);      // a reader's left is the board's +x
+        Color white = Color.white;
+        face.QuadUV(new Vector3(l.x, bottom, l.y), new Vector3(r.x, bottom, r.y), new Vector3(r.x, bottom + height, r.y), new Vector3(l.x, bottom + height, l.y),
+            new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f), white, white, white, white);
+        Material paint = b.ShaderMaterial("BWM/Picture", "Sign " + key, mat => { mat.SetTexture("_MainTex", picture); mat.SetFloat("_Indoor", 0f); mat.SetFloat("_Shine", 0.15f); mat.SetFloat("_Cull", 0f); });
+        b.MeshPiece(name, face.ToMesh(), paint, false).Transform.position = b.WorldPoint(x, z, baseHeight, onGround);
+    }
+
+    // Words on one of the SDK's Sign parts (they show in the editor only: use PaintedWords)
     public static void SignText(Piece sign, string text, float size)
     {
         var tmp = sign.Go.GetComponentInChildren<TMPro.TextMeshPro>(true);
@@ -124,26 +144,28 @@ public static class IsleKit
     // A teleporter (Winter Walk's Teleporter): a red signboard on posts at (x, z) facing 'yaw', and 1.4 m in front of
     // it a gold pad on the ground. Whoever stands on the pad a moment is set down at the object named
     // "Teleport Arrival <place>" (TeleportArrival makes one). 'name' tells this pad from the others.
-    public static void TeleportBooth(PuzzleBuilder b, string name, string place, string words, float x, float z, float yaw, bool onGround = true)
+    // 'baseHeight' is the floor's height (above the ground, or above the root's level with onGround false).
+    public static void TeleportBooth(PuzzleBuilder b, string name, string place, string wordsKey, float x, float z, float yaw, bool onGround = true, float baseHeight = 0f)
     {
-        BoardOnPosts(b, name + " Teleporter", x, z, yaw, 1.8f, 1.5f, 2.2f, Red, onGround);
+        BoardOnPosts(b, name + " Teleporter", x, z, yaw, 1.8f, 1.5f, 2.2f, Red, onGround).Transform.position = b.WorldPoint(x, z, baseHeight, onGround);
         Vector2 face = Turn(0f, FaceZ + 0.06f, yaw), front = Turn(0f, 1.4f, yaw);
-        SignText(b.Part("Sign", x + face.x, z + face.y, 1.85f, yaw, onGround).Named(name + " Teleporter Words"), words, 2.2f);
+        Vector2 paint = Turn(0f, 0.07f, yaw);      // a hair in front of the board (it is 0.12 thick)
+        PaintedWords(b, name + " Teleporter Words", wordsKey, x + paint.x, z + paint.y, yaw, 1.8f, 1.5f, 0.7f, onGround, baseHeight);
         var mb = new MeshBuilder();
         Kit.AddDisc(mb, Vector3.zero, 0.95f, 0.04f, DarkWood, 28);
         Kit.AddDisc(mb, new Vector3(0f, 0.04f, 0f), 0.85f, 0.02f, Gold, 28);
         Kit.AddDisc(mb, new Vector3(0f, 0.06f, 0f), 0.55f, 0.01f, Red, 24);
         Kit.AddDisc(mb, new Vector3(0f, 0.07f, 0f), 0.3f, 0.01f, Gold, 20);
         Piece pad = b.MeshPiece(name + " Teleporter Pad", mb.ToMesh(), Bare(b), false);
-        pad.Transform.position = b.WorldPoint(x + front.x, z + front.y, 0f, onGround);
-        b.Empty("Teleport Pad " + name + " to " + place, x + front.x, z + front.y, 0.05f, onGround);
-        b.Empty("Room Light Night " + name + " Pad FFCB8C 5.0 1.1", x + face.x * 3f, z + face.y * 3f, 2.0f, onGround);
+        pad.Transform.position = b.WorldPoint(x + front.x, z + front.y, baseHeight, onGround);
+        b.Empty("Teleport Pad " + name + " to " + place, x + front.x, z + front.y, baseHeight + 0.05f, onGround);
+        b.Empty("Room Light Night " + name + " Pad FFCB8C 5.0 1.1", x + face.x * 3f, z + face.y * 3f, baseHeight + 2.0f, onGround);
     }
 
     // Where a teleporter's travellers arrive, facing 'yaw'
-    public static void TeleportArrival(PuzzleBuilder b, string place, float x, float z, float yaw, bool onGround = true)
+    public static void TeleportArrival(PuzzleBuilder b, string place, float x, float z, float yaw, bool onGround = true, float baseHeight = 0f)
     {
-        Piece at = b.Empty("Teleport Arrival " + place, x, z, 0.05f, onGround);
+        Piece at = b.Empty("Teleport Arrival " + place, x, z, baseHeight + 0.05f, onGround);
         at.Transform.rotation = Quaternion.Euler(0f, b.Root.transform.eulerAngles.y + yaw, 0f);
     }
 

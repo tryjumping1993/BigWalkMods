@@ -1,8 +1,8 @@
 // Midnight Finale (puzzle 24): the island's fireworks show, fired by its crew. A communication puzzle for three
 // players (four with a fourth bay), built from the redesign spec of 2026-11-22.
 //
-// One player, the Show Caller, is shut in the Firing Room: a small soundproof box with no windows, a baffle wall just
-// inside its door, and a console of conductor lamps, each beside a split-flap display showing a scribble. The others
+// One player, the Show Caller, is shut in the Firing Room: a small soundproof box with no windows, a door
+// that shuts while the puzzle runs, and a console of conductor lamps, each beside a split-flap display showing a scribble. The others
 // are Firers in open-fronted bays 20 m away on either side (a third bay to the north in lobbies of four or more), each
 // bay with three hold buttons under copies of three of the console's displays. Every five seconds one console lamp
 // lights; the Caller describes its scribble over a push-to-talk intercom (the firers cannot answer), and when the phase
@@ -113,7 +113,10 @@ public sealed class MidnightFinalePuzzle : PuzzleDef
         Block(shell, -1.8f, -0.62f, -1.8f, -1.6f, 0f, 2.8f, IsleKit.Red);       // south wall, west of the door
         Block(shell, 0.62f, 1.8f, -1.8f, -1.6f, 0f, 2.8f, IsleKit.Red);         // south wall, east of the door
         Block(shell, -0.62f, 0.62f, -1.8f, -1.6f, 2.02f, 2.8f, IsleKit.Red);    // lintel: the doorway is exactly the door
-        Block(shell, -1.1f, 1.1f, -1.0f, -0.8f, 0f, 2.8f, IsleKit.Cream);       // baffle: hides the console from the doorway
+        // (No baffle inside the door any more. It left a passage 0.6 m deep behind the door and 0.7 m wide at each end,
+        // which a player had to shuffle through sideways: "you need to maneuver through the geometry in an unnatural
+        // manner", the user, 2026-11-24. It hid the console from the doorway, which the door does itself: it is shut,
+        // and soundproof, for as long as the puzzle runs, and the console shows nothing before that.)
         Block(shell, -2.0f, 2.0f, -1.8f, 1.4f, 2.8f, 3.0f, IsleKit.Red);        // roof
         Block(shell, -1.8f, 1.8f, -1.6f, 1.2f, 0f, 0.03f, IsleKit.Wood);        // floor
         b.MeshPiece("Firing Room Shell", shell.ToMesh(), snowy).Under(room);

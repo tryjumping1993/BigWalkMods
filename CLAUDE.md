@@ -317,8 +317,18 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
 - **Teleporters** (`winterwalk\Teleporter.cs`, `IsleKit.TeleportBooth` / `TeleportArrival`): an empty named
   "Teleport Pad <name> to <place>" is a pad, "Teleport Arrival <place>" where its travellers land. Standing on a pad
   1.2 s moves this PC's own player. Pads beside the landing's and the plaza's gear stations (Island Gear) go to Cast
-  Iron Pizza's door; the one on its terrace (in the Summit Disc Golf pack) goes back to the plaza. Test:
-  `Teleporter.TestPad` 0..2 (the log lists them).
+  Iron Pizza's door; the one on its terrace (in the Summit Disc Golf pack) goes back to the plaza; one on the floor
+  of the spawn building's training hall (-229.5, 32.25, -516, in Island Gear) goes to the covered bridge's mainland
+  end. Test: `Teleporter.TestPad` 0..3 (the log lists them). A booth's words are a painted picture
+  (`IsleKit.PaintedWords`, `tools\sign_art.py` into `Assets\Textures\Signs\`, run by hand, committed): the SDK's Sign
+  shows no text in the game.
+- **The sea's sound** (`winterwalk\IsleSound.cs`): on the isle the surf is held to `ShoreLevel` 0.35 at the water's
+  edge and fades to nothing by `Inland` 11 m up; it starts only well inside the island's box (weight over 0.9). It
+  multiplies each beach source's own volume, read before first touching it, and leaves the shared ocean bus alone
+  (`UseBus`). The first version wrote 0..1 over the game's own mix and made every beach "EXTREMELY loud" (the user).
+  The level was set without hearing it.
+- **Midnight Finale's Firing Room** has no baffle wall inside its door (it left a 0.6 m passage players had to shuffle
+  through); the door, shut while the puzzle runs, hides the console.
 - **Disc golf and the summit's ski stand** (`winterwalk\DiscGolf.cs`, the Summit Disc Golf pack): baskets nobody holds
   are stood upright and cannot tip; a "Frisbee nn" let go at 3 m/s or more is flown as a disc (lift, drag, and the roll
   that makes a throw turn then fade; the game's throw speed times `Power` 1.5, the thrower's turning as they let go

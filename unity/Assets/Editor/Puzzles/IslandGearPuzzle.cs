@@ -248,7 +248,7 @@ public sealed class IslandGearPuzzle : PuzzleDef
             }
             if (!boothPlaced) Debug.LogWarning("[BWM] Island Gear: no clear ground for the teleporter beside " + name + "; it stands at its first place");
             string stop = name.Replace(" Gear", "");
-            IsleKit.TeleportBooth(b, stop, "Pizzeria", "TO CAST IRON PIZZA", boothAt.x - site.x, boothAt.y - site.z, yaw + 180f);
+            IsleKit.TeleportBooth(b, stop, "Pizzeria", "ToPizzeria", boothAt.x - site.x, boothAt.y - site.z, yaw + 180f);
             if (stop == "Plaza")
             {
                 Vector2 arrive = boothAt + front2 * 3.6f;
@@ -292,6 +292,12 @@ public sealed class IslandGearPuzzle : PuzzleDef
             built++;
             Debug.Log("[BWM] Island Gear: " + w.name + " at " + Sdk.F(spot.x) + ", " + Sdk.F(spot.y) + " (" + Sdk.F((spot - w.at).magnitude) + " m from where it was wanted)");
         }
+        // A teleporter from the training hall to the Winter Isle's bridge, for convenience (the user, 2026-11-24): a pad
+        // on the open floor of the game's spawn building, in the aisle between its teaching stations (floor at 32.25 m,
+        // found from where players walk there and seen in the game), facing those who come from the spawn rooms; it sets
+        // them down on the covered bridge's mainland end (its deck at 1.35 m), facing the island.
+        IsleKit.TeleportBooth(b, "Training", "Bridge", "ToWinterIsle", -229.5f - site.x, -517.4f - site.z, 0f, false, 32.25f - site.y);
+        IsleKit.TeleportArrival(b, "Bridge", -384.9f - site.x, -719.7f - site.z, -109f, false, 1.35f - site.y);
         // a firework post by each of the railway's stations out from the plaza (the Plaza Halt is near the plaza's own)
         if (WinterIsleRail.Load() && WinterIsleRail.Lines.Count > 0)
         {

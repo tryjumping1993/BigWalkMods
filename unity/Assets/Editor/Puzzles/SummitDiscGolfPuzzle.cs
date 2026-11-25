@@ -136,11 +136,11 @@ public sealed class SummitDiscGolfPuzzle : PuzzleDef
         // it; and the way back down, a pad at the terrace's side
         Vector2 arrive = Here(CastIronPizzaPuzzle.ShopFront - 4f, 2.4f), back = Here(19.5f, -11f);      // (on the open snow by the railing: the terrace's other side is all tables)
         IsleKit.TeleportArrival(b, "Pizzeria", arrive.x, arrive.y, Mathf.Atan2(CastIronPizzaPuzzle.Out.x, CastIronPizzaPuzzle.Out.y) * Mathf.Rad2Deg, false);
-        IsleKit.TeleportBooth(b, "Summit", "Plaza", "TO THE PLAZA", back.x, back.y, Mathf.Atan2(CastIronPizzaPuzzle.Side.x, CastIronPizzaPuzzle.Side.y) * Mathf.Rad2Deg, false);
+        IsleKit.TeleportBooth(b, "Summit", "Plaza", "ToPlaza", back.x, back.y, Mathf.Atan2(CastIronPizzaPuzzle.Side.x, CastIronPizzaPuzzle.Side.y) * Mathf.Rad2Deg, false);
         Vector2 board = tee + IsleKit.Turn(2.3f, -1.4f, yaw);
         IsleKit.BoardOnPosts(b, "Disc Golf Sign", board.x, board.y, yaw, 1.6f, 1.2f, 2.0f, IsleKit.Green, false);
         Vector2 face = board + IsleKit.Turn(0f, IsleKit.FaceZ + 0.06f, yaw);
-        SetText(b.Part("Sign", face.x, face.y, 1.6f, yaw, false).Named("Disc Golf Words"), "SUMMIT DISC GOLF", 2.6f);
+        IsleKit.PaintedWords(b, "Disc Golf Words", "DiscGolf", board.x + IsleKit.Turn(0f, 0.07f, yaw).x, board.y + IsleKit.Turn(0f, 0.07f, yaw).y, yaw, 1.6f, 1.2f, 0.8f, false);
         Kit.LightString(b, "Disc Golf Lights", new List<Vector3>
         {
             new Vector3(board.x + IsleKit.Turn(-1.0f, 0f, yaw).x, 2.4f, board.y + IsleKit.Turn(-1.0f, 0f, yaw).y),
@@ -174,7 +174,7 @@ public sealed class SummitDiscGolfPuzzle : PuzzleDef
             Vector2 behind = stand + IsleKit.Turn(0f, -1.6f, sy);
             IsleKit.BoardOnPosts(b, "Ski Stand Sign", behind.x, behind.y, sy, 2.4f, 1.5f, 2.2f, IsleKit.Red, false);
             Vector2 signFace = behind + IsleKit.Turn(0f, IsleKit.FaceZ + 0.06f, sy);
-            IsleKit.SignText(b.Part("Sign", signFace.x, signFace.y, 1.85f, sy, false).Named("Ski Stand Words"), "SKIS AND BOARDS: TAKE A PAIR", 1.6f);
+            IsleKit.PaintedWords(b, "Ski Stand Words", "SkiStand", behind.x + IsleKit.Turn(0f, 0.07f, sy).x, behind.y + IsleKit.Turn(0f, 0.07f, sy).y, sy, 2.4f, 1.5f, 0.7f, false);
         }
         Debug.Log("[BWM] Summit Disc Golf: 2 baskets and " + Discs + " frisbees on the summit");
     }

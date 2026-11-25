@@ -11,6 +11,13 @@
 // turned down in two places, either of which is enough: the ocean bus's volume (AmbienceSoundData.OceanBus.BusVolume)
 // and the beach sources' own script volume (AudioSourceController.ScriptableVolume). The wind is left as it is.
 //
+// Loudness (the user, 2026-11-24, an hour after the first version: "the ocean sounds are now EXTREMELY loud compared to
+// the base game"). The first version wrote the sea's share (0..1) straight into every beach source's ScriptableVolume,
+// which is the game's own mix for that source: at "full" all thirteen loops played at 1, everywhere, the mainland
+// included. Now a source's own value is read before it is first touched and only ever multiplied (never raised above
+// it), nothing at all is touched until the sea has to be turned down, and the bus is turned down in its own units
+// (a value at or below 0 is taken for decibels and lowered, never scaled towards 0 dB).
+//
 // The game's names are used directly; where one is missing or throws, that way is given up with a line in the log.
 // Nothing here was heard in the game when it was written (2026-11-24, the user was in a walk): check State.
 //
@@ -24,9 +31,13 @@ namespace WinterWalk
     internal static class IsleSound
     {
         public static bool Off;
-        public static float Shore = 3f;        // metres above the sea: below this the sea is at full loudness
+        public static float Shore = 3f;        // metres above the sea: below this the sea is at its loudest on the island (ShoreLevel)
         public static float Inland = 11f;      // and from here up it is silent
+        public static float ShoreLevel = 0.35f; // the sea's loudness at the island's own water's edge (live setting)
         public static float TestSea = -1f;
+        // The bus is left alone unless this is set (live, for tests): it is an asset the whole game shares and that
+        // outlives the walk, its units are not known (its value is logged once), and the sources alone are enough
+        public static bool UseBus;
         public static string State = "not started";
         public static float Sea = 1f;          // the sea's loudness now, 0..1
 
@@ -36,6 +47,8 @@ namespace WinterWalk
         static float bus0 = 1f, applied = -1f, nextLook, nextApply;
         static bool busFailed, sourcesFailed, told;
         static int sources;
+        // each beach source's own volume, as the game had it before this first touched it (by the source's pointer)
+        static readonly System.Collections.Generic.Dictionary<IntPtr, float> own = new System.Collections.Generic.Dictionary<IntPtr, float>();
 
         // Once a frame from SkyDriver: weight is how far the camera is on the island (0..1), y its height
         internal static void Tick(float weight, float y, float now)
@@ -46,8 +59,12 @@ namespace WinterWalk
             // only well onto the island: the winter's weight is already above nothing 170 m outside the island's box,
             // which reaches the mainland's shore by the bridge, where the game's own surf belongs (at the spawn rooms
             // the sea was at 0.78 with the plain weight)
-            float isle = weight <= 0.6f ? 0f : (weight - 0.6f) / 0.4f;
-            float want = TestSea >= 0f ? Math.Min(1f, TestSea) : 1f - isle * inland;
+            // (0.9, not 0.6: at the intro pavilion on the mainland, 60 m from the bridge, the sea was already at 0.49)
+            float isle = weight <= 0.9f ? 0f : (weight - 0.9f) / 0.1f;
+            // On the island's own shore the game takes the listener for one standing in open sea and plays every beach
+            // loop at once, far louder than any beach of the base island (the user, 2026-11-24: quiet inland is right,
+            // "it just shouldn't be so loud near the sea"): so even at the water's edge it is held to ShoreLevel there.
+            float want = TestSea >= 0f ? Math.Min(1f, TestSea) : 1f - isle * (1f - ShoreLevel * (1f - inland));
             // glide, so walking up from a beach does not switch the surf off
             float step = Time.unscaledDeltaTime * 0.6f;
             Sea = want > Sea ? Math.Min(want, Sea + step) : Math.Max(want, Sea - step);
@@ -63,7 +80,12 @@ namespace WinterWalk
             if (!Find(now)) return;
             applied = sea;
             if (!busFailed)
-                try { if (busVolume != null) busVolume.Value = bus0 * sea; }
+                try
+                {
+                    if (busVolume != null && UseBus)
+                        busVolume.Value = bus0 > 0f ? bus0 * sea                                               // a plain share
+                            : sea <= 0.001f ? bus0 - 80f : bus0 + 20f * (float)Math.Log10(sea);                 // decibels: only ever down
+                }
                 catch (Exception e) { busFailed = true; Plugin.L.LogWarning("Winter Walk: the ocean bus's volume could not be set (" + e.GetType().Name + ": " + e.Message + ")"); }
             if (!sourcesFailed)
                 try
@@ -79,7 +101,7 @@ namespace WinterWalk
                     if (rocky != null) foreach (var pair in rocky) Quiet(pair.Value, sea);
                 }
                 catch (Exception e) { sourcesFailed = true; Plugin.L.LogWarning("Winter Walk: the beach sounds' own volume could not be set (" + e.GetType().Name + ": " + e.Message + ")"); }
-            State = "sea at " + sea.ToString("0.00") + "; bus " + (busFailed ? "failed" : busVolume != null ? "set" : "none") + ", " + (sourcesFailed ? "sources failed" : sources + " beach sources set");
+            State = "sea at " + sea.ToString("0.00") + "; bus " + (busFailed ? "failed" : !UseBus ? "left alone" : busVolume != null ? "set" : "none") + ", " + (sourcesFailed ? "sources failed" : sources + " beach sources set");
             if (!told && sea < 0.5f)
             {
                 told = true;
@@ -96,7 +118,9 @@ namespace WinterWalk
         static void Quiet(AudioSourceController source, float sea)
         {
             if (source == null) return;
-            source.ScriptableVolume = sea;
+            IntPtr key = source.Pointer;
+            if (!own.TryGetValue(key, out float mine)) { mine = source.ScriptableVolume; own[key] = mine; }
+            source.ScriptableVolume = mine * sea;
             sources++;
         }
 
@@ -112,13 +136,14 @@ namespace WinterWalk
                 if (player == null) { playerSeen = IntPtr.Zero; State = "no ambience player yet"; return false; }
                 playerSeen = player.Pointer;
                 busVolume = null; busFailed = false; sourcesFailed = false;
+                own.Clear();
                 try
                 {
                     AmbienceSoundData data = player.SoundData;
                     AudioBus bus = data != null ? data.OceanBus : null;
                     busVolume = bus != null ? bus.BusVolume : null;
                     // the bus is an asset that outlives the walk: its own volume is the one it had when first seen
-                    if (busVolume != null && applied < 0f) bus0 = busVolume.Value;
+                    if (busVolume != null && applied < 0f) { bus0 = busVolume.Value; Plugin.L.LogInfo("Winter Walk: the game's ocean bus volume is " + bus0.ToString("0.###")); }
                 }
                 catch (Exception e) { busFailed = true; Plugin.L.LogWarning("Winter Walk: the game's ocean bus was not found (" + e.GetType().Name + ": " + e.Message + ")"); }
                 return true;
