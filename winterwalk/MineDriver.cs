@@ -36,6 +36,7 @@ namespace WinterWalk
         public static bool ForceOpen;        // for testing (the companion: set?path=WinterWalk.MineDriver.ForceOpen&value=true)
         public static bool Open;             // read-only: whether the mine is open
         public static bool Underground;      // read-only: whether this player's camera is in the mine
+        public static bool NoSnow;           // for testing: the snowfall off, to measure what it costs
         public static string State = "not loaded";
 
         readonly List<Transform> trips = new List<Transform>();
@@ -143,6 +144,7 @@ namespace WinterWalk
         {
             if (Time.unscaledTime < nextPlinthCheck) return Open;
             nextPlinthCheck = Time.unscaledTime + 1f;
+            plinths.RemoveAll(p => p == null);      // a new walk builds the packs again: plinths of the walk before are gone
             if (plinths.Count < 5)
             {
                 plinths.Clear();
@@ -157,7 +159,7 @@ namespace WinterWalk
             if (plinths.Count < 5) { State = "waiting: the mine tower shows " + plinths.Count + " of 5 plinths (the tower shows one plinth per puzzle loaded, The Tree's five first, so the mine needs ten puzzles)"; return false; }
             int filled = 0;
             foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in plinths)
-                if (plinth != null && plinth.HasGourd) filled++;
+                if (Towers.Filled(plinth)) filled++;
             State = filled >= 5 ? "open" : "waiting: " + filled + " of 5 gourds on the mine tower";
             return filled >= 5;
         }
@@ -264,7 +266,7 @@ namespace WinterWalk
             }
             Underground = under;
             Rescue();
-            under |= TrainDriver.InTunnel || (cam != null && Indoors(cam.transform.position));      // a railway tunnel or a room stops the snowfall too
+            under |= NoSnow || TrainDriver.InTunnel || (cam != null && Indoors(cam.transform.position));      // a railway tunnel or a room stops the snowfall too
             if (snowfall != null && snowfall.activeSelf == under) snowfall.SetActive(!under);
         }
 
@@ -342,10 +344,11 @@ namespace WinterWalk
                     if (ForceOpen) State = "open (forced open for testing)";
                     if (gates != null && gates.activeSelf == Open) gates.SetActive(!Open);
                 }
-                // closed: the mantrips stand where the clock's zero puts them
-                double now = Open ? Mirror.NetworkTime.time : 0.0;
-                bool place = Open || !parked;
-                parked = !Open;
+                // The mantrips always run, and whoever comes upon one can ride it, whatever the towers hold: the gourds only
+                // open the mine's gates (the user, 2026-11-24). Before that they stood still until the mine opened.
+                double now = Mirror.NetworkTime.time;
+                bool place = true;
+                parked = false;
                 for (int i = 0; place && i < trips.Count; i++)
                 {
                     if (trips[i] == null) { tripRoot = null; return; }

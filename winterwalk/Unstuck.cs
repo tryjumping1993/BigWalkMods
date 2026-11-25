@@ -7,6 +7,13 @@
 // ground), they are set down on firm ground nearby: the game's own last safe position if it is near and not the same
 // spot, else the nearest open, level spot within a few metres. Never while sitting, swimming, asleep, flying, skiing
 // or being moved by another of Winter Walk's drivers (mantrips, lifts, planes, dinosaurs). Each rescue is logged.
+//
+// Under the island (the user, 2026-11-24: "you can sometimes get into environments where you're not supposed to and
+// exist within the world geometry": they stood 32 m under the mountain's snow on the outside of a railway tunnel by the
+// Summit station, seeing the sky through the ground's back). The island's ground is one sheet with nothing above it but
+// air, so a player with the island's ground over their head and no roof of a tunnel, the mine or a building between
+// them and it is somewhere no one should be, however they got there: after UnderSeconds they are set down on the
+// snow above. The log says where they last stood in the open, which is where the way in is.
 using System;
 using System.Globalization;
 using UnityEngine;
@@ -29,6 +36,74 @@ namespace WinterWalk
         float anchorAt;
         Vector3 lastRescueAt = new Vector3(1e9f, 0f, 0f);
         int repeats;
+
+        public static float UnderSeconds = 1.5f;    // live setting: this long under the island's ground, then up
+        public static bool UnderOff;
+        public static string UnderState = "";
+        float nextUnder, underSince = -1f;
+        Vector3 lastOpen;                            // where the player last stood with no ground over their head
+        bool lastOpenKnown;
+
+        // The island's ground above the player's head with no roof of ours in between: how high it is, or NaN.
+        // (The ground's pieces are named "Island i-j"; rays only meet a mesh from its front, so from below the ground
+        // itself is not met, while a tunnel's lining, the mine's rock and a building's ceiling, which face down, are.)
+        static float GroundOverhead(Transform self, Vector3 pos, out string roof)
+        {
+            roof = "";
+            float surface = float.NaN;
+            foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(pos.x, pos.y + 500f, pos.z), Vector3.down, 497.5f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                if (hit.collider == null || !hit.collider.name.StartsWith("Island ", StringComparison.Ordinal)) continue;
+                if (float.IsNaN(surface) || hit.point.y > surface) surface = hit.point.y;
+            }
+            if (float.IsNaN(surface)) return surface;
+            foreach (RaycastHit hit in Physics.RaycastAll(pos, Vector3.up, surface - pos.y + 0.5f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                Collider c = hit.collider;
+                if (c == null || c.transform.IsChildOf(self) || c.name.StartsWith("Island ", StringComparison.Ordinal)) continue;
+                if (c.transform.root.name == "Winter Dressing") continue;      // (a rock buried in the mountain is no roof)
+                roof = c.name;
+                return float.NaN;
+            }
+            return surface;
+        }
+
+        void Under(PlayerCharacter pc, Vector3 pos, bool sitting)
+        {
+            float now = Time.unscaledTime;
+            if (now < nextUnder) return;
+            nextUnder = now + 0.5f;
+            bool onIsle = pos.x > Dresser.X0 && pos.x < Dresser.X1 && pos.z > Dresser.Z0 && pos.z < Dresser.Z1;
+            if (UnderOff || !onIsle || sitting || PlaneDriver.Flying) { underSince = -1f; UnderState = ""; return; }
+            Transform self = pc.transform.root;
+            float surface = GroundOverhead(self, pos, out string roof);
+            if (float.IsNaN(surface)) { underSince = -1f; UnderState = roof.Length > 0 ? "under " + roof : ""; if (roof.Length == 0) { lastOpen = pos; lastOpenKnown = true; } return; }
+            if (underSince < 0f) underSince = now;
+            UnderState = "under the island's ground by " + (surface - pos.y).ToString("0.0", CultureInfo.InvariantCulture) + " m";
+            if (now - underSince < UnderSeconds) return;
+            underSince = -1f;
+            // up onto the snow above: there, or the nearest open level spot round it
+            Vector3? to = Firm(self, pos.x, pos.z, surface);
+            for (float r = 1.5f; r <= 12f && !to.HasValue; r += 1.5f)
+                for (int k = 0; k < 12 && !to.HasValue; k++)
+                {
+                    float a = k * Mathf.PI / 6f;
+                    Vector3 around = new Vector3(pos.x + Mathf.Cos(a) * r, pos.y, pos.z + Mathf.Sin(a) * r);
+                    float there = GroundOverhead(self, around, out _);
+                    if (!float.IsNaN(there)) to = Firm(self, around.x, around.z, there);
+                }
+            if (!to.HasValue) to = new Vector3(pos.x, surface + 1.2f, pos.z);
+            string under = "nothing";
+            foreach (RaycastHit hit in Physics.RaycastAll(pos, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore))
+                if (hit.collider != null && !hit.collider.transform.IsChildOf(self)) { under = hit.collider.name; break; }
+            Diag.Touched("unstuck");
+            pc.transform.position = to.Value;
+            if (pc.rb != null) { pc.rb.position = to.Value; pc.rb.linearVelocity = Vector3.zero; pc.rb.angularVelocity = Vector3.zero; }
+            lastRescue = now; Rescues++;
+            State = "rescued " + Rescues + " time(s)";
+            Diag.Warn("unstuck: the player was UNDER THE ISLAND'S GROUND at " + Diag.V(pos) + ", " + (surface - pos.y).ToString("0.0", CultureInfo.InvariantCulture) + " m below the snow, standing on " + under
+                + "; last in the open at " + (lastOpenKnown ? Diag.V(lastOpen) : "(not known)") + "; set down on the snow at " + Diag.V(to.Value));
+        }
 
         static int Action(string word, bool exact)
         {
@@ -69,6 +144,7 @@ namespace WinterWalk
                 PlayerGround ground = pc.ground;
                 Rigidbody rb = pc.rb;
                 bool sitting = pc.sitter != null && pc.sitter.isSittingLocal;
+                Under(pc, pos, sitting);
                 bool asleep = pc.sleeper != null && pc.sleeper.localIsSleeping;
                 bool swimming = ground != null && ground.isSwimming;
                 bool busy = sitting || asleep || swimming || PlaneDriver.Flying || JetpackDriver.Worn && rb != null && rb.linearVelocity.y > 0.5f || Diag.AnyTouch(3f);

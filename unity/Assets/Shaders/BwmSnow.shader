@@ -569,18 +569,16 @@ Shader "BWM/Snow"
         Pass
         {
             Name "GBufferDepth"
-            Tags { "LightMode" = "UniversalGBuffer" "UniversalMaterialType" = "Unlit" }      // depth only, so the depth texture holds this surface (see the note above)
+            Tags { "LightMode" = "UniversalGBuffer" "UniversalMaterialType" = "Unlit" }      // depth, normal and a plain albedo: BwmGBuffer.hlsl
             ZWrite On
-            ColorMask 0 0
-            ColorMask 0 1
-            ColorMask 0 2
             ColorMask 0 3
 
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            float4 Vert(float4 positionOS : POSITION) : SV_POSITION { return TransformObjectToHClip(positionOS.xyz); }
-            half4 Frag(float4 positionCS : SV_POSITION) : SV_Target { return positionCS.z; }
+            #include "BwmGBuffer.hlsl"
+            BwmGBufferVaryings Vert(BwmGBufferAttributes v) { return BwmGBufferVert(v); }
+            BwmGBufferOut Frag(BwmGBufferVaryings i, bool front : SV_IsFrontFace) { return BwmGBuffer(i.normalWS, front); }
             ENDHLSL
         }
 

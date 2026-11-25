@@ -1,7 +1,11 @@
-// Summit Disc Golf (a scenery pack): two portable disc golf baskets and six frisbees on the pizzeria's terrace at the
+// Summit Disc Golf (a scenery pack): two portable disc golf baskets and twelve frisbees on the pizzeria's terrace at the
 // summit, all of them things players can pick up, carry and put down anywhere, so a group can lay out its own holes
 // (or carry a basket down the mountain). The frisbees wait on a rack beside a tee mat and a sign; the baskets stand
 // in front of the shop and down the alley beside it to begin with. Nothing to win. Items are not saved: a reload puts them back.
+// Winter Walk's DiscGolf driver does the rest: a basket put down stands upright, a thrown frisbee flies as a disc
+// does, and frisbees left lying come back to the rack, so they never run out.
+// The pack also holds the summit end of the teleporters (Winter Walk's Teleporter): where travellers from the landing's
+// and the plaza's pads arrive, in front of the pizzeria's door, and the pad that takes them back down to the plaza.
 using System.Collections.Generic;
 using Bwm;
 using UnityEngine;
@@ -14,6 +18,7 @@ public sealed class SummitDiscGolfPuzzle : PuzzleDef
     public override Vector2? FixedSite => WinterIslePuzzle.Summit;
 
     static readonly Color Steel = new Color(0.62f, 0.64f, 0.68f), Yellow = new Color(0.98f, 0.8f, 0.1f), Chain = new Color(0.78f, 0.79f, 0.83f);
+    const int Discs = 12;
     static readonly Color[] DiscColours =
     {
         new Color(0.9f, 0.15f, 0.12f), new Color(0.15f, 0.45f, 0.95f), new Color(0.98f, 0.85f, 0.15f),
@@ -56,6 +61,35 @@ public sealed class SummitDiscGolfPuzzle : PuzzleDef
         return mb.ToMesh();
     }
 
+    // A pair of skis lying flat, tips towards +z: two planks with turned-up tips and a binding each
+    static Mesh SkisMesh(Color colour)
+    {
+        var mb = new MeshBuilder();
+        foreach (float x in new[] { -0.09f, 0.09f })
+        {
+            Kit.AddBox(mb, new Vector3(x, 0f, -0.05f), new Vector3(0.085f, 0.018f, 1.5f), colour);
+            Kit.AddBox(mb, new Vector3(x, 0.012f, 0.76f), new Vector3(0.085f, 0.018f, 0.12f), colour);          // the tip, stepped up
+            Kit.AddBox(mb, new Vector3(x, 0.03f, 0.86f), new Vector3(0.075f, 0.018f, 0.1f), colour * 0.9f);
+            Kit.AddBox(mb, new Vector3(x, 0.018f, -0.1f), new Vector3(0.07f, 0.05f, 0.26f), new Color(0.12f, 0.12f, 0.14f));      // the binding
+        }
+        return mb.ToMesh();
+    }
+
+    // A snowboard lying flat, nose towards +z
+    static Mesh BoardMesh(Color colour)
+    {
+        var mb = new MeshBuilder();
+        Kit.AddBox(mb, new Vector3(0f, 0f, 0f), new Vector3(0.27f, 0.02f, 1.2f), colour);
+        foreach (float z in new[] { -0.66f, 0.66f })
+        {
+            Kit.AddBox(mb, new Vector3(0f, 0.01f, z), new Vector3(0.24f, 0.02f, 0.12f), colour);
+            Kit.AddBox(mb, new Vector3(0f, 0.025f, z * 1.14f), new Vector3(0.18f, 0.02f, 0.08f), colour * 0.9f);
+        }
+        foreach (float z in new[] { -0.26f, 0.26f })
+            Kit.AddBox(mb, new Vector3(0f, 0.02f, z), new Vector3(0.24f, 0.06f, 0.14f), new Color(0.12f, 0.12f, 0.14f));          // the bindings
+        return mb.ToMesh();
+    }
+
     static void SetText(Piece sign, string text, float size)
     {
         var tmp = sign.Go.GetComponentInChildren<TMPro.TextMeshPro>(true);
@@ -92,11 +126,17 @@ public sealed class SummitDiscGolfPuzzle : PuzzleDef
         Kit.AddBox(mb, new Vector3(rack.x, 0.85f, rack.y), new Vector3(1.9f, 0.06f, 0.8f), IsleKit.DarkWood, yaw);
         Piece furniture = b.MeshPiece("Disc Golf Tee", mb.ToMesh(), snowy);
         furniture.Transform.position = b.WorldPoint(tee.x, tee.y, 0f, false);
-        for (int i = 0; i < DiscColours.Length; i++)
+        for (int i = 0; i < Discs; i++)
         {
-            Vector2 at = tee + IsleKit.Turn(-2.2f - 0.75f + (i % 3) * 0.75f, -1.2f - 0.18f + (i / 3) * 0.36f, yaw);
-            b.Item("Frisbee " + (i + 1), DiscMesh(DiscColours[i]), bare, at.x, at.y, 0.93f, 0.25f, false);
+            Vector2 at = tee + IsleKit.Turn(-2.2f - 0.66f + (i % 4) * 0.44f, -1.2f - 0.24f + (i / 4) * 0.24f, yaw);
+            b.Item("Frisbee " + (i + 1).ToString("00"), DiscMesh(DiscColours[i % DiscColours.Length]), bare, at.x, at.y, 0.93f, 0.25f, false)
+                .Set("PuzzleItem", "savesOnReload", false);
         }
+        // the teleporters' summit end: arriving in front of the pizzeria's door (shop x -2.4, 4 m out from it), facing
+        // it; and the way back down, a pad at the terrace's side
+        Vector2 arrive = Here(CastIronPizzaPuzzle.ShopFront - 4f, 2.4f), back = Here(19.5f, -11f);      // (on the open snow by the railing: the terrace's other side is all tables)
+        IsleKit.TeleportArrival(b, "Pizzeria", arrive.x, arrive.y, Mathf.Atan2(CastIronPizzaPuzzle.Out.x, CastIronPizzaPuzzle.Out.y) * Mathf.Rad2Deg, false);
+        IsleKit.TeleportBooth(b, "Summit", "Plaza", "TO THE PLAZA", back.x, back.y, Mathf.Atan2(CastIronPizzaPuzzle.Side.x, CastIronPizzaPuzzle.Side.y) * Mathf.Rad2Deg, false);
         Vector2 board = tee + IsleKit.Turn(2.3f, -1.4f, yaw);
         IsleKit.BoardOnPosts(b, "Disc Golf Sign", board.x, board.y, yaw, 1.6f, 1.2f, 2.0f, IsleKit.Green, false);
         Vector2 face = board + IsleKit.Turn(0f, IsleKit.FaceZ + 0.06f, yaw);
@@ -106,6 +146,36 @@ public sealed class SummitDiscGolfPuzzle : PuzzleDef
             new Vector3(board.x + IsleKit.Turn(-1.0f, 0f, yaw).x, 2.4f, board.y + IsleKit.Turn(-1.0f, 0f, yaw).y),
             new Vector3(board.x + IsleKit.Turn(1.0f, 0f, yaw).x, 2.4f, board.y + IsleKit.Turn(1.0f, 0f, yaw).y),
         }, 0.2f, 0.3f, false, false, 97);
-        Debug.Log("[BWM] Summit Disc Golf: 2 baskets and " + DiscColours.Length + " frisbees on the summit");
+        // Skis and snowboards for the taking (the user, 2026-11-24: "free access to skiing equipment at the summit ...
+        // intuitive to use as is most of the equipment in the base game"): things to pick up, on a low table under a
+        // sign. Whoever holds a pair has it on their feet (Winter Walk's SkiDriver), and pairs left lying come back.
+        {
+            Vector2 stand = Here(24.5f, -9.5f);      // on the open snow in front of the shop, by the railing
+            float sy = Mathf.Atan2(CastIronPizzaPuzzle.Side.x, CastIronPizzaPuzzle.Side.y) * Mathf.Rad2Deg;      // its front to the terrace's middle
+            var table = new MeshBuilder();
+            Kit.AddBox(table, new Vector3(0f, 0f, 0f), new Vector3(4.6f, 0.42f, 2.1f), IsleKit.Wood, sy);
+            Kit.AddBox(table, new Vector3(0f, 0.42f, 0f), new Vector3(4.7f, 0.05f, 2.2f), IsleKit.DarkWood, sy);
+            Piece tablePiece = b.MeshPiece("Ski Stand", table.ToMesh(), snowy);
+            tablePiece.Transform.position = b.WorldPoint(stand.x, stand.y, 0f, false);
+            Color[] skiColours = { new Color(0.85f, 0.12f, 0.1f), new Color(0.95f, 0.75f, 0.1f), new Color(0.15f, 0.6f, 0.3f) };
+            Color[] boardColours = { new Color(0.1f, 0.45f, 0.8f), new Color(0.6f, 0.2f, 0.7f) };
+            for (int i = 0; i < 6; i++)
+            {
+                Vector2 at = stand + IsleKit.Turn(-2.0f + i * 0.36f, 0f, sy);
+                Piece skis = b.Item("Skis " + (i + 1), SkisMesh(skiColours[i % 3]), bare, at.x, at.y, 0.5f, 3f, false).Set("PuzzleItem", "savesOnReload", false);
+                skis.Transform.rotation = Quaternion.Euler(0f, sy, 0f);
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                Vector2 at = stand + IsleKit.Turn(0.45f + i * 0.5f, 0f, sy);
+                Piece snowboard = b.Item("Snowboard " + (i + 1), BoardMesh(boardColours[i % 2]), bare, at.x, at.y, 0.5f, 3f, false).Set("PuzzleItem", "savesOnReload", false);
+                snowboard.Transform.rotation = Quaternion.Euler(0f, sy, 0f);
+            }
+            Vector2 behind = stand + IsleKit.Turn(0f, -1.6f, sy);
+            IsleKit.BoardOnPosts(b, "Ski Stand Sign", behind.x, behind.y, sy, 2.4f, 1.5f, 2.2f, IsleKit.Red, false);
+            Vector2 signFace = behind + IsleKit.Turn(0f, IsleKit.FaceZ + 0.06f, sy);
+            IsleKit.SignText(b.Part("Sign", signFace.x, signFace.y, 1.85f, sy, false).Named("Ski Stand Words"), "SKIS AND BOARDS: TAKE A PAIR", 1.6f);
+        }
+        Debug.Log("[BWM] Summit Disc Golf: 2 baskets and " + Discs + " frisbees on the summit");
     }
 }

@@ -218,6 +218,44 @@ public sealed class IslandGearPuzzle : PuzzleDef
         }
         if (!postPlaced) Debug.LogWarning("[BWM] Island Gear: no clear ground for a firework post beside " + name + "; it stands at its first place");
         FireworkPost(name.Replace(" Gear", "") + " Fireworks", postAt, yaw);
+        // The teleporter to Cast Iron Pizza on the summit (the user, 2026-11-24), at the landing and at the plaza: a
+        // signboard facing the way the station does, its pad in front of it, on ground the island's trees and rocks
+        // left free and clear of the firework post. Its summit end, and the pad back, are in the Summit Disc Golf pack;
+        // travellers coming back arrive in front of the plaza's pad.
+        if (name == "Landing Gear" || name == "Plaza Gear")
+        {
+            Vector3 frontDir = L(0f, 0f, -1f);
+            var front2 = new Vector2(frontDir.x, frontDir.z);
+            Vector2 boothAt = Vector2.zero;
+            bool boothPlaced = false;
+            var spots = new List<(float px, float pz)> { (5.4f, -0.3f), (-5.4f, -0.3f), (6.8f, -0.3f), (-6.8f, -0.3f) };
+            foreach (float ring in new[] { 7.5f, 9f, 11f, 13f })
+                for (int step = 0; step < 16; step++)
+                {
+                    float a = step * Mathf.PI / 8f;
+                    spots.Add((Mathf.Cos(a) * ring, Mathf.Sin(a) * ring * 0.8f - 0.5f));
+                }
+            foreach (var (px, pz) in spots)
+            {
+                Vector3 beside = L(px, 0f, pz);
+                var candidate = new Vector2(at.x + beside.x, at.y + beside.z);
+                if (!boothPlaced && boothAt == Vector2.zero) boothAt = candidate;      // (failing all, the first)
+                if ((candidate - postAt).magnitude < 3.5f || (candidate + front2 * 1.4f - postAt).magnitude < 3f) continue;
+                if (!PostSpot(candidate) || !PostSpot(candidate + front2 * 1.4f) || !PostSpot(candidate + front2 * 3.6f)) continue;
+                boothAt = candidate;
+                boothPlaced = true;
+                break;
+            }
+            if (!boothPlaced) Debug.LogWarning("[BWM] Island Gear: no clear ground for the teleporter beside " + name + "; it stands at its first place");
+            string stop = name.Replace(" Gear", "");
+            IsleKit.TeleportBooth(b, stop, "Pizzeria", "TO CAST IRON PIZZA", boothAt.x - site.x, boothAt.y - site.z, yaw + 180f);
+            if (stop == "Plaza")
+            {
+                Vector2 arrive = boothAt + front2 * 3.6f;
+                IsleKit.TeleportArrival(b, "Plaza", arrive.x - site.x, arrive.y - site.z, yaw);      // facing the board they came from
+            }
+            Debug.Log("[BWM] Island Gear: teleporter to the pizzeria beside " + name + " at " + Sdk.F(boothAt.x) + ", " + Sdk.F(boothAt.y));
+        }
     }
 
     public override void Build(PuzzleBuilder builder)

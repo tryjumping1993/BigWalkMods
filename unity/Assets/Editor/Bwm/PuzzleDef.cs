@@ -95,6 +95,7 @@ namespace Bwm
         public struct GlowStretch { public Vector3 a, b; public Color color; public int bulbs; public GameObject piece; }
         public readonly List<GlowStretch> Strings = new List<GlowStretch>();
         readonly string assetDir;      // Assets/Puzzles/<Name>
+        public string Name => System.IO.Path.GetFileName(assetDir.TrimEnd('/'));      // the puzzle's name, as its folder has it
         readonly Dictionary<string, Material> materials = new Dictionary<string, Material>();
 
         public PuzzleBuilder(GameObject root, Ground ground, string assetDir)

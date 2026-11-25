@@ -31,6 +31,8 @@ public sealed class LookoutsPuzzle : PuzzleDef
     static readonly string[] Names = { "North", "South", "Summit" };
     static readonly Color[] Colours = { new Color(0.85f, 0.12f, 0.1f), new Color(0.12f, 0.6f, 0.25f), new Color(0.98f, 0.75f, 0.2f) };
     const float StationRadius = 7f;
+    // a station's beacon mast: its top platform above the station's floor, and the beacon lamp's middle
+    const float MastTop = 24f, BeaconUp = MastTop + 1.8f;
     // each lookout's ground, for the island to level and keep clear (not the summit's: the summit is level ground
     // already, and a flat there would cut into its plateau)
     public override IEnumerable<Vector3> ExtraSites => Stations.Where((s, i) => i != 2).Select(s => new Vector3(s.x, s.y, StationRadius));
@@ -108,14 +110,16 @@ public sealed class LookoutsPuzzle : PuzzleDef
         Kit.AddBox(mb, P(0f, 1.7f, 2.9f, th), new Vector3(3.6f, 0.18f, 3.0f), IsleKit.DarkWood, th);      // roof, v 0.2..3.2
         Kit.AddBox(mb, P(0f, 1.7f, 3.08f, th), new Vector3(2.2f, 0.14f, 3.0f), IsleKit.DarkWood, th);     // a stepped ridge
         Vector3 mast = P(-3.0f, -2.0f, 0f, th);
-        Kit.AddBox(mb, mast, new Vector3(0.34f, 11f, 0.34f), IsleKit.Wood);
-        Kit.AddBox(mb, mast + Vector3.up * 11.0f, new Vector3(1.4f, 0.2f, 1.4f), IsleKit.DarkWood);
-        Kit.AddBox(mb, mast + Vector3.up * 12.5f, new Vector3(1.6f, 0.2f, 1.6f), IsleKit.DarkWood);
+        // the beacon mast stands above the firs (which reach about 16 m), so it shows from far along the way there
+        Kit.AddBox(mb, mast, new Vector3(0.5f, MastTop, 0.5f), IsleKit.Wood);
+        Kit.AddBox(mb, mast + Vector3.up * MastTop, new Vector3(2.4f, 0.25f, 2.4f), IsleKit.DarkWood);
+        Kit.AddBox(mb, mast + Vector3.up * (MastTop + 3.3f), new Vector3(2.8f, 0.25f, 2.8f), IsleKit.DarkWood);
+        Kit.AddBox(mb, mast + new Vector3(0f, MastTop - 5f, 0f), new Vector3(3.2f, 4.2f, 0.12f), Colours[i], th);      // a banner of the station's colour under the lamp
         Piece booth = Keep(b.MeshPiece("Lookout " + Names[i] + " Booth", mb.ToMesh(), IsleKit.Snowy(b)));
         booth.Transform.position = b.WorldPoint(c.x, c.y, baseH, false);
 
         var glow = new MeshBuilder();
-        Kit.AddGlow(glow, mast + Vector3.up * 11.75f, new Vector3(1.0f, 1.3f, 1.0f), 0f, Colours[i], i * 0.25f);      // the beacon
+        Kit.AddGlow(glow, mast + Vector3.up * BeaconUp, new Vector3(2.0f, 2.8f, 2.0f), 0f, Colours[i], i * 0.25f);      // the beacon
         Piece lamp = Keep(b.MeshPiece("Lookout " + Names[i] + " Beacon", glow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false));
         lamp.Transform.position = b.WorldPoint(c.x, c.y, baseH, false);
 
@@ -274,19 +278,25 @@ public sealed class LookoutsPuzzle : PuzzleDef
                 .Set("PuzzleVanillaItem", "itemType", 4)      // WalkieTalkie
                 .Set("PuzzleVanillaItem", "savesOnReload", false);
 
-        // ---- a telescope at the rim aimed at each lookout, beside a pennant of its colour ----
+        // ---- a pennant at the rim towards each lookout, in its colour, with an arrow board under it ----
+        // (Telescopes stood here until 2026-11-24, sunk to the knee and looking into the parapet: "the telescopes
+        // don't point to anything". Raised and aimed they still would not: the build measured each line of sight, and
+        // the ground between stands 20 m above the line to the North beacon, 18 m above the Summit's and just over the
+        // South's. So there are none: the pennants say which way to walk, and the 24 m beacon masts show from nearer.)
         for (int i = 0; i < Stations.Length; i++)
         {
             float bearing = Bearing(new Vector2(site.x, site.z), Stations[i]);
-            Vector2 at = IsleKit.Turn(0f, 6.6f, bearing), flag = IsleKit.Turn(1.3f, 6.6f, bearing), side = IsleKit.Turn(0.35f, 0f, bearing);
-            Piece telescope = b.Part("Telescope", at.x, at.y, Floor, bearing, false).Named("Observatory Telescope " + Names[i]);
+            Vector2 flag = IsleKit.Turn(0f, 6.9f, bearing), side = IsleKit.Turn(0.4f, 0f, bearing), tip = IsleKit.Turn(0f, 0.55f, bearing);
             var pennant = new MeshBuilder();
-            Kit.AddBox(pennant, new Vector3(flag.x, Floor, flag.y), new Vector3(0.08f, 2.6f, 0.08f), IsleKit.DarkWood);
-            Kit.AddBox(pennant, new Vector3(flag.x + side.x, Floor + 2.0f, flag.y + side.y), new Vector3(0.7f, 0.45f, 0.03f), Colours[i], bearing + 90f);
+            Kit.AddBox(pennant, new Vector3(flag.x, Floor, flag.y), new Vector3(0.1f, 3.2f, 0.1f), IsleKit.DarkWood);
+            Kit.AddBox(pennant, new Vector3(flag.x + side.x, Floor + 2.5f, flag.y + side.y), new Vector3(0.8f, 0.55f, 0.03f), Colours[i], bearing + 90f);
+            // the arrow: a bar along the bearing at chest height with a block at its far end, in the station's colour
+            Kit.AddBox(pennant, new Vector3(flag.x + tip.x * 0.5f, Floor + 1.3f, flag.y + tip.y * 0.5f), new Vector3(0.1f, 0.14f, 1.1f), Colours[i], bearing);
+            Kit.AddBox(pennant, new Vector3(flag.x + tip.x * 1.1f, Floor + 1.22f, flag.y + tip.y * 1.1f), new Vector3(0.34f, 0.3f, 0.2f), Colours[i], bearing);
             Piece flagPiece = b.MeshPiece("Observatory Pennant " + Names[i], pennant.ToMesh(), IsleKit.Bare(b));
             flagPiece.Transform.position = b.WorldPoint(0f, 0f, 0f, false);
             Piece group = i == 1 ? IsleKit.Lobby(b, "Observatory South", false, true, true) : i == 2 ? summit : null;
-            if (group != null) { telescope.Under(group); flagPiece.Under(group); }
+            if (group != null) flagPiece.Under(group);
         }
         Kit.LightRing(b, "Observatory Lights", 0f, 0f, 19.6f, 19.6f, 2.4f, true, 71);
 

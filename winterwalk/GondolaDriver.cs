@@ -145,6 +145,7 @@ namespace WinterWalk
         {
             if (Time.unscaledTime < nextPlinthCheck) return Open;
             nextPlinthCheck = Time.unscaledTime + 1f;
+            treePlinths.RemoveAll(p => p == null);      // a new walk builds the packs again: plinths of the walk before are gone
             if (treePlinths.Count < 5)
             {
                 treePlinths.Clear();
@@ -159,7 +160,7 @@ namespace WinterWalk
             if (treePlinths.Count < 5) { State = "waiting: The Tree's plinths are not loaded (" + treePlinths.Count + " of 5)"; return false; }
             int filled = 0;
             foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in treePlinths)
-                if (plinth != null && plinth.HasGourd) filled++;
+                if (Towers.Filled(plinth)) filled++;
             State = filled >= 5 ? "running" : "waiting: " + filled + " of 5 gourds on The Tree";
             return filled >= 5;
         }

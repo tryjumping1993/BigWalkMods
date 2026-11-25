@@ -2,14 +2,18 @@
 // columns, named only by stakes: row stakes along the side fences (red, green, gold, ice-blue, front to back) and
 // column stakes along the front and back fences (short to tall, one to four white bands, left to right).
 //
-// A tall lamp board stands on the Signal Cab's roof at the field's front edge, facing the field: sixteen lamps, a
-// row of them on each row's colour, a column over each column's bands. One lamp is lit. Find that pad from its two
-// stakes and stand on it; after a moment it counts, the lamp goes out and another lights (Seek, in PuzzleScripts).
-// Six pads win. There is no clock, treading on other pads costs nothing, and the only trace of where you have been
-// is your own tracks in the snow. One player can do it alone; with more, somebody on the cab's platform sees the whole
-// field and can call the walkers on.
-// (Before the user's rules of 2026-11-24 the lamps were in a sealed, soundproof hut, heard through a microphone in
-// the headphones of a chair in the cab, and each pad had 9 seconds: a three-link relay on a clock.)
+// A puzzle for two or more: a walker who cannot see and a guide who can. The field is blind-only: its one way in is
+// a blind turnstile in the front fence (the blindfold hangs on a post beside it), and BlindWatch puts anyone inside
+// the fence without a blindfold back outside. The guide climbs the Signal Cab, which looks over the whole field at
+// the tall lamp board behind its far fence: sixteen lamps, a row of them on each row's colour, a column over each
+// column's bands, laid out as the pads lie. One lamp is lit. The guide talks the walker onto that pad; after a moment
+// on it, it counts, the lamp goes out and another lights (Seek, in PuzzleScripts). Six pads win. There is no clock,
+// and treading on other pads costs nothing. The two talk freely: nobody is shut in.
+// (The user, 2026-11-24, of the version before: "it's set up so that the player in the overhead area needs to direct
+// a player, but with no blind mask and no requirement on entry, players can just complete the puzzle themselves".
+// That version had open gates and its lamp board on the cab's own roof, facing the field: the walker read it and the
+// guide in the cab could not see it at all. Before the rules of 2026-11-24 the lamps were in a sealed, soundproof
+// hut, heard through a microphone in the headphones of a chair in the cab, and each pad had 9 seconds.)
 //
 // Coordinates: x right, z forward (towards the back of the field), heights above the ground; the cab's floor is
 // 2.6 m up. Parts face their local +z; yaw 90 faces +x, -90 faces -x, 180 faces -z.
@@ -33,15 +37,17 @@ public sealed class FootprintsPuzzle : PuzzleDef
 
     static readonly float[] PadX = { -6.3f, -2.1f, 2.1f, 6.3f };      // columns 1..4, left to right
     static readonly float[] PadZ = { 1.0f, 5.2f, 9.4f, 13.6f };       // rows 1..4, front (nearest the cab) to back
-    // The lamp board on the cab's roof: its face, the lamps' columns (west to east, as the pads lie) and rows (the
-    // front row at the bottom), heights above the ground
-    const float BoardFace = -4.38f;
-    static readonly float[] LampX = { -0.9f, -0.3f, 0.3f, 0.9f };
-    static readonly float[] LampH = { CabFloor + 3.45f, CabFloor + 4.05f, CabFloor + 4.65f, CabFloor + 5.25f };
+    // The lamp board behind the back fence, facing the field and the cab: its face (it looks along -z), the lamps'
+    // columns (west to east, as the pads lie and as the cab sees them) and rows (the front row, nearest the cab, at
+    // the bottom), heights above the ground. The cab's window is 3.0 to 4.8 m up, 22 m away.
+    const float BoardZ = 18f, BoardFace = BoardZ - 0.06f, BoardLow = 2.0f, BoardTop = 5.6f;
+    static readonly float[] LampX = { -1.05f, -0.35f, 0.35f, 1.05f };
+    static readonly float[] LampH = { 2.75f, 3.35f, 3.95f, 4.55f };
     static readonly Color Warm = new Color(1f, 0.92f, 0.75f);      // near white: a lit lamp is a bright disc, an unlit one a dull one
 
-    // Field fence: x -9.2..9.2, z -2.2..16.6; front gates 1.6 m wide centred at x = -4.2 and 4.2
-    const float FenceX = 9.2f, FenceZ0 = -2.2f, FenceZ1 = 16.6f, FenceH = 1.8f, GateX = 4.2f, GateHalf = 0.8f;
+    // Field fence: x -9.2..9.2, z -2.2..16.6; one gap in the front, 2.16 m wide (a turnstile's doorway) centred at
+    // x = -4.2, where the blind turnstile stands
+    const float FenceX = 9.2f, FenceZ0 = -2.2f, FenceZ1 = 16.6f, FenceH = 1.8f, GateX = 4.2f, GateHalf = 1.08f;
 
     public override void Build(PuzzleBuilder b)
     {
@@ -61,14 +67,51 @@ public sealed class FootprintsPuzzle : PuzzleDef
         BuildFence(b, snowy, rowColour);
         BuildStakes(b, snowy, rowColour);
 
-        // the back board, behind the back fence, facing the field and the cab: the count
-        IsleKit.BoardOnPosts(b, "Back Board", 0f, 18f, 180f, 3.8f, 1.9f, 3.2f, IsleKit.Board);
-        b.Part("Progress Bar", 0f, 17.87f, 2.55f, 180f).Named("Seek Bar Back").Set("PuzzleProgressBar", "total", Rounds);
+        // ================= the lamp board, behind the back fence, facing the field and the cab =================
+        // One lamp per pad, laid out as the pads lie seen from the cab: west to the west, the front row (nearest the
+        // cab) at the bottom. Each row of lamps sits on its row's colour and each column over its column's bands, as
+        // on the stakes. The count is the bar across its top.
+        IsleKit.BoardOnPosts(b, "Lamp Board", 0f, BoardZ, 180f, 3.8f, BoardLow, BoardTop, IsleKit.Board);
+        var paint = new MeshBuilder();
+        for (int r = 0; r < 4; r++)
+            Block(paint, 0f, BoardZ, -1.6f, 1.6f, LampH[r] - 0.27f, LampH[r] + 0.27f, BoardFace - 0.01f, BoardFace, rowColour[r]);
+        for (int c = 0; c < 4; c++)
+            for (int band = 0; band <= c; band++)
+            {
+                float y = BoardLow + 0.08f + band * 0.07f;
+                Block(paint, 0f, BoardZ, LampX[c] - 0.14f, LampX[c] + 0.14f, y, y + 0.045f, BoardFace - 0.01f, BoardFace, IsleKit.Cream);
+            }
+        Piece paintPiece = b.MeshPiece("Lamp Board Paint", paint.ToMesh(), bare, false);
+        paintPiece.Transform.position = b.WorldPoint(0f, BoardZ);
+        for (int r = 0; r < 4; r++)
+            for (int c = 0; c < 4; c++)
+                b.Part("Light 6", LampX[c], BoardFace - 0.142f - 0.012f, LampH[r], 180f).Named("Lamp " + (r + 1) + "-" + (c + 1))
+                    .Set("PuzzleLight", "color", Warm).Set("PuzzleLight", "range", 3f);
+        b.Part("Progress Bar", 0f, BoardFace - BarHalfDepth - 0.012f, 5.15f, 180f).Named("Seek Bar Back").Set("PuzzleProgressBar", "total", Rounds);
+
+        // ================= the field is blind-only =================
+        // The one way in or out is the blind turnstile in the front fence (two-way: only a player wearing the
+        // blindfold passes, either way), the blindfold on its post beside it. Anyone inside the fence without one is
+        // put back in front of it (taking the blindfold off inside is the quick way out).
+        IsleKit.BlindfoldHook(b, -GateX - 2.0f, FenceZ0 - 1.3f, 90f);
+        Piece gate = IsleKit.BlindGate(b, -GateX, FenceZ0, 0f).Set("PuzzleNoItemsGate", "oneWay", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
+        Piece putOut = b.Empty("Put Out", -GateX, FenceZ0 - 2.6f, 1.0f);
+        putOut.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, 180f, 0f);      // facing away from the field
+        Component watch = b.AddCustomScript(b.Empty("Blind Watch", 0f, 0f, 0f), "BlindWatch");
+        Sdk.Set(watch, "boxMin", new Vector3(-FenceX + 0.1f, -1f, FenceZ0 + 0.1f));      // inside the fence, from under the snow
+        Sdk.Set(watch, "boxMax", new Vector3(FenceX - 0.1f, 30f, FenceZ1 - 0.1f));       // to far above its top
+        Sdk.Set(watch, "putOut", putOut.Transform);
+        Sdk.Add(watch, "gates", gate.Transform);
+        Sdk.Set(watch, "gateSkip", 1.2f);
+        Sdk.Set(watch, "cooldown", 1.5f);
+        Sdk.Set(watch, "interval", 0.25f);
+        Sdk.Set(watch, "dropHeld", true);
+        Sdk.Set(watch, "onlyWhileRunning", false);
 
         // the field corner's start switch, the gourd's vice, the pillow and the confetti
         IsleKit.StartCorner(b, 6.5f, -7.5f, 0f);
 
-        // ================= the Signal Cab: a covered platform that looks over the whole field =================
+        // ================= the Signal Cab: a covered platform that looks over the whole field to the lamp board =================
         // platform x -2.2..2.2, z -7.6..-4.4, floor 2.6 m; inside x -2.0..2.0, z -7.4..-4.6; steps up behind it
         const float CabZ = -6f;
         Place(b, "Signal Cab", CabMesh(), snowy, 0f, CabZ);
@@ -78,35 +121,6 @@ public sealed class FootprintsPuzzle : PuzzleDef
         b.Part("Progress Bar", cabWest, -6.0f, CabFloor + 1.9f, 90f).Named("Seek Bar Cab")
             .Scaled(BarScale, BarScale, BarScale).Set("PuzzleProgressBar", "total", Rounds);
         b.Empty("Room Light Cab FFE2B8 2.4 0.8", -0.5f, -6.4f, CabFloor + 2.3f);
-
-        // ================= the lamp board on the cab's roof, facing the field =================
-        // One lamp per pad, laid out as the pads lie seen from the field: west to the west, the front row (nearest
-        // the cab) at the bottom. Each row of lamps sits on its row's colour and each column over its column's bands,
-        // as on the stakes.
-        var sign = new MeshBuilder();
-        float signLow = CabFloor + 2.8f, signTop = CabFloor + 6.35f;
-        Block(sign, 0f, CabZ, -1.5f, 1.5f, signLow, signTop, BoardFace - 0.12f, BoardFace, IsleKit.Board);
-        foreach (float px in new[] { -1.4f, 1.4f })
-            Block(sign, 0f, CabZ, px - 0.08f, px + 0.08f, signLow, signTop - 0.4f, BoardFace - 0.9f, BoardFace - 0.12f, IsleKit.DarkWood);      // braces behind
-        Block(sign, 0f, CabZ, -1.7f, 1.7f, signTop, signTop + 0.12f, BoardFace - 0.4f, BoardFace + 0.25f, IsleKit.DarkWood);      // a little roof
-        Place(b, "Lamp Board", sign, snowy, 0f, CabZ);
-        var paint = new MeshBuilder();
-        for (int r = 0; r < 4; r++)
-            Block(paint, 0f, CabZ, -1.42f, 1.42f, LampH[r] - 0.27f, LampH[r] + 0.27f, BoardFace, BoardFace + 0.01f, rowColour[r]);
-        for (int c = 0; c < 4; c++)
-            for (int band = 0; band <= c; band++)
-            {
-                float y = signLow + 0.08f + band * 0.07f;
-                Block(paint, 0f, CabZ, LampX[c] - 0.12f, LampX[c] + 0.12f, y, y + 0.045f, BoardFace, BoardFace + 0.01f, IsleKit.Cream);
-            }
-        Piece paintPiece = b.MeshPiece("Lamp Board Paint", paint.ToMesh(), bare, false);
-        paintPiece.Transform.position = b.WorldPoint(0f, CabZ);
-        for (int r = 0; r < 4; r++)
-            for (int c = 0; c < 4; c++)
-                b.Part("Light 6", LampX[c], BoardFace + 0.142f + 0.012f, LampH[r], 0f).Named("Lamp " + (r + 1) + "-" + (c + 1))
-                    .Set("PuzzleLight", "color", Warm).Set("PuzzleLight", "range", 3f);
-        b.Part("Progress Bar", 0f, BoardFace + BarHalfDepth + 0.012f, CabFloor + 5.95f, 0f).Named("Seek Bar Board")
-            .Scaled(0.75f, 0.75f, 0.75f).Set("PuzzleProgressBar", "total", Rounds);
 
         // ================= the rule: go to the lit pad; six found win (Seek.cs). Start deals, stop clears =================
         Component seek = b.AddCustomScript(b.Empty("Field Seek", 0f, 7f, 0.5f), "Seek");
@@ -138,7 +152,7 @@ public sealed class FootprintsPuzzle : PuzzleDef
     }
 
     // The field fence: solid boards along the sides and back, vertical slats along the front (the cab sees through,
-    // nobody passes) with two gate gaps, posts about every 2 m, and a colour stripe on the side boards behind each
+    // nobody passes) with the turnstile's gap, posts about every 2 m, and a colour stripe on the side boards behind each
     // row stake (inside and out)
     static void BuildFence(PuzzleBuilder b, Material snowy, Color[] rowColour)
     {
@@ -149,14 +163,14 @@ public sealed class FootprintsPuzzle : PuzzleDef
         Block(mb, 0f, oz, FenceX - 0.1f, FenceX, -0.1f, FenceH, FenceZ0, FenceZ1, IsleKit.Wood);
         Block(mb, 0f, oz, -FenceX, FenceX, -0.1f, FenceH, FenceZ1 - 0.1f, FenceZ1, IsleKit.Wood);
 
-        // front: slats 0.06 wide every 0.25 m, rails top and bottom, all left out across the two gates
-        bool InGate(float x0, float x1) => (x1 > -GateX - GateHalf && x0 < -GateX + GateHalf) || (x1 > GateX - GateHalf && x0 < GateX + GateHalf);
+        // front: slats 0.06 wide every 0.25 m, rails top and bottom, all left out across the turnstile's gap
+        bool InGate(float x0, float x1) => x1 > -GateX - GateHalf && x0 < -GateX + GateHalf;
         for (float x = -FenceX + 0.125f; x < FenceX; x += 0.25f)
             if (!InGate(x - 0.03f, x + 0.03f))
                 Block(mb, 0f, oz, x - 0.03f, x + 0.03f, -0.1f, FenceH, FenceZ0, FenceZ0 + 0.06f, IsleKit.Wood);
-        float[] railFrom = { -FenceX, -GateX + GateHalf, GateX + GateHalf };
-        float[] railTo = { -GateX - GateHalf, GateX - GateHalf, FenceX };
-        for (int i = 0; i < 3; i++)
+        float[] railFrom = { -FenceX, -GateX + GateHalf };
+        float[] railTo = { -GateX - GateHalf, FenceX };
+        for (int i = 0; i < 2; i++)
         {
             Block(mb, 0f, oz, railFrom[i], railTo[i], 0.15f, 0.25f, FenceZ0 + 0.06f, FenceZ0 + 0.12f, IsleKit.DarkWood);
             Block(mb, 0f, oz, railFrom[i], railTo[i], FenceH - 0.12f, FenceH - 0.02f, FenceZ0 + 0.06f, FenceZ0 + 0.12f, IsleKit.DarkWood);
@@ -174,7 +188,7 @@ public sealed class FootprintsPuzzle : PuzzleDef
             if (!InGate(x - P - 0.05f, x + P + 0.05f))
                 Block(mb, 0f, oz, x - P, x + P, -0.1f, FenceH + 0.1f, FenceZ0 - P + 0.03f, FenceZ0 + P + 0.03f, IsleKit.DarkWood);
         }
-        foreach (float g in new[] { -GateX, GateX })
+        foreach (float g in new[] { -GateX })
             foreach (float side in new[] { -1f, 1f })
             {
                 float x = g + side * (GateHalf + P);
@@ -218,7 +232,7 @@ public sealed class FootprintsPuzzle : PuzzleDef
     }
 
     // The Signal Cab, in its own frame (its piece stands at local (0, -6)): the platform, the walls with the slatted
-    // front window and the open doorway at the back, the roof (the lamp board stands on it), and the steps up
+    // front window and the open doorway at the back, the roof, and the steps up
     static MeshBuilder CabMesh()
     {
         const float oz = -6f, f = CabFloor, top = CabFloor + 2.7f;

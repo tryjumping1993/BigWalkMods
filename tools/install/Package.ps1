@@ -72,6 +72,9 @@ foreach ($f in Get-ChildItem -Path $ww -File) {
     if ($f.Extension -in '.pdb', '.cfg') { continue }
     Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $payload ('BepInEx\plugins\WinterWalk\' + $f.Name))
 }
+# the version, beside the plugin: Winter Walk puts it in a lobby hosted from this copy, and tells a friend whose copy
+# does not match which version the host has (winterwalk\JoinVersion.cs)
+Set-Content -Path (Join-Path $payload 'BepInEx\plugins\WinterWalk\version.txt') -Value $Version -Encoding ASCII
 
 # the installer
 foreach ($f in 'Install.cmd', 'Install.ps1', 'Install-Common.ps1', 'Uninstall.cmd', 'Uninstall.ps1', 'Send-Logs.cmd', 'Send-Logs.ps1', 'README.txt') {

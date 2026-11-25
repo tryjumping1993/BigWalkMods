@@ -196,7 +196,8 @@ public sealed class SummitShotPuzzle : PuzzleDef
         IsleKit.StartCorner(b, 8f + OX, 13f + OZ, 180f, true, Floor, false);
 
         // ---- the gallery's only door: a turnstile that lets out, never in ----
-        P("Gate No items", -0.5f, 9.36f, VestFloor, -90f).Named("Gallery Exit")
+        (float outX, float outZ, float outYaw) = IsleKit.OneWay(-0.5f, 9.36f, -90f);      // walked east to west, out of the gallery
+        P("Gate No items", outX, outZ, VestFloor, outYaw).Named("Gallery Exit")
             .Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
 
         // ---- every ball comes back: one that stays 2.5 s anywhere no player can reach is laid in the tray again ----
@@ -338,7 +339,7 @@ public sealed class SummitShotPuzzle : PuzzleDef
         // the exit vestibule: inside x -1.6..4.6, z 8.12 (the gallery's glass) to 10.45, open to the west
         Block(mb, -1.6f, 4.85f, y0, VestFloor + PorchH, 10.45f, 10.7f, wall);                         // north
         Block(mb, 4.6f, 4.85f, y0, VestFloor + PorchH, 8.12f, 10.7f, wall);                           // east
-        Block(mb, 1.5f, 1.65f, VestFloor, VestFloor + PorchH, 8.12f, 10.0f, wall);                    // the baffle
+        Block(mb, 1.5f, 1.65f, VestFloor, VestFloor + PorchH, 8.12f, 9.3f, wall);                     // the baffle (a 1.15 m way round it: 0.45 m was too tight to walk)
         Block(mb, -1.75f, 5.0f, VestFloor + PorchH, VestFloor + PorchH + 0.2f, 8.12f, 10.85f, roof);
         Block(mb, -1.2f, 0.2f, VestFloor + 2.3f, VestFloor + PorchH, 8.12f, 10.45f, wall);           // the turnstile's hood
         Block(mb, -1.2f, 0.2f, VestFloor, VestFloor + 2.3f, 10.37f, 10.45f, trim);                   // the stub to the north wall

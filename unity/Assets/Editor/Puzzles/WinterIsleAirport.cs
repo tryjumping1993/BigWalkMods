@@ -225,6 +225,10 @@ public static class WinterIsleAirport
         }
         for (int k = -1; k <= 1; k++) Stand(Pt(HU + k * 13.5f, HV - 3f, 0f), yawAcross);      // in the hangar, noses to the doors
         Stand(Pt(28f, -38f, 0f), yawAlong);                                                 // on the apron, ready to roll
+        // two more on the apron, in the open (the user, 2026-11-24: "there should be several planes available";
+        // with the hangar shut only one could be seen), a wingspan and more apart and clear of the tower at u 58
+        Stand(Pt(44f, -38f, 0f), yawAlong);
+        Stand(Pt(28f, -56f, 0f), yawAlong);
 
         // ---- the summit's airstrip: a deck on stilts, level with the crest where it starts ----
         {

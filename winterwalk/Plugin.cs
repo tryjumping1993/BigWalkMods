@@ -36,6 +36,8 @@ namespace WinterWalk
             Dresser.Prefetch();      // the island's lists, read on threads while the game loads
             Scatter.Prefetch();
             SdkSpeedups.Apply();      // quicker lookups for the SDK's puzzle builds
+            JoinFlood.Apply();        // a joining friend gets the puzzles' state in shares the game can send
+            JoinVersion.Apply();      // a friend whose copy does not match is told which version the host has
             ClassInjector.RegisterTypeInIl2Cpp<DiagDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<SkyDriver>();
             ClassInjector.RegisterTypeInIl2Cpp<Dresser>();
@@ -59,6 +61,9 @@ namespace WinterWalk
             ClassInjector.RegisterTypeInIl2Cpp<NightVision>();
             ClassInjector.RegisterTypeInIl2Cpp<IsleLamps>();
             ClassInjector.RegisterTypeInIl2Cpp<IsleGlow>();
+            ClassInjector.RegisterTypeInIl2Cpp<TowerLog>();
+            ClassInjector.RegisterTypeInIl2Cpp<Teleporter>();
+            ClassInjector.RegisterTypeInIl2Cpp<DiscGolf>();
             var go = new GameObject("WinterWalk");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -86,6 +91,9 @@ namespace WinterWalk
             go.AddComponent<NightVision>();
             go.AddComponent<IsleLamps>();
             go.AddComponent<IsleGlow>();
+            go.AddComponent<TowerLog>();      // gourds placed on and taken from the towers' plinths, for the debug log
+            go.AddComponent<Teleporter>();    // the pads to Cast Iron Pizza and back
+            go.AddComponent<DiscGolf>();      // baskets that stand up, discs that fly like discs and come back to the rack
             L.LogInfo("Winter Walk loaded" + (Diag.FilePath != null ? "; debug log " + Diag.FilePath : ""));
         }
     }
@@ -147,6 +155,25 @@ namespace WinterWalk
 
         static float Smooth(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
 
+        // How the game's renderer packs the normals in its GBuffer, for our shaders' GBuffer pass (BwmGBuffer.hlsl):
+        // 1 where it packs them into an octahedron ("accurate G-buffer normals"), 0 where it stores them plainly
+        static float gbufferOct = -1f;
+        static void GBufferNormals()
+        {
+            float oct = 0f;
+            try
+            {
+                var urp = (QualitySettings.renderPipeline ?? UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline)?.TryCast<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>();
+                var data = urp != null ? urp.scriptableRendererData?.TryCast<UnityEngine.Rendering.Universal.UniversalRendererData>() : null;
+                oct = data != null && data.accurateGbufferNormals ? 1f : 0f;
+            }
+            catch (Exception) { oct = gbufferOct < 0f ? 0f : gbufferOct; }
+            if (oct == gbufferOct) return;
+            gbufferOct = oct;
+            Shader.SetGlobalFloat("_BwmGBufferOct", oct);
+            Plugin.L.LogInfo("Winter Walk: the game's GBuffer normals are " + (oct > 0f ? "packed (octahedron)" : "plain") + "; our shaders write theirs the same way");
+        }
+
         // Our shaders' sun shadows (unity/Assets/Shaders/BwmSunShadow.hlsl) follow the quality level in use: on where it
         // draws sun shadows, off (all in sun) where it does not, as on Low
         static int shadowCheckFrame = -1000;
@@ -162,6 +189,7 @@ namespace WinterWalk
                 on = urp != null && urp.supportsMainLightShadows && urp.shadowDistance > 0f ? 1f : 0f;
             }
             catch (Exception) { on = 0f; }
+            GBufferNormals();
             if (on == sunShadows) return;
             sunShadows = on;
             Shader.SetGlobalFloat("_BwmSunShadows", on);
@@ -194,6 +222,7 @@ namespace WinterWalk
         {
             using var diag = Diag.Time("sky");
             SunShadows();
+            JoinFlood.Tick(Time.unscaledTime);
             SkyCube();
             try
             {
@@ -226,6 +255,7 @@ namespace WinterWalk
                 Vector3 p = cam.transform.position;
                 float dx = Mathf.Max(0f, Mathf.Max(Dresser.X0 - p.x, p.x - Dresser.X1)), dz = Mathf.Max(0f, Mathf.Max(Dresser.Z0 - p.z, p.z - Dresser.Z1));
                 float weight = Plugin.Enabled.Value ? 1f - Smooth(Mathf.Sqrt(dx * dx + dz * dz) / FadeDistance) : 0f;
+                IsleSound.Tick(weight, p.y, Time.unscaledTime);      // the sea is not heard inland on the isle
                 // the island's weather (WeatherDriver): mist and cloud by the hour, and blizzards
                 float mist = WeatherDriver.Mist, cloud = WeatherDriver.Cloud, gloom = WeatherDriver.Gloom, storm = WeatherDriver.Blizzard;
                 float signature = weight + mist * 0.37f + cloud * 0.11f + storm * 1.7f;

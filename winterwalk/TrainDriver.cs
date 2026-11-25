@@ -472,6 +472,7 @@ namespace WinterWalk
         {
             if (Time.unscaledTime < nextPlinthCheck) return towerComplete;
             nextPlinthCheck = Time.unscaledTime + 1f;
+            plinths.RemoveAll(p => p == null);      // a new walk builds the packs again: plinths of the walk before are gone
             if (plinths.Count < 5)
             {
                 plinths.Clear();
@@ -483,7 +484,7 @@ namespace WinterWalk
                 }
             }
             int filled = 0;
-            foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in plinths) if (plinth != null && plinth.HasGourd) filled++;
+            foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in plinths) if (Towers.Filled(plinth)) filled++;
             towerComplete = plinths.Count == 5 && filled == 5;
             if (!towerComplete) State = plinths.Count < 5 ? "waiting: the train tower shows " + plinths.Count + " of 5 plinths (the towers show one plinth per puzzle loaded, The Tree's, the mine's and the airport's first)" : "waiting: " + filled + " of 5 gourds on the train tower";
             return towerComplete;

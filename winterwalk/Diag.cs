@@ -167,6 +167,7 @@ namespace WinterWalk
             var lines = new List<string>();
             void Try(Func<string> f) { try { lines.Add(f()); } catch (Exception e) { lines.Add("(" + e.GetType().Name + ")"); } }
             Try(() => "Winter Walk " + version + " (WinterWalk.dll " + File.GetLastWriteTime(typeof(Diag).Assembly.Location).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + "), game " + Application.version + ", Unity " + Application.unityVersion);
+            Try(() => "Big Christmas Walk " + JoinVersion.Name + " (what a lobby hosted here tells joiners)");
             Try(() => "Windows " + Environment.OSVersion.Version + ", " + SystemInfo.processorType + " (" + SystemInfo.processorCount + " threads), RAM " + SystemInfo.systemMemorySize + " MB");
             Try(() => "GPU " + SystemInfo.graphicsDeviceName + " (" + SystemInfo.graphicsMemorySize + " MB, " + SystemInfo.graphicsDeviceVersion + ")");
             Try(() => "screen " + Screen.width + "x" + Screen.height + ", " + Screen.fullScreenMode + ", quality level " + QualitySettings.GetQualityLevel() + ", vsync " + QualitySettings.vSyncCount + ", frame limit " + Application.targetFrameRate);

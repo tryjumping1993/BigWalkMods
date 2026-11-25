@@ -263,21 +263,19 @@ Shader "BWM/Fir"
         Pass
         {
             Name "GBufferDepth"
-            Tags { "LightMode" = "UniversalGBuffer" "UniversalMaterialType" = "Unlit" }      // depth only, so the depth texture holds this surface (see the note above)
+            Tags { "LightMode" = "UniversalGBuffer" "UniversalMaterialType" = "Unlit" }      // depth, normal and a plain albedo: BwmGBuffer.hlsl
             ZWrite On
-            ColorMask 0 0
-            ColorMask 0 1
-            ColorMask 0 2
             ColorMask 0 3
             Cull Off
 
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
-            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
-            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
-            Varyings Vert(Attributes v) { Varyings o; o.positionCS = TransformObjectToHClip(v.positionOS.xyz); o.uv = v.uv; return o; }
-            half4 Frag(Varyings i) : SV_Target { clip(Alpha(i.uv) - _Cutoff); return i.positionCS.z; }
+            #include "BwmGBuffer.hlsl"
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; float3 normalWS : TEXCOORD7; };
+            Varyings Vert(Attributes v) { Varyings o; o.positionCS = TransformObjectToHClip(v.positionOS.xyz); o.uv = v.uv; o.normalWS = TransformObjectToWorldNormal(v.normalOS); return o; }
+            BwmGBufferOut Frag(Varyings i, bool front : SV_IsFrontFace) { clip(Alpha(i.uv) - _Cutoff); return BwmGBuffer(i.normalWS, front); }
             ENDHLSL
         }
 

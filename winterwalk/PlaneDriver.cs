@@ -49,11 +49,19 @@ namespace WinterWalk
         bool wasJump, towerComplete;
         readonly List<BigPuzzleSDK.PuzzleGourdPlinth> plinths = new List<BigPuzzleSDK.PuzzleGourdPlinth>();
         int jumpAction = -2, forwardAction = -2;
+        float nextAlive;
 
         void Find()
         {
             parked.Clear();
             found = false;
+            // a new walk: nothing of the walk before is kept. Until 2026-11-24 the tower's plinths and the hangar's
+            // doors were kept for the whole game session, so after hosting a second time the driver watched five
+            // plinths that no longer existed ("0 of 5 gourds" for ever) and doors that were gone: the user's five
+            // gourds on the airport tower opened nothing.
+            plinths.Clear(); towerComplete = false; nextPlinthCheck = 0f;
+            gates = null;
+            if (flown != null) { try { UnityEngine.Object.Destroy(flown); } catch (Exception) { } flown = null; }
             GameObject planes = GameObject.Find("Biplanes");
             if (planes == null) return;
             for (int i = 0; i < planes.transform.childCount; i++)
@@ -111,6 +119,7 @@ namespace WinterWalk
         {
             if (Time.unscaledTime < nextPlinthCheck) return towerComplete;
             nextPlinthCheck = Time.unscaledTime + 1f;
+            plinths.RemoveAll(p => p == null);      // a new walk builds the packs again: plinths of the walk before are gone
             if (plinths.Count < 5)
             {
                 plinths.Clear();
@@ -122,7 +131,7 @@ namespace WinterWalk
                 }
             }
             int filled = 0;
-            foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in plinths) if (plinth != null && plinth.HasGourd) filled++;
+            foreach (BigPuzzleSDK.PuzzleGourdPlinth plinth in plinths) if (Towers.Filled(plinth)) filled++;
             towerComplete = plinths.Count == 5 && filled == 5;
             if (!towerComplete) State = plinths.Count < 5 ? "waiting: the airport tower shows " + plinths.Count + " of 5 plinths (the towers show one plinth per puzzle loaded, The Tree's and the mine's first)" : "waiting: " + filled + " of 5 gourds on the airport tower";
             return towerComplete;
@@ -189,6 +198,12 @@ namespace WinterWalk
             {
                 Mirror.NetworkIdentity me = Mirror.NetworkClient.localPlayer;
                 if (me == null) { State = "no player"; return; }
+                // the parked planes are the pack's: when they are gone (the packs were built again), look again
+                if (found && Time.unscaledTime >= nextAlive)
+                {
+                    nextAlive = Time.unscaledTime + 1f;
+                    if (parked.Count == 0 || parked[0] == null) { found = false; Open = false; }
+                }
                 if (!found)
                 {
                     if (Time.unscaledTime < nextLook || !Setup.Turn()) return;
@@ -210,7 +225,8 @@ namespace WinterWalk
 
                 if (!Flying)
                 {
-                    if (!Open) return;
+                    // (A plane anyone comes upon can be flown, whatever the towers hold: the gourds only open the hangar's
+                    // doors, which is what keeps the planes behind them out of reach. The user, 2026-11-24.)
                     // board the plane whose cockpit the player walks up to (not straight after climbing out of it)
                     GameObject nearest = null; float best = TestBoard ? 60f : BoardReach;
                     foreach (GameObject plane in parked)

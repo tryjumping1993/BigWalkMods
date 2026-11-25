@@ -21,7 +21,8 @@ namespace WinterWalk
         public static int Gear;                 // 0 none, 1 skis, 2 snowboard (the companion can set it: set?path=WinterWalk.SkiDriver.Gear&value=1)
         public static string State = "not loaded";
         public static float Speed;              // metres a second, for reading
-        public static bool Straight;            // for testing without a hand on the camera: steer straight down the fall line
+        public static float OffPisteSeconds = 20f;      // gear comes off this long after leaving a piste (or a rack)
+        public static bool Straight;           // for testing without a hand on the camera: steer straight down the fall line
 
         const float BodyHeight = 0.75f;         // a standing player's origin above the ground
         GameObject rackSki, rackBoard, modelSki, modelBoard, worn;
@@ -29,6 +30,58 @@ namespace WinterWalk
         float nextLook, offPisteSince = -1f;
         Vector3 velocity;
         bool wasOn, airborne;
+        // Skis and boards that are things (the summit's stand: items named "Skis n" and "Snowboard n", the user,
+        // 2026-11-24: "intuitive to use as is most of the equipment in the base game"): pick a pair up and they are on
+        // your feet for as long as you hold them, anywhere; put them down and they are off. In the hand they are not
+        // drawn on this PC (the pair on the feet is).
+        readonly System.Collections.Generic.List<Prop> gearProps = new System.Collections.Generic.List<Prop>();
+        readonly System.Collections.Generic.List<int> gearKinds = new System.Collections.Generic.List<int>();
+        float nextGearLook, nextCarryCheck;
+        bool fromItem;
+        Prop hidden;
+
+        void FindGear()
+        {
+            gearProps.Clear(); gearKinds.Clear();
+            foreach (BigPuzzleSDK.PuzzleItem item in FindObjectsOfType<BigPuzzleSDK.PuzzleItem>())
+            {
+                if (item == null) continue;
+                string n = item.gameObject.name;
+                int kind = n.StartsWith("Skis", StringComparison.Ordinal) ? 1 : n.StartsWith("Snowboard", StringComparison.Ordinal) ? 2 : 0;
+                if (kind == 0) continue;
+                Prop prop = DiscGolf.PropOf(item);
+                if (prop != null) { gearProps.Add(prop); gearKinds.Add(kind); }
+            }
+        }
+
+        static void Show(Prop prop, bool on)
+        {
+            if (prop == null) return;
+            foreach (Component c in prop.GetComponentsInChildren(Il2CppInterop.Runtime.Il2CppType.Of<Renderer>(), true))
+            {
+                Renderer r = c != null ? c.TryCast<Renderer>() : null;
+                if (r != null) r.enabled = on;
+            }
+        }
+
+        // which gear this PC's player has in the hand (0 none, 1 skis, 2 a board)
+        int Carried(Mirror.NetworkIdentity me)
+        {
+            PlayerCharacter pc = me.GetComponent<PlayerCharacter>();
+            Prop held = pc != null && pc.hands != null ? pc.hands.heldProp : null;
+            int kind = 0;
+            if (held != null)
+                for (int i = 0; i < gearProps.Count; i++)
+                    if (gearProps[i] != null && gearProps[i].Pointer == held.Pointer) { kind = gearKinds[i]; break; }
+            Prop want = kind != 0 ? held : null;
+            if ((want != null ? want.Pointer : IntPtr.Zero) != (hidden != null ? hidden.Pointer : IntPtr.Zero))
+            {
+                try { Show(hidden, true); } catch (Exception) { }
+                hidden = want;
+                Show(hidden, false);
+            }
+            return kind;
+        }
         float airSince;
 
         // every rack on the island: the first of each found by name, the rest beside it under the same parent
@@ -86,8 +139,26 @@ namespace WinterWalk
                 Transform t = me.transform;
                 Vector3 p = t.position;
                 // the racks
-                foreach (Vector3 r in skiRacks) if ((r - p).sqrMagnitude < 2.5f * 2.5f) Gear = 1;
-                foreach (Vector3 r in boardRacks) if ((r - p).sqrMagnitude < 2.5f * 2.5f) Gear = 2;
+                // (At a rack the time allowed off the piste starts afresh. It used to keep running from the last time the
+                // gear came off, so after one timeout every rack that stands beside its run, not on it, gave gear that
+                // vanished the moment the player stepped away: "the skis don't do anything" at Big Air's hut, 2026-11-24.)
+                bool atRack = false;
+                foreach (Vector3 r in skiRacks) if ((r - p).sqrMagnitude < 2.5f * 2.5f) { Gear = 1; atRack = true; }
+                foreach (Vector3 r in boardRacks) if ((r - p).sqrMagnitude < 2.5f * 2.5f) { Gear = 2; atRack = true; }
+                if (atRack) offPisteSince = -1f;
+                // gear that is a thing: in the hand, it is on
+                float nowT = Time.unscaledTime;
+                bool gearStale = false;
+                foreach (Prop gp in gearProps) if (gp == null) { gearStale = true; break; }
+                if ((gearStale || gearProps.Count == 0) && nowT >= nextGearLook && Setup.Turn()) { nextGearLook = nowT + 5f; hidden = null; FindGear(); }
+                if (gearProps.Count > 0 && nowT >= nextCarryCheck)
+                {
+                    nextCarryCheck = nowT + 0.1f;
+                    int kind = Carried(me);
+                    if (kind != 0) { if (!fromItem || Gear != kind) Diag.Event("ski gear: picked up " + (kind == 1 ? "skis" : "a snowboard")); Gear = kind; fromItem = true; }
+                    else if (fromItem) { fromItem = false; if (!atRack) Gear = 0; Diag.Event("ski gear: put down"); }
+                }
+                if (fromItem) offPisteSince = -1f;
                 Wear(t);
                 if (Gear == 0) { State = "no gear"; wasOn = false; return; }
 
@@ -118,8 +189,10 @@ namespace WinterWalk
                 if (!on)
                 {
                     if (offPisteSince < 0f) offPisteSince = Time.unscaledTime;
-                    if (Time.unscaledTime - offPisteSince > 6f) { Gear = 0; State = "gear off: left the piste"; }
-                    else State = "off the piste";
+                    if (fromItem) State = "carrying " + (Gear == 1 ? "skis" : "a snowboard") + ", off the piste";
+                    else if (atRack) State = "at a rack (gear " + Gear + "): the run is a few steps away";
+                    else if (Time.unscaledTime - offPisteSince > OffPisteSeconds) { Gear = 0; State = "gear off: left the piste"; Diag.Event("ski gear came off after " + OffPisteSeconds + " s off the piste at " + p.x.ToString("0") + ", " + p.y.ToString("0") + ", " + p.z.ToString("0")); }
+                    else State = "off the piste (gear " + Gear + ", " + (OffPisteSeconds - (Time.unscaledTime - offPisteSince)).ToString("0") + " s left)";
                     wasOn = false;
                     Speed = 0f;
                     return;

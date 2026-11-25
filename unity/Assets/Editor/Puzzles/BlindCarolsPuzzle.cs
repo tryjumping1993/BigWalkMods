@@ -159,7 +159,8 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
 
         // the gates, neither ever locked: in blindfolded (one way, east to west), out (one way, west to east)
         Piece blindGate = IsleKit.BlindGate(b, 9.5f, 7.1f, -90f, baseH, false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-        Piece wayOut = P("Gate No items", 9.5f, 9.9f, 0f, 90f).Named("Way Out")
+        (float outX, float outZ, float outYaw) = IsleKit.OneWay(9.5f, 9.9f, 90f);      // walked west to east
+        Piece wayOut = P("Gate No items", outX, outZ, 0f, outYaw).Named("Way Out")
             .Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
 
         // a hook by the Way Out for a blindfold the plain gate will not let through, and three on the rack outside

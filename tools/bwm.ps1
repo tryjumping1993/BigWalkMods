@@ -98,9 +98,25 @@ function Update-BwmPizzeriaArt {
     }
 }
 
+# The puzzles' how-to-play boards (tools/howto_art.py, from docs/puzzle-variety/howto.json) are small and committed;
+# they are painted again when the text or the painter is newer than they are
+function Update-BwmHowTo {
+    $script = Join-Path $Repo 'tools\howto_art.py'
+    $text = Join-Path $Repo 'docs\puzzle-variety\howto.json'
+    $dir = Join-Path $Repo 'unity\Assets\Textures\HowTo'
+    $newest = @((Get-Item $script).LastWriteTimeUtc, (Get-Item $text).LastWriteTimeUtc) | Sort-Object | Select-Object -Last 1
+    $boards = @(Get-ChildItem -Path $dir -Filter *.png -ErrorAction SilentlyContinue)
+    if ($boards.Count -gt 0 -and -not ($boards | Where-Object { $_.LastWriteTimeUtc -lt $newest })) { return }
+    $p = Start-Process -FilePath python -ArgumentList ('"' + $script + '"') -PassThru -NoNewWindow
+    $null = $p.Handle
+    Set-BwmAffinity $p
+    $p.WaitForExit()
+    if ($p.ExitCode -ne 0) { Write-Warning 'tools\howto_art.py failed; puzzles are built without their how-to-play boards.' }
+}
+
 function Invoke-BwmUnity([string]$Method, [string[]]$Extra) {
     if (-not (Test-Path $Unity)) { Write-Output "Unity editor not found at $Unity"; return 2 }
-    if ($Method -like 'Build*') { Update-BwmSnowMaps; Update-BwmTreeMaps; Update-BwmPizzeriaArt }
+    if ($Method -like 'Build*') { Update-BwmSnowMaps; Update-BwmTreeMaps; Update-BwmPizzeriaArt; Update-BwmHowTo }
     # (a build lane, BWM_LANE set, is its own copy of the project, so another editor on another copy is no conflict;
     # the check below still catches a second editor on this copy, by its project path in the command line)
     if ($env:BWM_LANE) {

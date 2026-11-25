@@ -159,7 +159,8 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
         // ---- gates: blind entry (locked while the puzzle is off), plain one-way exit (never locked) ----
         Piece blindEntry = IsleKit.BlindGate(b, -3.0f, -4.0f, 0f, Floor, false).Named("Blind Entry")
             .Set("PuzzleNoItemsGate", "defaultLocked", true);
-        Piece wayOut = b.Part("Gate No items", 3.0f, -4.0f, Floor, 180f, false).Named("Way Out")      // front (-z turned by 180) is the court side
+        (float outX, float outZ, float outYaw) = IsleKit.OneWay(3.0f, -4.0f, 180f);      // walked north to south, out of the court
+        Piece wayOut = b.Part("Gate No items", outX, outZ, Floor, outYaw, false).Named("Way Out")
             .Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "defaultLocked", false);
         // inside stop switch and its live lamp, on the plaque by the exit: quitting from inside
         b.Part("Switch Start", 0.0f, -3.775f, Floor + 1.25f, 0f, false).Named("Inside Stop Switch");

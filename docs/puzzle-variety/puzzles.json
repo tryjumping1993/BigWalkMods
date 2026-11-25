@@ -705,23 +705,23 @@
   "plan": {
    "kind": "small",
    "timer": false,
-   "least": "1",
-   "idea": "The lamp board stands in the open at the field's edge. Find the lit pad from its row and column stakes without treading on another. Six pads, no timer.",
+   "least": "2",
+   "idea": "The field is blindfold-only and the lamp board faces the cab from beyond the far fence: the guide reads it and talks the blind walker to the lit pad. Six pads, no timer. (The user, 2026-11-24: with open gates a player simply did it alone.)",
    "done": true
   },
   "now": {
-   "tag": "Find the lit pad from its two stakes",
+   "tag": "For two or more: a guide in the cab and a blindfolded walker",
    "chain": [
     {
-     "r": "Walker",
+     "r": "Guide and walker",
      "at": "fenced snowfield",
-     "has": "sixteen pads hidden under the snow; a tall lamp board over the cab shows which one is lit"
+     "has": "sixteen pads hidden under the snow; the walker is blindfolded (a blind turnstile is the only way in), the guide in the cab reads the lamp board beyond the far fence and calls the way"
     }
    ],
    "win": "Six lit pads found. Stand on the lit pad for a moment and it counts.",
    "cost": "Nothing: there is no clock and treading on other pads is free.",
-   "own": "The pads are invisible. Row stakes give the colour, column stakes the number of bands, and your own tracks show where you have been.",
-   "lobby": "With more players, one on the cab's platform sees the whole field and can call the walkers on.",
+   "own": "The pads are invisible and the walker sees nothing: the guide turns a lamp on a board into steps across a field, by the row and column stakes.",
+   "lobby": "Two can finish it; more share the guiding or take turns under the blindfold.",
    "code": "Seek"
   }
  },

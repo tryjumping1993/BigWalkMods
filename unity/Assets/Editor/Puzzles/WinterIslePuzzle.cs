@@ -687,6 +687,25 @@ public sealed class WinterIslePuzzle : PuzzleDef
             new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(1f, 0.85f), new GradientAlphaKey(0f, 1f) });
         fade.color = gradient;
 
+        // A flake that lands is gone: it stops at the first roof, wall or stretch of ground it meets, so no snow falls
+        // inside a roofed room (the belfry, the sleigh shed, the cottages) or under the covered bridge, and none
+        // passes down through the snow. Only our packs' own colliders count (layer 10, the SDK's layer for every
+        // pack's objects: the island's ground and every building on it are there), and only those that stand still
+        // (the cached kind of collision: a query for a flake's first meeting with a place, then a remembered plane).
+        ParticleSystem.CollisionModule landing = ps.collision;
+        landing.enabled = true;
+        landing.type = ParticleSystemCollisionType.World;
+        landing.mode = ParticleSystemCollisionMode.Collision3D;
+        landing.quality = ParticleSystemCollisionQuality.Medium;
+        landing.voxelSize = 0.5f;
+        landing.collidesWith = 1 << 10;
+        landing.enableDynamicColliders = false;
+        landing.lifetimeLoss = 1f;
+        landing.bounce = 0f;
+        landing.dampen = 1f;
+        landing.radiusScale = 0.5f;
+        landing.sendCollisionMessages = false;
+
         ParticleSystemRenderer renderer = fall.Go.GetComponent<ParticleSystemRenderer>();
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
         renderer.sharedMaterial = b.ShaderMaterial("BWM/Snowflake", "Snowflake");

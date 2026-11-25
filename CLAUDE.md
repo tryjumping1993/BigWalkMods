@@ -767,6 +767,57 @@ menu. Say afterwards what was released and installed. Claude's reading of its sc
 the Winter Walk plugin), not notes-only or test-tool-only commits, and never a broken or half-built state. The user
 still copies the zip to Google Drive themselves, and the repo's visibility stays theirs.
 
+## Written on 2026-11-24 from the players' session log, NOT yet built or seen in the game
+
+The user was in a three-player walk and asked for code only. Winter Walk and the editor code compile (csc); the
+shaders and packs are unbuilt. Test each of these before releasing, then move what holds into the sections above.
+
+- **Joining players never got the puzzles' state** (`winterwalk\JoinFlood.cs`): the SDK sends every synced value again
+  after a join (`SyncedValue.ResendAll`, at 3, 6, 10, 16, 25, 40, 60 s) in one frame, the game makes one message of
+  it, 68,000 bytes against a limit of 64,350: the host's log has `ValidatePacketSize: cannot send packet larger than
+  64350 bytes` and `GetBatch needs a fresh writer!` seven times a join, and none of it arrived (lamps, doors, lobby
+  groups as built, not as they stood). JoinFlood takes `ResendAll` over (Harmony) and sends a sixteenth every 0.15 s
+  with the SDK's own `Resend()`. `JoinFlood.State`, `Off`, `TestSend`. Look for those two errors in a host's log.
+- **Seeing through our walls and snow** (`unity\Assets\Shaders\BwmGBuffer.hlsl`): our GBufferDepth passes wrote depth
+  only, so the GBuffer's normals under our pixels were those of the game's own things behind (players, SDK parts, the
+  mine's tunnel material), and the game's ambient occlusion (HBAO) drew their outlines on our surfaces (the user's F8
+  marks 10 and 11 at the Lookouts' hut). The pass now writes the normal (target 2) and a plain albedo; Winter Walk
+  sets `_BwmGBufferOct` from the renderer's `accurateGbufferNormals`. Every pack needs a rebuild to take it. This is
+  the likely cause, not a proven one: if it still shows, look at what else reads the GBuffer.
+- **The sea's sound** (`winterwalk\IsleSound.cs`): the game's `AmbiencePlayer` takes the sea from a map of the base
+  island, and the isle lies outside it, where all is open sea. On the isle the ocean bus (`SoundData.OceanBus.BusVolume`)
+  and the beach sources (`ScriptableVolume`) now follow the listener's height: full below 3 m, silent from 11 m.
+  The game's wind is left alone; the isle has no ambience of its own yet.
+- **How-to-play boards** (`IsleKit.HowTo`, called by `StartCorner`): `tools\howto_art.py` paints one picture a puzzle
+  from `docs\puzzle-variety\howto.json` (name, players, up to five lines) into `unity\Assets\Textures\HowTo\`, hung
+  1.8 x 1.2 m over the start switch on `BWM/Picture`. Change a puzzle's rules, change its lines. Check each puzzle's
+  preview: a corner against a wall or under a low roof may put the board through it.
+- **Lookouts' telescopes** stood at the floor (the pivot is 1.1 m above the pillar's foot), level, looking into the
+  parapet. They are raised and turned (pitch too) onto each station's beacon, whose mast is now 24 m with a banner;
+  the build's log says how far each line clears the ground ("TREES MAY HIDE THE BEACON" under 17 m).
+- **The join message names the version** (`winterwalk\JoinVersion.cs`, lobby attribute `bcwver`, `version.txt` beside
+  the plugin from `Package.ps1`) and **snowflakes stop at roofs** (the island's Snowfall collides with layer 10;
+  `MineDriver.NoSnow` for measuring): both from earlier the same day, the same state.
+- **One-way turnstiles stood backwards** (the user, at Thin Ice: the blindfolded player could not get in). A one-way
+  Gate No items is entered at the side the part faces (local +z) and left at its back; every one here was placed on
+  the opposite belief. `IsleKit.OneWay(x, z, yaw)` gives the place and yaw for a gate walked the way `yaw` points;
+  `BlindGate` uses it, and so do the plain exits of Blind Carols, Blind Sculptor and Summit Shot (which let in, not
+  out). Walk each of the four gates both ways when testing.
+- **Footprints is for two or more** (the user: with open gates and the lamp board on the cab's own roof, facing the
+  field, a player simply read it and did the puzzle alone, and the guide in the cab could not see it). The field's
+  one gap now holds a two-way blind turnstile with a blindfold hook beside it, `BlindWatch` puts anyone inside the
+  fence without a blindfold out, and the lamp board stands behind the far fence facing the cab. The review page
+  (`build.py`, the artifact) is not rebuilt for it yet.
+- **The airport never opened in a second walk** (the user: five gourds on the airport tower, no planes, hangar shut).
+  `PlaneDriver` kept its plinths, its parked planes and the hangar doors for the whole game session; the user hosted
+  twice (20:11, 20:25), and in the second walk it watched objects of the first ("0 of 5 gourds" to the end). It now
+  starts over when its planes are gone, and all four tower drivers (gondola, mine, plane, train) drop plinths that no
+  longer exist before counting. Test by hosting, leaving to the menu and hosting again. Not ruled out: that the
+  plinths themselves did not take the gourds (the log has no line about a plinth). Two more planes stand on the
+  apron (six at the airport, two on the summit).
+- Also in that log, not acted on: the players flipped Stocking Sort's start switch nine times before working it out;
+  a spike of ground at a rail tunnel's mouth again (marks 1 and 2, -723, -965); snow fell inside Stocking Sort's room.
+
 ## Known open problems
 
 - (Probably fixed 2026-11-22: the flat Glass sheet, see Glass above.) Flat-colour materials on the Glass Booth's pad and walls show thin dark grid lines in the game. The same
