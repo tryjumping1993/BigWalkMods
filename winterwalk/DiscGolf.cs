@@ -148,8 +148,8 @@ namespace WinterWalk
             d.flown = 0f; d.top = 0f; d.steps = 0; d.mode = 3; d.restSince = -1f;
             // (the game caps how fast a prop's body may move: the first test throw at 20 m/s was read back slower and
             // taken for a collision 0.1 s into its flight)
-            float cap = d.prop.maxSpeed;
-            if (cap < 80f) d.prop.maxSpeed = 80f;
+            float cap = d.rb.maxLinearVelocity;
+            if (cap < 80f) d.rb.maxLinearVelocity = 80f;
             d.rb.linearVelocity = U(v);
             d.expect = v;
             how += " (body: speed cap was " + cap.ToString("0.#") + ", drag " + d.rb.linearDamping.ToString("0.##") + ", gravity " + d.rb.useGravity + ", mass " + d.rb.mass.ToString("0.##") + ")";

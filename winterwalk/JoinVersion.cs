@@ -18,9 +18,9 @@
 // All of it hangs on the SDK mod's internals (LobbyData.Set / Get / ConvertPostfix, JoinPopup.Set / Open), found by
 // name: with another SDK version they may be gone, and then the log says so and the SDK's own message is shown.
 //
-// For tests (the companion): get?path=WinterWalk.JoinVersion.State ; set?path=WinterWalk.JoinVersion.TestHost&value=1.2.3
+// For tests (the companion): get?path=WinterWalk.JoinVersion.State ; set?path=WinterWalk.JoinVersion.TestHost&value=2
 // then get?path=WinterWalk.JoinVersion.Preview shows the message a joiner would get from such a host
-// (TestHost "none": a host that says no version; "same": this PC's own).
+// (TestHost 0: a host that says no version; 1: this PC's own; 2: another version).
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -39,7 +39,7 @@ namespace WinterWalk
         const int ListShown = 8;                     // puzzle names shown before "and N more"
 
         public static string State = "not applied";
-        public static string TestHost;               // for tests: see above
+        public static int TestHost;                  // for tests: 0 a host that says no version, 1 this PC's own, 2 another (the companion cannot set a string)
         public static string Last = "";              // the last message shown to this PC, title first
 
         static string mine;                          // this PC's version ("" = a development build)
@@ -239,7 +239,7 @@ namespace WinterWalk
         {
             get
             {
-                string says = TestHost == "none" || string.IsNullOrEmpty(TestHost) ? null : TestHost == "same" ? Name : Clean(TestHost);
+                string says = TestHost == 1 ? Name : TestHost == 2 ? "2026.12.01-abc1234" : null;
                 string[] sample = { "Out of date:\nAdvent Trail\nBauble Hunt\nBell Ringers\nBig Air\nBlind Carols\nBlind Sculptor\nBlizzard Walk\nDownhill\nFairy Lights\nFootprints\nHold the Star\nLight the Tree" };
                 string[] lines = Compose(sample, says, out string title);
                 return title + "\n" + string.Join("\n", lines);

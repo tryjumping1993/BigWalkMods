@@ -43,7 +43,11 @@ namespace WinterWalk
             if (Off) { if (applied >= 0f && applied < 0.999f) Apply(1f, now, true); return; }
             float inland = Inland > Shore ? (y - Shore) / (Inland - Shore) : 1f;
             inland = inland < 0f ? 0f : inland > 1f ? 1f : inland;
-            float want = TestSea >= 0f ? Math.Min(1f, TestSea) : 1f - weight * inland;
+            // only well onto the island: the winter's weight is already above nothing 170 m outside the island's box,
+            // which reaches the mainland's shore by the bridge, where the game's own surf belongs (at the spawn rooms
+            // the sea was at 0.78 with the plain weight)
+            float isle = weight <= 0.6f ? 0f : (weight - 0.6f) / 0.4f;
+            float want = TestSea >= 0f ? Math.Min(1f, TestSea) : 1f - isle * inland;
             // glide, so walking up from a beach does not switch the surf off
             float step = Time.unscaledDeltaTime * 0.6f;
             Sea = want > Sea ? Math.Min(want, Sea + step) : Math.Max(want, Sea - step);

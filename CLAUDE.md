@@ -788,10 +788,22 @@ menu. Say afterwards what was released and installed. Claude's reading of its sc
 the Winter Walk plugin), not notes-only or test-tool-only commits, and never a broken or half-built state. The user
 still copies the zip to Google Drive themselves, and the repo's visibility stays theirs.
 
-## Written on 2026-11-24 from the players' session log, NOT yet built or seen in the game
+## From the players' session of 2026-11-24: built, tested alone on the test save, NOT yet played by a group
 
-The user was in a three-player walk and asked for code only. Winter Walk and the editor code compile (csc); the
-shaders and packs are unbuilt. Test each of these before releasing, then move what holds into the sections above.
+Written from the log and F8 marks of a three-player walk. Tested with one player that night (what was seen is in
+"Tested" below); everything here still wants a walk with friends before it is trusted, and none of it is released.
+
+**Tested (one player, 23:00):** every pack builds with the new shaders and passes the SDK's checks; the game starts
+with no new error; `JoinFlood` applied and a test round sent 2,504 values in shares of 157 with no error (nobody
+was there to receive them); the lobby carries `bcwver` and the three join messages read right through
+`JoinVersion.TestHost` 0/1/2 and `Preview` (the real popup needs a second PC); the sea's volume is untouched at the
+spawn rooms and 0 at the plaza and at Footprints (not listened to); the how-to board reads well from 4 m
+(`shots\t-howto.png`); Summit Shot's exit turnstile lets the test player out and not in (the blind turnstiles were
+not walked: the test player has no blindfold on); Footprints' Blind Watch put the sighted test player back outside
+the gate; the roof check reads 5 rays in the belfry and the Lookouts' hut and 0 outside and under firs, and the
+snowfall costs nothing measurable (plaza 140.7 fps with, 139.9 without). **Not shown either way:** the see-through
+ground (walls and snow draw as before; the outlines were only ever seen in a walk with other players), the tower
+fix (needs a second hosting in one game session and five gourds), anything with two players.
 
 - **Joining players never got the puzzles' state** (`winterwalk\JoinFlood.cs`): the SDK sends every synced value again
   after a join (`SyncedValue.ResendAll`, at 3, 6, 10, 16, 25, 40, 60 s) in one frame, the game makes one message of
@@ -813,12 +825,17 @@ shaders and packs are unbuilt. Test each of these before releasing, then move wh
   from `docs\puzzle-variety\howto.json` (name, players, up to five lines) into `unity\Assets\Textures\HowTo\`, hung
   1.8 x 1.2 m over the start switch on `BWM/Picture`. Change a puzzle's rules, change its lines. Check each puzzle's
   preview: a corner against a wall or under a low roof may put the board through it.
-- **Lookouts' telescopes** stood at the floor (the pivot is 1.1 m above the pillar's foot), level, looking into the
-  parapet. They are raised and turned (pitch too) onto each station's beacon, whose mast is now 24 m with a banner;
-  the build's log says how far each line clears the ground ("TREES MAY HIDE THE BEACON" under 17 m).
+- **Lookouts has no telescopes now.** They stood at the floor (the pivot is 1.1 m above the pillar's foot), level,
+  looking into the parapet. Raised and aimed they still saw nothing: the build measured each line of sight and the
+  ground between stands 20 m above the line to the North beacon, 18 m above the Summit's and just over the South's.
+  Each direction has a pennant in the station's colour with an arrow under it; the beacon masts are 24 m with a banner.
 - **The join message names the version** (`winterwalk\JoinVersion.cs`, lobby attribute `bcwver`, `version.txt` beside
-  the plugin from `Package.ps1`) and **snowflakes stop at roofs** (the island's Snowfall collides with layer 10;
-  `MineDriver.NoSnow` for measuring): both from earlier the same day, the same state.
+  the plugin from `Package.ps1`): "You need Big Christmas Walk <version>", what this PC has, what to do. Only a joiner
+  who has this code sees it.
+- **It does not snow under a roof** (`MineDriver.Roofed`): five rays up from round the camera; four meeting one of our
+  colliders (layer 10, not the dressing) within 16 m switch the snowfall off for that player. `MineDriver.RoofRays`,
+  `NoRoofs`, `NoSnow`. Flakes colliding with layer 10 were tried first and worked, at 19 fps at the plaza and 25 in the
+  belfry (old pack: 3 and 0), so the island's snowfall has no collision module.
 - **One-way turnstiles stood backwards** (the user, at Thin Ice: the blindfolded player could not get in). A one-way
   Gate No items is entered at the side the part faces (local +z) and left at its back; every one here was placed on
   the opposite belief. `IsleKit.OneWay(x, z, yaw)` gives the place and yaw for a gate walked the way `yaw` points;

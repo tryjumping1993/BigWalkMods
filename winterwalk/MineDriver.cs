@@ -266,8 +266,43 @@ namespace WinterWalk
             }
             Underground = under;
             Rescue();
-            under |= NoSnow || TrainDriver.InTunnel || (cam != null && Indoors(cam.transform.position));      // a railway tunnel or a room stops the snowfall too
+            under |= NoSnow || TrainDriver.InTunnel || (cam != null && (Indoors(cam.transform.position) || Roofed(cam.transform.position)));      // a railway tunnel, a room or any roof of ours stops the snowfall too
             if (snowfall != null && snowfall.activeSelf == under) snowfall.SetActive(!under);
+        }
+
+        // Under a roof it does not snow (the user, 2026-11-24, after snow fell in Stocking Sort's room and every other
+        // roofed room of the puzzles): five rays go up from round the camera, and where four or more meet one of our
+        // own colliders (layer 10, the packs' objects; not the dressing's trees and rocks) within RoofHeight, the
+        // camera is under a roof and the snowfall is switched off for this player. A lone post or a branch overhead
+        // meets one ray or two. (Tried first: the flakes themselves colliding with layer 10, so they stopped at every
+        // roof. It worked, and cost 19 fps at the plaza and 25 in the belfry against 3 and 0 without: 9,000 particles
+        // tested against the world every frame.)
+        public static float RoofHeight = 16f;
+        public static bool NoRoofs;         // for testing: roofs do not stop the snowfall
+        public static int RoofRays;         // read-only: how many of the five rays met a roof at the last look
+        static readonly float[] roofX = { 0f, 0.9f, -0.9f, 0f, 0f }, roofZ = { 0f, 0f, 0f, 0.9f, -0.9f };
+        bool Roofed(Vector3 eye)
+        {
+            if (NoRoofs) return false;
+            int met = 0;
+            try
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    bool hitRoof = false;
+                    foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(eye.x + roofX[i], eye.y + 0.2f, eye.z + roofZ[i]), Vector3.up, RoofHeight, 1 << 10, QueryTriggerInteraction.Ignore))
+                    {
+                        Collider c = hit.collider;
+                        if (c == null || c.transform.root.name == "Winter Dressing") continue;
+                        hitRoof = true;
+                        break;
+                    }
+                    if (hitRoof) met++;
+                }
+            }
+            catch (Exception) { met = 0; }
+            RoofRays = met;
+            return met >= 4;
         }
 
         // Rooms where it must not snow: empty objects named "Indoors ..." whose position, turn and size are the room's box
