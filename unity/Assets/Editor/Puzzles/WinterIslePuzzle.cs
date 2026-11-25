@@ -3506,6 +3506,18 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 Vector2 slHut = Vector2.Dot(new Vector2(-1798.5f, -1521f) - slMid, slAcross) >= 0f ? slAcross : -slAcross;
                 Racks(slMid + slHut * (slHalf + 5f), -slHut, 4);
             }
+            // Downhill's start pad (off run 1's edge beside the ski lift's top station): a pair on the run's edge by
+            // the pad, 3 m off the piste. Gear comes off 6 s after its wearer is off a piste (SkiDriver), and the
+            // lift-top pair is a longer walk than that from the pad's gate.
+            {
+                Vector2 dhPad = new Vector2(-1774.6f, -1786.5f);      // DownhillPuzzle.StartSite
+                float dhAlong = (dhPad - Peak).magnitude;
+                Vector2 dhMid = RunCentre(1, dhAlong, out float dhHalf);
+                Vector2 dhDown = (RunCentre(1, dhAlong + 3f, out _) - RunCentre(1, dhAlong - 3f, out _)).normalized, dhAcross = new Vector2(dhDown.y, -dhDown.x);
+                Vector2 dhSide = Vector2.Dot(dhPad - dhMid, dhAcross) >= 0f ? dhAcross : -dhAcross;
+                Racks(dhMid + dhSide * (dhHalf + 3f) + dhDown * 12f, -dhSide, 5);
+                Debug.Log($"[BWM] Downhill's racks: the pad is {Vector2.Dot(dhPad - dhMid, dhSide) - dhHalf:0.0} m off run 1's edge at along {dhAlong:0}");
+            }
             b.MeshPiece("Gear Racks", rackMesh.ToMesh(), gear, false);
 
             // piste furniture: orange marker poles down both edges of every run, slalom gates down the middle run

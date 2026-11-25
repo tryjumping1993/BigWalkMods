@@ -19,6 +19,21 @@ namespace Bwm
 
         // ---- meshes ----
 
+        // Loose snow drawn by the ground's own shader (BWM/Snow: snowballs, snow blocks). That shader reads a vertex's
+        // colour as the state of the ground (red: fresh snow, green: bare ground, blue: sand, alpha: the land's form)
+        // and a mesh with no colours as white, which is bare, sandy ground with rock on every steep face: Snowman's
+        // balls were dark boulders with white caps. This colour says fresh snow lying in a hollow, where the shader
+        // lays snow down steep faces too.
+        public static readonly Color LooseSnow = new Color(1f, 0f, 0f, 0.25f);
+
+        public static Mesh AsLooseSnow(Mesh mesh)
+        {
+            var colours = new Color[mesh.vertexCount];
+            for (int k = 0; k < colours.Length; k++) colours[k] = LooseSnow;
+            mesh.colors = colours;
+            return mesh;
+        }
+
         // A ball: a sphere of latitude rings, optionally lumpy (0 = perfect, 0.15 = hand-rolled snowball)
         public static Mesh Ball(float radius, int rings = 10, int segments = 14, float lumpy = 0f, int seed = 1)
         {

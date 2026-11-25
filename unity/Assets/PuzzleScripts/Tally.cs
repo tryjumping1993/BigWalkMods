@@ -9,6 +9,10 @@
 // Wire each target's event to Hit(k) with k as the event's argument, and for targets that can be undone (things set
 // down and picked up again) the opposite event to Unhit(k). Wire On Puzzle Stop to Clear() (it also fires when the
 // puzzle spawns; the SDK's checks reject a start and a stop wired to the same call, and a stop always comes first).
+// Where every target has both Hit and Unhit (a thing lying in a place), also wire On Puzzle Start to Begin(): what
+// already lies in its place when the puzzle starts then counts at once (a sensor does not fire again for a thing
+// that never left). Never wire Begin() where targets only have Hit (a throw, a fly-through): nothing would ever
+// take such a target's "held" off again.
 //
 // Only the host decides (PuzzleSDK.IsHost); lamps and bars are the SDK's own and reach every PC by themselves.
 // This runs inside the game (IL2CPP): keep to Transform, GetChild, the generic GetComponent and plain C#.
@@ -23,7 +27,7 @@ public class Tally : MonoBehaviour
     [SerializeField] private string barPrefix = "";
 
     private PuzzleSDK sdk;
-    private bool[] done;
+    private bool[] done, held;          // done: marked in this run; held: Hit(k) came last, not Unhit(k), running or not
     private PuzzleLight[] lamps;
     private readonly List<PuzzleProgressBar> bars = new List<PuzzleProgressBar>();
     private bool found, warned;
@@ -32,8 +36,22 @@ public class Tally : MonoBehaviour
     public void Hit(int k)
     {
         if (!PuzzleSDK.IsHost || !Resolve()) return;
-        if (k < 1 || k > count || done[k - 1]) return;
-        if (!sdk.IsRunning || sdk.IsWon) return;
+        if (k < 1 || k > count) return;
+        held[k - 1] = true;
+        if (done[k - 1] || !sdk.IsRunning || sdk.IsWon) return;
+        Mark(k);
+    }
+
+    // Wired to On Puzzle Start, only where every target has Unhit as well: what is held already counts
+    public void Begin()
+    {
+        if (!PuzzleSDK.IsHost || !Resolve() || sdk.IsWon) return;
+        for (int k = 1; k <= count; k++)
+            if (held[k - 1] && !done[k - 1]) { Mark(k); if (sdk.IsWon) return; }
+    }
+
+    void Mark(int k)
+    {
         done[k - 1] = true;
         if (lamps[k - 1] != null) lamps[k - 1].TurnOn();
         for (int i = 0; i < bars.Count; i++) bars[i].Increment();
@@ -47,7 +65,9 @@ public class Tally : MonoBehaviour
     public void Unhit(int k)
     {
         if (!PuzzleSDK.IsHost || !Resolve()) return;
-        if (k < 1 || k > count || !done[k - 1] || sdk.IsWon) return;
+        if (k < 1 || k > count) return;
+        held[k - 1] = false;
+        if (!done[k - 1] || sdk.IsWon) return;
         done[k - 1] = false;
         if (lamps[k - 1] != null) lamps[k - 1].TurnOff();
         for (int i = 0; i < bars.Count; i++) bars[i].Decrement();
@@ -81,6 +101,7 @@ public class Tally : MonoBehaviour
         if (count < 1) count = 1;
         if (count > 32) count = 32;
         done = new bool[count];
+        held = new bool[count];
         lamps = new PuzzleLight[count];
         int lampsFound = 0;
         List<Transform> all = BwmFind.All(sdk.transform);

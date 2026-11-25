@@ -1,22 +1,17 @@
-// Whispering Chimney: "telephone" over fixed one-way channels (spec: puzzle-specs/WhisperingChimney.md, 2026-11-22).
+// Whispering Chimney: tunes heard down chimneys, matched by ear. One player can finish it; no clock, nobody shut in.
 //
 // A low Listening Hut stands at the north end of a clearing, four squat stone chimneys behind its back wall. Each
 // chimney's flue drops to a hearth far down in the rock (500, 800, 1100, 1400 m under the root), where a Sound Peg
-// Answer plays a tune; a Directional Mic beside each hearth is picked by one Listening Chair, so only a seated
-// listener hears it. 22 m south stands the Tile Shed, a closed room with nine Speaking Tiles (one of each of the
-// game's nine tunes) and a peg board with one coloured slot per chimney.
+// Answer plays a tune; a Directional Mic beside each hearth is picked by one Listening Chair, so whoever sits in a
+// chimney's chair hears that chimney's tune and nothing else. 22 m south stands the Tile Shed with nine Speaking
+// Tiles (one of each of the game's nine tunes) and a peg board with one coloured slot per chimney.
 //
-//   listener (seated)  hears only their chimney, and hums it;
-//   relay (in the hut) hears that hum, repeats it into the Hut Intercom (to the Hut Line speaker in the shed) and
-//                      hears the matcher's candidate on the Shed Line speaker on the hut's baffle; compares the two;
-//   matcher (in shed)  auditions the tiles, hums candidates into the Talk-back, hangs the confirmed tiles.
-//
-// No intercom lists a chair, so a seated listener hears nothing but the hearth. The hut is a soundproof shell inside
-// a Radio Dead Zone, its only door a No Items turnstile behind a porch baffle; the shed is walled and roofed, its only
-// opening a No Items turnstile, so the tiles never leave it. A right check wins (the gourd and the confetti at the
-// start corner outside the shed); a wrong one shows its cross for 3 s and then stops the puzzle, and the next start
-// deals every hearth afresh, so guessing throws away all progress. Two Start Switches (the corner, and one inside the
-// hut) let anyone quit at any time; nothing ever locks. Four players: a fourth chimney (blue) and a four-slot board.
+// Sit, listen, walk to the shed, find the tile that plays the same tune and hang it in that chimney's colour. With
+// more players, some listen and hum while others try tiles: everyone can talk, both doors are open doorways and the
+// tiles can be carried anywhere. A right check wins (the gourd and the confetti at the start corner outside the
+// shed); a wrong one only shows its cross. Four players: a fourth chimney (blue) and a four-slot board.
+// (Before the user's rules of 2026-11-24 this was a relay: a seated listener hummed to a go-between in a soundproof
+// hut, who passed it over one intercom and judged the matcher's hum on another, and a wrong check stopped the puzzle.)
 //
 // Coordinates: local metres from the root, x east, z north (+z forward). Every building piece is placed onGround:
 // false on its pad, heights above that pad's top. Yaw: 0 faces +z, 180 -z, 90 +x, -90 -x.
@@ -38,7 +33,6 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
     const float HearthDepth = 500f, HearthStep = 300f;       // hearth k at -(HearthDepth + k * HearthStep) under the root's level
     const float HutFloor = 0.25f, ShedFloor = 0.25f;         // tops of the two pads, above the root's level
     const float Wall = 2.7f;                                 // inside height of both rooms (roofs 2.7..2.94)
-    const float ResultSeconds = 3f;                          // how long a wrong check's cross shows before the stop
     const float StackTop = 4.5f;                             // chimney stacks' tops, above the hut's floor
 
     static readonly float[] StackX = { -3.32f, -1.22f, 0.88f, 2.98f };       // behind each chair (chair x + 0.38)
@@ -105,19 +99,10 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
             Sdk.Set(chair.Component("PuzzleListeningChair"), "microphone", mics[k]);
             if (k == 3) chair.Under(fourth);
         }
-        Piece hutIntercom = P("Intercom Mic", 0f, 13.14f, HutFloor, 1.3f).Named("Hut Intercom");
-        Piece shedLine = P("Intercom Speaker", -1.0f, 13.22f, HutFloor, 1.9f).Named("Shed Line");
         // the second knob (defaults: togglePuzzleState on), so players inside can quit; flipping either moves both
         P("Switch Start", 1.6f, 13.19f, HutFloor, 1.3f).Named("Hut Start");
         P("Live Light", 1.6f, 13.13f, HutFloor, 1.6f).Named("Hut Live");
         Piece hutLamp = P("Light 2", 0f, 16.0f, HutFloor, 2.6f).Named("Hut Lamp").Set("PuzzleLight", "color", Warm);
-        P("Gate No items", 0.05f, 11.08f, HutFloor, 0f).Named("Hut Turnstile")
-            .Set("PuzzleNoItemsGate", "oneWay", false).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-        Piece dead = P("Radio Dead Zone", 0f, 15.2f, HutFloor, 2f).Named("Hut Dead Zone");
-        BoxCollider zone = dead.Go.GetComponent<BoxCollider>();
-        if (zone == null) zone = dead.Go.AddComponent<BoxCollider>();
-        zone.size = new Vector3(11f, 6f, 10f);
-        zone.center = Vector3.zero;
 
         // ---- the lanterns on the stacks, in each chimney's colour ----
         var lanterns = new List<Component>();
@@ -132,22 +117,14 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
         // ---- the shed's parts ----
         for (int i = 0; i < 9; i++)
             P("Peg Sound", -2.0f + 0.5f * i, -13.4f, ShedFloor, 1.14f).Named("Speaking Tile " + (i + 1)).Set("PuzzleSoundPeg", "sound", i);
-        P("Gate No items", 0.05f, -11.12f, ShedFloor, 0f).Named("Shed Turnstile")
-            .Set("PuzzleNoItemsGate", "oneWay", false).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-        Piece hutLine = P("Intercom Speaker", -3.66f, -13.5f, ShedFloor, 1.9f, 90f).Named("Hut Line");
-        Piece talkBack = P("Intercom Mic", 3.74f, -13.5f, ShedFloor, 1.3f, -90f).Named("Talk-back");
         Piece shedLamp = P("Light 2", 0f, -13.5f, ShedFloor, 2.55f).Named("Shed Lamp").Set("PuzzleLight", "color", Warm);
-        Sdk.Add(hutIntercom.Component("PuzzleIntercom"), "speakers", hutLine.Component("PuzzleIntercomSpeaker"));
-        Sdk.Add(talkBack.Component("PuzzleIntercom"), "speakers", shedLine.Component("PuzzleIntercomSpeaker"));
 
         // ---- the boards on the shed's south wall: slot n at local x -0.45 n, so red is on the left of a player
-        //      facing the board; a wrong check shows its cross, then stops the puzzle ----
-        Piece resultDelay = P("Timer", 0f, -13.5f, ShedFloor, -0.8f).Named("Result Delay").Set("PuzzleTimer", "duration", ResultSeconds);      // hidden in the pad
-        Component delayC = resultDelay.Component("PuzzleTimer");
+        //      facing the board; a wrong check only shows its cross ----
         // validators a little further out than the spec's -1.1 / -1.35: the 3- and 4-slot models' left ends are not
         // measured (the 5-slot model runs 0.218 past slot 1 and 0.218 past slot 5)
-        Board(boardThree, 3, 0.45f, -1.3f, hearths, delayC, bare);
-        Board(boardFour, 4, 0.675f, -1.55f, hearths, delayC, bare);
+        Board(boardThree, 3, 0.45f, -1.3f, hearths, bare);
+        Board(boardFour, 4, 0.675f, -1.55f, hearths, bare);
 
         // ---- the start corner outside the shed's door (the gourd can be carried away from there) ----
         IsleKit.StartCorner(b, 4.5f, -8.6f, 0f);
@@ -177,14 +154,11 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
             root.On("PuzzleSDK", "onPuzzleStart", lamp, "TurnOn");
             root.On("PuzzleSDK", "onPuzzleStop", lamp, "TurnOff");
         }
-        root.On("PuzzleSDK", "onPuzzleStop", delayC, "ResetTimer");
-        // StopPuzzle = SetRunning(false): both knobs go to off, the hearths fall silent, and the next flip re-deals
-        resultDelay.On("PuzzleTimer", "onFinished", sdk, "StopPuzzle");
     }
 
     // One peg board (3 or 4 slots) with its validator and poke button and the colour plaques over its slots, all in
     // a lobby group; its answers are the first 'slots' hearths, each Sound Peg Answer's own tune (flap 1)
-    void Board(Piece group, int slots, float pivotX, float checkX, Component[] hearths, Component delayC, Material bare)
+    void Board(Piece group, int slots, float pivotX, float checkX, Component[] hearths, Material bare)
     {
         const float face = -15.76f;      // the south wall's inner face; every part's back sits on it
         Piece board = P("Peg Board", pivotX, face, ShedFloor, 1.3f).Named("Chimney Board " + slots)
@@ -199,7 +173,6 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
         Sdk.AddInts(boardC, "answerFromFlap", flaps);
         Sdk.Set(boardC, "validator", checkC);
         Sdk.Set(checkC, "pokeButton", poke.Component("PuzzlePokeButton"));
-        check.On("PuzzleValidator", "onIncorrect", delayC, "StartTimer");
 
         var plaques = new MeshBuilder();
         for (int k = 0; k < slots; k++)
@@ -231,9 +204,7 @@ public sealed class WhisperingChimneyPuzzle : PuzzleDef
         Block(mb, -4.79f, 4.79f, Wall, Wall + 0.24f, 10.81f, 19.53f, roof);      // stops short of the stacks (from z 19.55)
         // the porch baffle: blocks every straight line from the chairs to the doorway; parts on its north face
         Block(mb, -2.6f, 2.6f, y0, Wall, 12.88f, 13.12f, IsleKit.DarkWood);
-        Piece hut = b.Empty("Listening Hut", 0f, 15.2f, HutFloor, false);
-        Sdk.Set(b.AddScript(hut, "PuzzleSoundProof"), "material", 0);
-        OnPad("Hut Shell", mb, snowy, HutFloor).Under(hut);
+        OnPad("Hut Shell", mb, snowy, HutFloor);
 
         // the chimney stacks against the north wall, from below the ground (they straddle the pad's edge) to 4.5 m,
         // a band of the chimney's colour at 3.6 m and a cap

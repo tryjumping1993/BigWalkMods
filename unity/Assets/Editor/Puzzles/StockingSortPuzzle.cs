@@ -1,19 +1,26 @@
-// Stocking Sort: Christmas Eve at the Lakeside Cottage (spec: puzzle-specs/StockingSort.md, 2026-11-22).
+// Stocking Sort: Christmas Eve at the Lakeside Cottage. Which present goes in which stocking?
 //
-// Presents go down the chimney and into the right stockings. Five stockings (six in a 4-player lobby) hang along the
-// mantel of the cottage's sealed, soundproof Parlour, each under its own emblem; they are the slots of a Peg Board.
-// The wishes are split: Santa's Letter Office, a sealed booth 22 m west, shows three of them on one-flap Displays
-// (star, bell, moon); the Parlour shows the other two (tree, holly). The eight presents are Peg Tiles on the Wrapping
-// Loft, the cottage's open roof deck, drawn from four features (paper, pattern, ribbon, shape) so that any two differ
-// in at least two of them. The Reader's voice reaches only the headphones of the Wrapper's Chair on the Loft; the
-// Hanger is heard there and on the Chimney Speaker; the Wrapper answers on the Loft Mic. The Wrapper posts presents
-// down the chute beside the fireplace, saying whose each is, and the Hanger hangs them by emblem. A full board lights
-// three green "board full" lamps; the check runs only while the office, Loft and Parlour N-Hold buttons are all held.
-// Right wins; wrong shows its cross for 3 s and stops the puzzle (doors open, Displays blank, a fresh deal next start).
-// An eight-minute mantel clock stops it too. Every room has a start knob, and turning any off opens every door.
+// Five stockings hang along the mantel of the cottage's Parlour, each under its own emblem (moon, holly, star, tree,
+// bell): the five slots of a Peg Board. Eight wrapped presents (Peg Tiles with our own pictures) stand on two
+// sideboards by the door, opposite the mantel. Every stocking has one right present and nobody is shown which: the
+// Guess script (PuzzleScripts) draws a new hidden answer at every start. Hang a present in each of the five stockings
+// and the row of five lamps over the mantel shows how many stockings are right, never which. Swap a present or two
+// and read the lamps again; five lit lamps win. There is no clock and a wrong guess costs nothing. One player can work
+// it out alone; more can share the carrying, the remembering and the arguing. The Parlour is an ordinary open room: a
+// plain doorway and nothing soundproof.
+// (Before the user's rules of 2026-11-24 it was a three-room relay on an eight-minute clock: a Reader sealed in a
+// Letter Office read the wishes into the headphones of a chair on the roof, a Wrapper there posted presents down a
+// chimney chute, and a Hanger sealed in the Parlour hung them; three buttons held at once checked the board, and a
+// wrong check stopped the puzzle.)
 //
-// Lobby sizes: in 4p the open Ledger Booth (22 m east) shows holly and candle, and a six-slot board replaces the five;
-// in 2p the Loft button and the Parlour door are left out and one Runner is both Wrapper and Hanger.
+// The presents are drawn from four features (paper red or green, dots or stripes, a gold or silver ribbon, tall or
+// flat) so that any two differ in at least two of them: each is easy to name aloud. Their pictures are images 1 to 8
+// of the puzzle's own sheet (PresentSheet.png, the SDK's Custom set). The game draws a Peg Tile's picture in grey, so
+// in play the paper's colour does not show: dots or stripes, a dark or a light ribbon and tall or flat are what a
+// player sees, and those three still tell all eight apart (any two differ in two of the four features, so never only
+// in the paper).
+//
+// The roof deck and its outside stair are a lookout now, with the chimney (solid: nothing goes down it) at its back.
 //
 // Coordinates: local metres from the cottage's centre, x east, z north; heights above the pad top (Floor above the
 // root), every piece placed onGround: false on one level pad. Yaw: 0 faces +z, 180 -z, 90 +x, -90 -x.
@@ -30,22 +37,25 @@ public sealed class StockingSortPuzzle : PuzzleDef
     public override Vector2? FixedSite => new Vector2(-951f, -1350f);      // layout-final: a level east-west shelf by East Lowland, woods behind, 133 m from the coast
 
     const float Floor = 0.25f;          // top of the pad, above the root's level
-    const float Deck = 3.2f;            // the Loft's walking surface (top of the Loft Deck, on the Parlour's 3.16 roof slab)
-    const float RoundSeconds = 480f;
-    const float ResultSeconds = 3f;
-    const float OfficeHigh = 2.8f;      // the offices' wall height
+    const float Deck = 3.2f;            // the roof deck's walking surface (on the Parlour's 3.16 roof slab)
     const string SheetPath = "Assets/Puzzles/StockingSort/PresentSheet.png";
 
-    // Emblems: 0 star, 1 bell, 2 tree, 3 moon, 4 holly, 5 candle, 6 letter (envelope), 7 stocking ("board full")
-    const int Star = 0, Bell = 1, Tree = 2, Moon = 3, Holly = 4, Candle = 5, Letter = 6, Sock = 7;
-    static readonly int[] Order5 = { Moon, Holly, Star, Tree, Bell };            // Board 5's slots, the Hanger's left to right
-    static readonly int[] Order6 = { Moon, Holly, Candle, Star, Tree, Bell };    // Board 6's
+    // Emblems: the stockings' (0 star, 1 bell, 2 tree, 3 moon, 4 holly) and the count board's (5 stocking, 6 tick)
+    const int Star = 0, Bell = 1, Tree = 2, Moon = 3, Holly = 4, Sock = 5, Tick = 6;
+    static readonly int[] Stockings = { Moon, Holly, Star, Tree, Bell };      // the board's slots, a player's left to right
+    const float FirstSlotX = -0.9f;     // the Peg Board's pivot, at its first slot (the board runs 2 m east from it)
     const float SlotPitch = 0.45f;      // PuzzlePegBoard slot spacing
+
+    // The count board over the mantel: its face (the mantel shelf's front edge is at z 2.0), its lamps' height and
+    // their spacing (closer than the stockings', so no lamp reads as one stocking's own)
+    const float CountFace = 2.1f, CountHigh = 2.45f, LampPitch = 0.3f;
+    // The present sideboards against the south wall, x ShelfIn..ShelfOut either side of the doorway
+    const float ShelfTop = 0.85f, ShelfFront = -2.5f, ShelfIn = 1.0f, ShelfOut = 3.3f;
 
     static readonly Color Brick = new Color(0.6f, 0.32f, 0.25f);
     static readonly Color Soot = new Color(0.1f, 0.08f, 0.08f);
     static readonly Color Warm = new Color(1f, 0.85f, 0.65f);
-    static readonly Color ReadyGreen = new Color(0.3f, 1f, 0.4f);
+    static readonly Color CountLamp = new Color(1f, 0.92f, 0.75f);      // near white: a lit lamp is a bright disc, an unlit one a dull one
     static readonly Color Crimson = new Color(0.55f, 0.10f, 0.12f);
     static readonly Color Berry = new Color(0.8f, 0.08f, 0.1f);
     static readonly Color Leaf = new Color(0.08f, 0.38f, 0.15f);
@@ -188,22 +198,14 @@ public sealed class StockingSortPuzzle : PuzzleDef
                 DiscOn(mb, fr, V(0.07f, 0.06f), 0.075f * s, d, d + 2f * t, Berry);
                 DiscOn(mb, fr, V(0f, 0.18f), 0.075f * s, d, d + 2f * t, Berry);
                 break;
-            case Candle:
-                RectOn(mb, fr, -0.1f * s, 0.1f * s, -0.38f * s, 0.16f * s, d, d + t, IsleKit.Cream);
-                RectOn(mb, fr, -0.17f * s, 0.17f * s, -0.46f * s, -0.36f * s, d, d + 1.3f * t, IsleKit.Red);
-                Poly(mb, fr, new[] { V(0f, 0.47f), V(0.075f, 0.33f), V(0.06f, 0.25f), V(0f, 0.2f), V(-0.06f, 0.25f), V(-0.075f, 0.33f) },
-                    V(0f, 0.3f), d, d + t, IsleKit.Gold);
-                break;
-            case Letter:
-                RectOn(mb, fr, -0.36f * s, 0.36f * s, -0.24f * s, 0.24f * s, d, d + t, IsleKit.Cream);
-                BarOn(mb, fr, V(-0.33f, 0.21f), V(0f, -0.03f), 0.035f * s, d, d + 1.5f * t, Crimson);
-                BarOn(mb, fr, V(0f, -0.03f), V(0.33f, 0.21f), 0.035f * s, d, d + 1.5f * t, Crimson);
-                DiscOn(mb, fr, V(0f, -0.03f), 0.07f * s, d, d + 2f * t, IsleKit.Red);
-                break;
             case Sock:
                 RectOn(mb, fr, -0.12f * s, 0.12f * s, -0.2f * s, 0.3f * s, d, d + t, IsleKit.Red);
                 RectOn(mb, fr, -0.12f * s, 0.3f * s, -0.4f * s, -0.2f * s, d, d + t, IsleKit.Red);
                 RectOn(mb, fr, -0.16f * s, 0.16f * s, 0.24f * s, 0.4f * s, d, d + 1.5f * t, IsleKit.Cream);
+                break;
+            case Tick:
+                BarOn(mb, fr, V(-0.3f, 0f), V(-0.08f, -0.28f), 0.13f * s, d, d + t, IsleKit.Cream);
+                BarOn(mb, fr, V(-0.08f, -0.28f), V(0.32f, 0.3f), 0.13f * s, d, d + 1.15f * t, IsleKit.Cream);
                 break;
         }
     }
@@ -241,16 +243,6 @@ public sealed class StockingSortPuzzle : PuzzleDef
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    // A Radio Dead Zone box centred at (x, z, height above the pad top)
-    void DeadZone(string name, float x, float z, float height, Vector3 size)
-    {
-        Piece dead = P("Radio Dead Zone", x, z, height).Named(name);
-        BoxCollider zone = dead.Go.GetComponent<BoxCollider>();
-        if (zone == null) zone = dead.Go.AddComponent<BoxCollider>();
-        zone.size = size;
-        zone.center = Vector3.zero;
-    }
-
     // ================================================================ build
 
     public override void Build(PuzzleBuilder builder)
@@ -259,9 +251,8 @@ public sealed class StockingSortPuzzle : PuzzleDef
         b.ClearGround(52f, 24f);
         b.DebugTeleport(2f, -6f, 2f);
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
-        Component sdk = b.Puzzle;
-        Sdk.Set(sdk, "gourdColor", Crimson);      // a deep crimson gourd: a hard puzzle
-        // No jetpacks over the yard: nobody flies onto the roofs, round the seals or out of the chute
+        Sdk.Set(b.Puzzle, "gourdColor", Crimson);      // a deep crimson gourd: a hard puzzle
+        // No jetpacks over the yard: nobody flies onto the roof
         IsleKit.CalmAir(b, "Stocking Sort", 0f, 0f, new Vector3(70f, 120f, 40f), 0f, -10f, false);
 
         // ---- the pad: one level slab, sunk 1.5 m so uneven ground never shows a gap ----
@@ -272,228 +263,111 @@ public sealed class StockingSortPuzzle : PuzzleDef
         Texture2D sheet = PresentSheet(SheetPath);
 
         BuildCottage(snowy, bare);
-        BuildLetterOffice(snowy, bare);
-
-        Piece lobby2 = IsleKit.Lobby(b, "Lobby 2", true, false, false);
-        Piece lobby23 = IsleKit.Lobby(b, "Lobby 2-3", true, true, false);
-        Piece lobby34 = IsleKit.Lobby(b, "Lobby 3-4", false, true, true);
-        Piece lobby4 = IsleKit.Lobby(b, "Lobby 4", false, false, true);
-
-        BuildLedgerBooth(snowy, bare, lobby4);
-        BuildStockings(bare, lobby23, lobby4);
+        BuildMantel(bare);
 
         // ================= the Parlour =================
-        Piece board5 = P("Peg Board", -0.9f, 2.4f, 1.3f, 180f).Named("Board 5").Set("PuzzlePegBoard", "size", 4).Under(lobby23);      // Slots5
-        Piece board6 = P("Peg Board", -1.125f, 2.4f, 1.3f, 180f).Named("Board 6").Set("PuzzlePegBoard", "size", 5).Under(lobby4);     // Slots6
-        Piece validator = P("Validator", 3.4f, 3.25f, 1.55f, 180f).Named("Validator");
-        Piece parlourButton = P("Button N Hold", -3.3f, 3.25f, 1.15f, 180f).Named("Parlour Button").Set("PuzzleButtonNHold", "group", "stockings");
-        // Light 8 sits about 0.1 m behind its pivot, so its pivot stands 0.1 m out from the wall
-        Piece lampParlour = P("Light 8", -3.3f, 3.15f, 1.5f, 180f).Named("Ready Lamp Parlour").Set("PuzzleLight", "color", ReadyGreen);
-        // A Display's body runs 0.168 m behind its pivot: pivots 0.17 m out from the wall's face
-        Piece parlourTree = P("Display", -4.08f, 0f, 1.9f, 90f).Named("Parlour Tree").Set("PuzzleDisplay", "size", 0);
-        Piece parlourHolly = P("Display", -4.08f, 0.6f, 1.9f, 90f).Named("Parlour Holly").Set("PuzzleDisplay", "size", 0).Under(lobby23);
-        Piece parlourMic = P("Intercom Mic", -4.23f, -1.0f, 1.35f, 90f).Named("Parlour Mic").Under(lobby34);
-        Piece parlourMic2 = P("Intercom Mic", -4.23f, -1.0f, 1.35f, 90f).Named("Parlour Mic 2").Under(lobby2);
-        Piece parlourSpeaker = P("Intercom Speaker", -4.15f, -1.9f, 1.9f, 90f).Named("Parlour Speaker");
-        P("Switch Start", 1.3f, -3.18f, 1.25f, 0f).Named("Parlour Knob");
-        P("Live Light", 1.3f, -3.25f, 1.42f, 0f).Named("Parlour Live Light");
-        Piece mantelClock = P("Timer", 0f, 2.4f, 2.55f, 180f).Named("Mantel Clock").Set("PuzzleTimer", "duration", RoundSeconds);
-        Piece parlourLamp = P("Light 2", 0f, -0.4f, 3.0f).Named("Parlour Lamp").Set("PuzzleLight", "color", Warm);
-        P("Confetti", 0f, 0.8f, 0.2f).Named("Parlour Confetti");
-        DeadZone("Parlour Dead Zone", 0f, 0f, 1.5f, new Vector3(8.5f, 3.0f, 6.5f));
-        P("Door", 0f, -3.375f, 0f, 180f).Named("Parlour Door").Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", true).Under(lobby34);
-        // Hidden inside the sunk pad: holds a wrong check's cross up for 3 s before the stop
-        Piece resultDelay = P("Timer", 0f, 0f, -0.8f).Named("Result Delay").Set("PuzzleTimer", "duration", ResultSeconds);
-        // The fire's glow: always on, so the Parlour is never pitch dark (Winter Walk's RoomLights)
-        b.Empty("Room Light 2 FF8A3C 3.0 0.9", 0f, 2.1f, Floor + 0.35f, false);
-
-        // ================= the Wrapping Loft =================
-        var presents = new List<Piece>();
+        // The stockings: a five-slot Peg Board on the chimney breast. Its Answer From stays empty: Guess holds the answer
+        Piece stockingBoard = P("Peg Board", FirstSlotX, 2.4f, 1.3f, 180f).Named("Stocking Board").Set("PuzzlePegBoard", "size", 4);      // Slots5
+        // The SDK's build check refuses a Peg Board with no Answer From ("can never be correct"), so the board is
+        // given five one-flap Displays buried 2 m under the pad, where nobody sees them. Nothing reads them: the Guess
+        // script holds the real answer and wins the puzzle itself, and the board has no Validator.
+        var buried = new Object[5];
+        for (int k = 0; k < 5; k++)
+            buried[k] = P("Display", -1f + 0.5f * k, 0f, -2.5f, 0f).Named("Buried Answer " + (k + 1)).Set("PuzzleDisplay", "size", 0).Component("PuzzleDisplay");
+        Sdk.Add(stockingBoard.Component("PuzzlePegBoard"), "answerFrom", buried);
+        Sdk.AddInts(stockingBoard.Component("PuzzlePegBoard"), "answerFromFlap", 1, 1, 1, 1, 1);
+        // The count: five lamps in a tight row on the board over the mantel, lit from the left. A Light 8's back is
+        // 0.1 m behind its pivot, and the board's paint is 0.02 m thick; a short range, since they are there to be read
+        for (int k = 0; k < 5; k++)
+            P("Light 8", LampPitch * (k - 2), CountFace - 0.02f - 0.1f, CountHigh, 180f).Named("Right Lamp " + (k + 1))
+                .Set("PuzzleLight", "color", CountLamp).Set("PuzzleLight", "range", 0.4f);
+        // The presents stand on the sideboards facing the room, 0.24 m above the tops: 1 to 4 (the red papers) east of
+        // the door and 5 to 8 (the green) west of it, in order from the left for a player facing them
         for (int k = 0; k < 8; k++)
         {
-            Piece tile = P("Peg Tile", -3.7f, -1.75f + 0.5f * k, Deck + 0.85f + 0.24f, 90f).Named("Present " + (k + 1));
+            float x = k < 4 ? ShelfIn + 0.4f + 0.5f * (3 - k) : -(ShelfIn + 0.4f + 0.5f * (k - 4));
+            Piece tile = P("Peg Tile", x, ShelfFront - 0.35f, ShelfTop + 0.24f, 0f).Named("Present " + (k + 1));
             Component tileC = tile.Component("PuzzlePegTile");
             SetEnumByName(tileC, "imageSet", "Custom");
             Sdk.Set(tileC, "image", k + 1);
             Sdk.Set(tileC, "customSheet", sheet);
             Sdk.Set(tileC, "invisibleInkView", false);
-            presents.Add(tile);
         }
-        // The puzzle's one Listening Chair with no microphone: its headphones sit 3000 m under it, so only the sitter
-        // hears what the Letters, Ledger and Parlour Mics play into it (spec, Review note 1: never add a second)
-        Piece chair = P("Listening Chair", -0.6f, -1.6f, Deck, 0f).Named("Wrapper's Chair");
-        Piece chimneySpeaker = P("Intercom Speaker", 1.8f, 2.2f, Deck + 1.75f, 180f).Named("Chimney Speaker");
-        Piece loftMic = P("Intercom Mic", 2.62f, 2.55f, Deck + 1.35f, 90f).Named("Loft Mic").Under(lobby23);
-        Piece loftMic4 = P("Intercom Mic", 2.62f, 2.55f, Deck + 1.35f, 90f).Named("Loft Mic 4").Under(lobby4);
-        P("Button N Hold", 2.6f, 2.95f, Deck + 1.15f, 90f).Named("Loft Button").Set("PuzzleButtonNHold", "group", "stockings").Under(lobby34);
-        Piece lampLoft = P("Light 8", 2.7f, 2.95f, Deck + 1.5f, 90f).Named("Ready Lamp Loft").Set("PuzzleLight", "color", ReadyGreen);
-        P("Switch Start", 0.93f, 2.9f, Deck + 1.25f, -90f).Named("Loft Knob");
-        P("Live Light", 1.0f, 2.9f, Deck + 1.42f, -90f).Named("Loft Live Light");
-        Piece loftClock = P("Timer", 1.0f, 2.6f, Deck + 1.9f, -90f).Named("Loft Clock").Set("PuzzleTimer", "duration", RoundSeconds);
-        Piece loftLamp = P("Light 1", 3.8f, -2.8f, Deck).Named("Loft Lamp").Set("PuzzleLight", "color", Warm);
-        P("Confetti", 0.8f, 0.5f, Deck + 0.1f).Named("Loft Confetti");
-
-        // ================= the Letter Office =================
-        Piece lettersStar = P("Display", -23.38f, 6.85f, 1.9f, 90f).Named("Letters Star").Set("PuzzleDisplay", "size", 0);
-        Piece lettersBell = P("Display", -23.38f, 7.45f, 1.9f, 90f).Named("Letters Bell").Set("PuzzleDisplay", "size", 0);
-        Piece lettersMoon = P("Display", -23.38f, 8.05f, 1.9f, 90f).Named("Letters Moon").Set("PuzzleDisplay", "size", 0);
-        Piece lettersMic = P("Intercom Mic", -23.53f, 8.65f, 1.35f, 90f).Named("Letters Mic");
-        Piece lettersSpeaker = P("Intercom Speaker", -22.6f, 9.45f, 1.9f, 180f).Named("Letters Office Speaker");
-        P("Button N Hold", -23.55f, 9.1f, 1.15f, 90f).Named("Letters Button").Set("PuzzleButtonNHold", "group", "stockings");
-        Piece lampLetters = P("Light 8", -23.45f, 9.1f, 1.5f, 90f).Named("Ready Lamp Letters").Set("PuzzleLight", "color", ReadyGreen);
-        P("Switch Start", -23.0f, 9.48f, 1.25f, 180f).Named("Letters Knob");
-        P("Live Light", -23.0f, 9.55f, 1.42f, 180f).Named("Letters Live Light");
-        P("Door", -20.325f, 7.3f, 0f, 90f).Named("Letters Door").Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", true);
-        DeadZone("Letters Dead Zone", -22f, 8f, 1.4f, new Vector3(3.1f, 2.8f, 3.1f));
-        P("Confetti", -22.6f, 8.0f, 0.2f).Named("Letters Confetti");
-        b.Empty("Room Light 1 FFE2B0 6.0 1.2", -22.6f, 8.0f, Floor + 2.5f, false);
-
-        // ================= the Ledger Booth (4 players; open: no door, no dead zone, no button) =================
-        Piece ledgerHolly = P("Display", 23.38f, 7.75f, 1.9f, -90f).Named("Ledger Holly").Set("PuzzleDisplay", "size", 0).Under(lobby4);
-        Piece ledgerCandle = P("Display", 23.38f, 7.15f, 1.9f, -90f).Named("Ledger Candle").Set("PuzzleDisplay", "size", 0).Under(lobby4);
-        Piece ledgerMic = P("Intercom Mic", 23.53f, 8.65f, 1.35f, -90f).Named("Ledger Mic").Under(lobby4);
-        Piece ledgerSpeaker = P("Intercom Speaker", 22.6f, 9.45f, 1.9f, 180f).Named("Ledger Booth Speaker").Under(lobby4);
-        P("Switch Start", 23.0f, 9.48f, 1.25f, 180f).Named("Ledger Knob").Under(lobby4);
-        P("Live Light", 23.0f, 9.55f, 1.42f, 180f).Named("Ledger Live Light").Under(lobby4);
-        P("Confetti", 22.6f, 8.0f, 0.2f).Named("Ledger Confetti").Under(lobby4);
-        b.Empty("Room Light 3 FFE2B0 6.0 1.2", 22.6f, 8.0f, Floor + 2.5f, false).Under(lobby4);
+        // A second start knob just inside the door, the room's lamp (lit while the puzzle runs) and confetti for the win
+        P("Switch Start", 0.81f, -3.18f, 1.25f, 0f).Named("Parlour Knob");
+        P("Live Light", 0.81f, -3.25f, 1.42f, 0f).Named("Parlour Live Light");
+        Piece parlourLamp = P("Light 2", 0f, -0.4f, 3.0f).Named("Parlour Lamp").Set("PuzzleLight", "color", Warm);
+        P("Confetti", 0f, 0.8f, 0.2f).Named("Parlour Confetti");
+        // Always on (Winter Walk's RoomLights), so the Parlour can be read at night: a ceiling light for the whole room,
+        // and the fire's glow, kept to the hearth so that it does not colour the presents in the stockings
+        b.Empty("Room Light 1 FFE2B8 8.0 1.2", 0f, 0f, Floor + 2.6f, false);
+        b.Empty("Room Light 2 FF8A3C 0.9 0.9", 0f, 2.15f, Floor + 0.2f, false);
 
         // ================= the yard: start corner, tree, lights =================
         IsleKit.StartCorner(b, -6f, -8f, 0f, true, Floor, false);
         BuildYard(snowy, bare);
 
-        // ================= wiring =================
-        Component chairC = chair.Component("PuzzleListeningChair");
-        Component chimneyC = chimneySpeaker.Component("PuzzleIntercomSpeaker"), parlourSpeakerC = parlourSpeaker.Component("PuzzleIntercomSpeaker");
-        Component lettersSpeakerC = lettersSpeaker.Component("PuzzleIntercomSpeaker"), ledgerSpeakerC = ledgerSpeaker.Component("PuzzleIntercomSpeaker");
-        // The Readers are heard only in the chair's headphones; the Hanger in the headphones and on the Chimney Speaker
-        lettersMic.Add("PuzzleIntercom", "speakers", chairC);
-        ledgerMic.Add("PuzzleIntercom", "speakers", chairC);
-        parlourMic.Add("PuzzleIntercom", "speakers", chairC, chimneyC);
-        parlourMic2.Add("PuzzleIntercom", "speakers", chairC, chimneyC, lettersSpeakerC);        // 2p: the Reader hears the Runner in the Parlour too
-        loftMic.Add("PuzzleIntercom", "speakers", parlourSpeakerC, lettersSpeakerC);
-        loftMic4.Add("PuzzleIntercom", "speakers", parlourSpeakerC, lettersSpeakerC, ledgerSpeakerC);
-
-        Component validatorC = validator.Component("PuzzleValidator");
-        Component lampParlourC = lampParlour.Component("PuzzleLight"), lampLoftC = lampLoft.Component("PuzzleLight"), lampLettersC = lampLetters.Component("PuzzleLight");
-        Component starC = lettersStar.Component("PuzzleDisplay"), bellC = lettersBell.Component("PuzzleDisplay"), moonC = lettersMoon.Component("PuzzleDisplay");
-        Component treeC = parlourTree.Component("PuzzleDisplay"), hollyC = parlourHolly.Component("PuzzleDisplay");
-        Component ledgerHollyC = ledgerHolly.Component("PuzzleDisplay"), candleC = ledgerCandle.Component("PuzzleDisplay");
-
-        // Each slot follows the one-flap Display under its emblem's plaque
-        Component board5C = board5.Component("PuzzlePegBoard"), board6C = board6.Component("PuzzlePegBoard");
-        Sdk.Add(board5C, "answerFrom", moonC, hollyC, starC, treeC, bellC);
-        Sdk.AddInts(board5C, "answerFromFlap", 1, 1, 1, 1, 1);
-        Sdk.Add(board6C, "answerFrom", moonC, ledgerHollyC, candleC, starC, treeC, bellC);
-        Sdk.AddInts(board6C, "answerFromFlap", 1, 1, 1, 1, 1, 1);
-        foreach (Piece board in new[] { board5, board6 })
-        {
-            board.Set("PuzzlePegBoard", "validator", validatorC);
-            // "board full": the board fires exactly one of these on every peg placed or taken off
-            foreach (Component lamp in new[] { lampParlourC, lampLoftC, lampLettersC })
-            {
-                board.On("PuzzlePegBoard", "onCorrect", lamp, "TurnOn");
-                board.On("PuzzlePegBoard", "onIncorrect", lamp, "TurnOn");
-                board.On("PuzzlePegBoard", "onMissingPegs", lamp, "TurnOff");
-            }
-        }
-
-        // The three-way hold checks (wired on the Parlour's button only: every member fires its events, and this one
-        // exists in every lobby); a wrong answer shows its cross for 3 s, then stops the puzzle; so does the clock
-        Component delayC = resultDelay.Component("PuzzleTimer");
-        parlourButton.On("PuzzleButtonNHold", "onAllHeld", validatorC, "Check");
-        validator.On("PuzzleValidator", "onIncorrect", delayC, "StartTimer");
-        resultDelay.On("PuzzleTimer", "onFinished", sdk, "StopPuzzle");
-        mantelClock.On("PuzzleTimer", "onFinished", sdk, "StopPuzzle");
-
+        // ================= the rule: a hidden answer, lamps that count, five right win (Guess.cs) =================
+        Component guess = b.AddCustomScript(b.Empty("Stocking Guess", 0f, 0f, Floor + 0.5f, false), "Guess");
+        Sdk.Set(guess, "board", "Stocking Board");
+        Sdk.Set(guess, "lampPrefix", "Right Lamp ");
+        Sdk.Set(guess, "images", 8);
         Piece root = b.RootPiece;
-        Component mantelC = mantelClock.Component("PuzzleTimer"), loftClockC = loftClock.Component("PuzzleTimer");
-        foreach (Component clock in new[] { mantelC, loftClockC })
-        {
-            root.On("PuzzleSDK", "onPuzzleStart", clock, "StartTimer");
-            root.On("PuzzleSDK", "onPuzzleStop", clock, "ResetTimer");
-            root.On("PuzzleSDK", "onWin", clock, "PauseTimer");
-        }
-        root.On("PuzzleSDK", "onPuzzleStop", delayC, "ResetTimer");
-        foreach (Component lamp in new[] { parlourLamp.Component("PuzzleLight"), loftLamp.Component("PuzzleLight") })
-        {
-            root.On("PuzzleSDK", "onPuzzleStart", lamp, "TurnOn");
-            root.On("PuzzleSDK", "onPuzzleStop", lamp, "TurnOff");
-        }
+        root.On("PuzzleSDK", "onPuzzleStart", guess, "Begin");
+        root.On("PuzzleSDK", "onPuzzleStop", guess, "End");
+        Component lampC = parlourLamp.Component("PuzzleLight");
+        root.On("PuzzleSDK", "onPuzzleStart", lampC, "TurnOn");
+        root.On("PuzzleSDK", "onPuzzleStop", lampC, "TurnOff");
     }
 
-    // ================================================================ the cottage: Parlour, chute, Loft, stair
+    // ================================================================ the cottage: Parlour, roof deck, stair
 
     void BuildCottage(Material snowy, Material bare)
     {
         const float y0 = -0.1f, H = 3.0f, D = Deck;
         Color wall = IsleKit.Wood, slab = IsleKit.DarkWood;
 
-        // ---- the soundproof shell: walls, floor, roof slab, chimney breast and stack (no walking surfaces, no parts) ----
+        // ---- the walls (ordinary ones: voices pass), the roof slab, the chimney breast and the stack on the roof ----
         var shell = new MeshBuilder();
-        Block(shell, -4.25f, 4.25f, -0.12f, 0.01f, -3.25f, 3.25f, slab);                     // floor (closes the path under the walls)
-        Block(shell, -4.5f, -0.62f, y0, H, -3.5f, -3.25f, wall);                              // south, with the doorway x -0.62..0.62
+        Block(shell, -4.5f, -0.62f, y0, H, -3.5f, -3.25f, wall);                              // south, with the open doorway x -0.62..0.62
         Block(shell, 0.62f, 4.5f, y0, H, -3.5f, -3.25f, wall);
         Block(shell, -0.62f, 0.62f, 2.04f, H, -3.5f, -3.25f, wall);
         Block(shell, -4.5f, 4.5f, y0, H, 3.25f, 3.5f, wall);                                  // north
         Block(shell, -4.5f, -4.25f, y0, H, -3.25f, 3.25f, wall);                              // west
         Block(shell, 4.25f, 4.5f, y0, H, -3.25f, 3.25f, wall);                                // east
-        // the roof slab (top 3.16), with the shaft's hole x 1.41..2.19, z 2.46..3.25
-        Block(shell, -4.5f, 1.41f, H, 3.16f, -3.5f, 3.5f, slab);
-        Block(shell, 2.19f, 4.5f, H, 3.16f, -3.5f, 3.5f, slab);
-        Block(shell, 1.41f, 2.19f, H, 3.16f, -3.5f, 2.46f, slab);
-        Block(shell, 1.41f, 2.19f, H, 3.16f, 3.25f, 3.5f, slab);
-        // the chimney breast x -2.3..2.3, z 2.4..3.25, round the shaft; open in front below 1.8 m (the log nook)
-        Block(shell, -2.3f, 1.41f, y0, H, 2.4f, 3.25f, Brick);
-        Block(shell, 2.19f, 2.3f, y0, H, 2.4f, 3.25f, Brick);
-        Block(shell, 1.41f, 2.19f, 1.8f, H, 2.4f, 2.46f, Brick);
-        // the stack on the deck, x 1.0..2.6, z 2.3..3.5, up to Deck + 2.4; the posting slot x 1.55..2.1 in its south face
-        Block(shell, 1.0f, 2.6f, 3.16f, D + 0.8f, 2.3f, 2.46f, Brick);
-        Block(shell, 1.0f, 1.55f, D + 0.8f, D + 1.5f, 2.3f, 2.46f, Brick);
-        Block(shell, 2.1f, 2.6f, D + 0.8f, D + 1.5f, 2.3f, 2.46f, Brick);
-        Block(shell, 1.0f, 2.6f, D + 1.5f, D + 2.4f, 2.3f, 2.46f, Brick);
-        Block(shell, 1.0f, 2.6f, 3.16f, D + 2.4f, 3.25f, 3.5f, Brick);
-        Block(shell, 1.0f, 1.41f, 3.16f, D + 2.4f, 2.46f, 3.25f, Brick);
-        Block(shell, 2.19f, 2.6f, 3.16f, D + 2.4f, 2.46f, 3.25f, Brick);
-        Block(shell, 0.95f, 2.65f, D + 2.4f, D + 2.55f, 2.25f, 3.55f, IsleKit.Stone);          // the cap
-        Piece parlourShell = b.Empty("Parlour Shell", 0f, 0f, Floor, false);
-        Sdk.Set(b.AddScript(parlourShell, "PuzzleSoundProof"), "material", 0);                // Wood
-        OnPad("Parlour Walls", shell, snowy).Under(parlourShell);
+        Block(shell, -4.5f, 4.5f, H, 3.16f, -3.5f, 3.5f, slab);                               // the roof slab (top 3.16)
+        Block(shell, -2.3f, 2.3f, y0, H, 2.4f, 3.25f, Brick);                                 // the chimney breast
+        Block(shell, 1.0f, 2.6f, 3.16f, D + 2.4f, 2.3f, 3.5f, Brick);                         // the stack on the deck
+        Block(shell, 0.95f, 2.65f, D + 2.4f, D + 2.55f, 2.25f, 3.55f, IsleKit.Stone);         // its cap
+        OnPad("Parlour Walls", shell, snowy);
 
-        // ---- inside the Parlour: floorboards, mantel, firebox, hearths (ordinary colliders, no snow indoors) ----
+        // ---- inside the Parlour (no snow indoors): floorboards, mantel, firebox, hearth, overmantel, sideboards ----
         var inside = new MeshBuilder();
-        Block(inside, -4.25f, 4.25f, 0.01f, 0.04f, -3.25f, 3.25f, IsleKit.Wood);              // floorboards
+        Block(inside, -4.25f, 4.25f, 0f, 0.04f, -3.25f, 3.25f, IsleKit.Wood);                 // floorboards
         Block(inside, -2.5f, 2.5f, 2.0f, 2.12f, 2.0f, 2.4f, IsleKit.DarkWood);                // the mantel shelf
         Block(inside, -0.7f, 0.7f, 0.04f, 0.36f, 2.38f, 2.4f, Soot);                          // the firebox
-        Block(inside, -1.4f, 1.25f, 0.04f, 0.07f, 2.0f, 2.4f, IsleKit.Stone);                 // the hearth stone
-        Block(inside, 1.3f, 2.4f, 0.04f, 0.10f, 1.7f, 2.4f, IsleKit.Stone);                   // the presents' hearth (0.06 high)
-        Block(inside, 1.3f, 2.4f, 0.10f, 0.16f, 1.7f, 1.76f, IsleKit.Stone);                  // ... with a lip on its outer edge only
+        Block(inside, -1.4f, 1.4f, 0.04f, 0.07f, 2.0f, 2.4f, IsleKit.Stone);                  // the hearth stone
+        Block(inside, -1.15f, 1.15f, 2.12f, 2.78f, CountFace, 2.4f, IsleKit.DarkWood);        // the overmantel: the count board stands on the shelf
+        // the present sideboards: a cupboard to the floor (nothing rolls under it), a crimson top at ShelfTop against
+        // the wall, a 0.05 lip along the front and at the ends
+        foreach (float x0 in new[] { -ShelfOut, ShelfIn })
+        {
+            float x1 = x0 + ShelfOut - ShelfIn;
+            Block(inside, x0 + 0.05f, x1 - 0.05f, 0.04f, ShelfTop - 0.06f, -3.25f, ShelfFront - 0.06f, IsleKit.DarkWood);
+            Block(inside, x0, x1, ShelfTop - 0.06f, ShelfTop, -3.25f, ShelfFront, Crimson);
+            Block(inside, x0, x1, ShelfTop, ShelfTop + 0.05f, ShelfFront - 0.04f, ShelfFront, IsleKit.DarkWood);
+            Block(inside, x0, x0 + 0.04f, ShelfTop, ShelfTop + 0.05f, -3.25f, ShelfFront - 0.04f, IsleKit.DarkWood);
+            Block(inside, x1 - 0.04f, x1, ShelfTop, ShelfTop + 0.05f, -3.25f, ShelfFront - 0.04f, IsleKit.DarkWood);
+        }
         OnPad("Parlour Fittings", inside, bare);
 
-        // ---- the chute: a straight 0.7 x 0.7 shaft (x 1.45..2.15, z 2.5..3.2) from the slot to the floor, lined with
-        //      smooth slabs that never narrow; its floor slopes 36 degrees down to the log nook, flush with the hearth ----
-        var liner = new MeshBuilder();
-        Color lin = IsleKit.Stone * 0.8f;
-        Block(liner, 1.41f, 1.45f, 0.04f, D + 2.4f, 2.46f, 3.24f, lin);                       // west
-        Block(liner, 2.15f, 2.19f, 0.04f, D + 2.4f, 2.46f, 3.24f, lin);                       // east
-        Block(liner, 1.45f, 2.15f, 0.04f, D + 2.4f, 3.20f, 3.24f, lin);                       // back
-        Block(liner, 1.41f, 2.19f, 1.8f, D + 0.8f, 2.46f, 2.50f, lin);                        // front, above the nook
-        Block(liner, 1.41f, 2.19f, D + 1.5f, D + 2.4f, 2.46f, 2.50f, lin);                    // front, above the slot
-        Block(liner, 1.41f, 1.55f, D + 0.8f, D + 1.5f, 2.46f, 2.50f, lin);                    // the slot's sides
-        Block(liner, 2.1f, 2.19f, D + 0.8f, D + 1.5f, 2.46f, 2.50f, lin);
-        Block(liner, 1.41f, 2.19f, 0.04f, 0.10f, 2.40f, 2.50f, lin);                          // the nook's sill, flush with the hearth
-        PrismX(liner, 1.41f, 2.19f, new[] { new Vector2(2.50f, 0.04f), new Vector2(2.50f, 0.10f), new Vector2(3.24f, 0.64f), new Vector2(3.24f, 0.04f) }, lin);
-        // the posting slot's sill: 35 degrees down and in across the 0.24 m passage, so nothing rests on it
-        PrismX(liner, 1.55f, 2.1f, new[] { new Vector2(2.26f, D + 0.80f), new Vector2(2.26f, D + 1.0f), new Vector2(2.50f, D + 0.832f), new Vector2(2.50f, D + 0.80f) }, lin);
-        OnPad("Chute Liner", liner, bare);
-
-        // ---- the Loft: deck (on the slab), parapet, the bench, the chimney pot, the chair's sign ----
+        // ---- the roof deck (on the slab) and its parapet, the chimney pot ----
         var deck = new MeshBuilder();
         Block(deck, -4.3f, 1.0f, 3.16f, D, -3.3f, 3.3f, IsleKit.Wood);
         Block(deck, 2.6f, 4.3f, 3.16f, D, -3.3f, 3.3f, IsleKit.Wood);
         Block(deck, 1.0f, 2.6f, 3.16f, D, -3.3f, 2.3f, IsleKit.Wood);
         Block(deck, 4.3f, 4.52f, 3.16f, D, 0.7f, 1.9f, IsleKit.Wood);                         // across the parapet's gap to the stair
-        OnPad("Loft Deck", deck, snowy);
+        OnPad("Roof Deck", deck, snowy);
 
         var parapet = new MeshBuilder();
         const float top = D + 1.1f;
@@ -504,21 +378,7 @@ public sealed class StockingSortPuzzle : PuzzleDef
         Block(parapet, 4.3f, 4.5f, 3.16f, top, -3.3f, 0.7f, wall);                            // east, with the stair's gap z 0.7..1.9
         Block(parapet, 4.3f, 4.5f, 3.16f, top, 1.9f, 3.3f, wall);
         Kit.AddDisc(parapet, new Vector3(1.8f, D + 2.55f, 2.9f), 0.2f, 0.45f, Brick * 0.8f);   // the chimney pot
-        Block(parapet, 0.11f, 0.19f, D, D + 1.2f, -2.44f, -2.36f, IsleKit.DarkWood);          // the chair's sign post
-        OnPad("Loft Parapet", parapet, snowy);
-
-        // the bench: top at Deck + 0.85, a 0.08 lip on the parapet side, 0.05 on the open side and at the ends
-        var bench = new MeshBuilder();
-        const float seat = D + 0.85f;
-        Block(bench, -4.1f, -3.3f, seat - 0.08f, seat, -2.1f, 2.1f, IsleKit.Wood);
-        Block(bench, -4.1f, -4.06f, seat, seat + 0.08f, -2.1f, 2.1f, IsleKit.DarkWood);
-        Block(bench, -3.34f, -3.3f, seat, seat + 0.05f, -2.1f, 2.1f, IsleKit.DarkWood);
-        Block(bench, -4.06f, -3.34f, seat, seat + 0.05f, -2.1f, -2.06f, IsleKit.DarkWood);
-        Block(bench, -4.06f, -3.34f, seat, seat + 0.05f, 2.06f, 2.1f, IsleKit.DarkWood);
-        foreach (float lx in new[] { -4.0f, -3.4f })
-            foreach (float lz in new[] { -2.0f, 0f, 2.0f })
-                Block(bench, lx - 0.04f, lx + 0.04f, D, seat - 0.08f, lz - 0.04f, lz + 0.04f, IsleKit.DarkWood);
-        OnPad("Present Bench", bench, snowy);
+        OnPad("Roof Parapet", parapet, snowy);
 
         // ---- the outside stair on the east side: 12 steps and a landing at Deck, rising north from z -5.6 (25 degrees);
         //      its collider is a ramp through the treads' middles, so no step needs climbing ----
@@ -539,119 +399,31 @@ public sealed class StockingSortPuzzle : PuzzleDef
         PrismX(walls, 4.52f, 4.6f, new[] { new Vector2(z0, 0f), new Vector2(z0, 1.0f), new Vector2(zLand, D + 1.0f), new Vector2(zLand, 0f) }, IsleKit.Stone);
         Block(walls, 4.52f, 5.8f, 0f, D + 1.0f, 1.9f, 2.05f, IsleKit.Stone);                 // the landing's north rail
         OnPad("Stair Walls", walls, snowy);
-
-        // ---- plaques: the Parlour's tree, the "board full" stockings by every lamp, the chair's letters sign ----
-        var plaques = new MeshBuilder();
-        Plaque(plaques, new Vector3(-4.25f, 2.35f, 0f), 90f, Tree, 0.28f);
-        Plaque(plaques, new Vector3(-3.3f, 1.78f, 3.25f), 180f, Sock, 0.16f);
-        Plaque(plaques, new Vector3(2.6f, D + 1.78f, 2.95f), 90f, Sock, 0.16f);
-        Plaque(plaques, new Vector3(0.19f, D + 1.05f, -2.4f), 90f, Letter, 0.22f);
-        Plaque(plaques, new Vector3(0.11f, D + 1.05f, -2.4f), -90f, Letter, 0.22f);
-        OnPad("Cottage Plaques", plaques, bare, false);
     }
 
-    // ================================================================ the stockings and their plaques (per lobby)
+    // ================================================================ the mantel: stockings, emblems, the count board
 
-    void BuildStockings(Material bare, Piece lobby23, Piece lobby4)
+    // Painted reliefs with no collider: a stocking under each of the Peg Board's slots with its emblem on the cuff and
+    // on a plaque above, and the count board's face on the overmantel (a stocking, room for the five lamps, a tick)
+    void BuildMantel(Material bare)
     {
-        void Set(string tag, int[] order, float firstX, Piece group)
+        var mb = new MeshBuilder();
+        for (int i = 0; i < Stockings.Length; i++)
         {
-            var mb = new MeshBuilder();
-            for (int i = 0; i < order.Length; i++)
-            {
-                float x = firstX + SlotPitch * i;
-                Color sock = i % 2 == 0 ? IsleKit.Red : IsleKit.Green;
-                Block(mb, x - 0.15f, x + 0.15f, 0.4f, 0.95f, 2.33f, 2.39f, sock);                 // leg
-                Block(mb, x - 0.15f, x + 0.2f, 0.4f, 0.56f, 2.33f, 2.385f, sock);                 // foot
-                Block(mb, x - 0.17f, x + 0.17f, 0.95f, 1.06f, 2.32f, 2.395f, IsleKit.Cream);      // cuff, below a hung tile (1.076)
-                Emblem(mb, Wall(new Vector3(x, 1.005f, 2.32f), 180f), order[i], 0.09f, 0f, IsleKit.Cream);
-                Plaque(mb, new Vector3(x, 1.78f, 2.4f), 180f, order[i], 0.28f);
-            }
-            OnPad("Stockings " + tag, mb, bare, false).Under(group);
+            float x = FirstSlotX + SlotPitch * i;
+            Color sock = i % 2 == 0 ? IsleKit.Red : IsleKit.Green;
+            Block(mb, x - 0.15f, x + 0.15f, 0.4f, 0.95f, 2.33f, 2.39f, sock);                 // leg
+            Block(mb, x - 0.15f, x + 0.2f, 0.4f, 0.56f, 2.33f, 2.385f, sock);                 // foot
+            Block(mb, x - 0.17f, x + 0.17f, 0.95f, 1.06f, 2.32f, 2.395f, IsleKit.Cream);      // cuff, below a hung tile (1.076)
+            Emblem(mb, Wall(new Vector3(x, 1.005f, 2.32f), 180f), Stockings[i], 0.09f, 0f, IsleKit.Cream);
+            Plaque(mb, new Vector3(x, 1.78f, 2.4f), 180f, Stockings[i], 0.28f);
         }
-        Set("5", Order5, -0.9f, lobby23);
-        Set("6", Order6, -1.125f, lobby4);
-
-        // the Parlour's holly Display is only in 2- and 3-player lobbies
-        var holly = new MeshBuilder();
-        Plaque(holly, new Vector3(-4.25f, 2.35f, 0.6f), 90f, Holly, 0.28f);
-        OnPad("Parlour Holly Plaque", holly, bare, false).Under(lobby23);
-    }
-
-    // ================================================================ the Letter Office (sealed) and the Ledger Booth (open)
-
-    // One booth's walls, x outer 'xa'..'xb' (xa the doorway's side), z 6.2..9.8: a doorway z 6.68..7.92 in the wall
-    // nearer the cottage, a screen wall from the south wall to z 8.4 that hides the Displays from the doorway
-    static void BoothWalls(MeshBuilder mb, bool west, Color wall)
-    {
-        const float y0 = -0.1f, H = OfficeHigh;
-        float s = west ? -1f : 1f;
-        float outer = 23.8f * s, inner = 23.55f * s, door = 20.2f * s, doorIn = 20.45f * s, scr0 = 21.6f * s, scr1 = 21.75f * s;
-        void B(float xa, float xb, float ya, float yb, float za, float zb, Color c) => Block(mb, Mathf.Min(xa, xb), Mathf.Max(xa, xb), ya, yb, za, zb, c);
-        B(outer, door, y0, H, 6.2f, 6.45f, wall);                        // south
-        B(outer, door, y0, H, 9.55f, 9.8f, wall);                        // north
-        B(outer, inner, y0, H, 6.45f, 9.55f, wall);                      // back wall (the Displays' wall)
-        B(door, doorIn, y0, H, 6.45f, 6.68f, wall);                      // the doorway's wall, doorway z 6.68..7.92
-        B(door, doorIn, y0, H, 7.92f, 9.55f, wall);
-        B(door, doorIn, 2.04f, H, 6.68f, 7.92f, wall);
-        B(scr0, scr1, y0, H, 6.45f, 8.4f, wall);                         // the screen: a 1.15 m corridor turns round its north end
-        B(outer + 0.15f * s, door - 0.15f * s, H, H + 0.15f, 6.05f, 9.95f, IsleKit.DarkWood);      // the flat roof, 0.15 m over every wall
-    }
-
-    // A booth's pitched decor roof, its floorboards and its sign
-    static void BoothDressing(MeshBuilder roof, MeshBuilder floor, MeshBuilder sign, bool west, int emblem)
-    {
-        const float H = OfficeHigh;
-        float s = west ? -1f : 1f;
-        PrismX(roof, west ? -24.0f : 20.0f, west ? -20.0f : 24.0f, new[] { new Vector2(5.95f, H + 0.15f), new Vector2(8.0f, H + 1.0f), new Vector2(10.05f, H + 0.15f) }, IsleKit.DarkWood);
-        Block(floor, west ? -23.55f : 20.45f, west ? -20.45f : 23.55f, 0.01f, 0.04f, 6.45f, 9.55f, IsleKit.Wood);
-        // the sign beside the doorway, on the wall facing the cottage
-        Frame fr = Wall(new Vector3(20.2f * s, 1.95f, 8.75f), west ? 90f : -90f);
-        RectOn(sign, fr, -0.42f, 0.42f, -0.3f, 0.3f, 0f, 0.02f, IsleKit.Gold);
-        RectOn(sign, fr, -0.38f, 0.38f, -0.26f, 0.26f, 0.02f, 0.03f, IsleKit.Board);
-        Emblem(sign, fr, emblem, 0.62f, 0.03f, IsleKit.Board);
-    }
-
-    void BuildLetterOffice(Material snowy, Material bare)
-    {
-        var shell = new MeshBuilder();
-        Block(shell, -23.55f, -20.45f, -0.12f, 0.01f, 6.45f, 9.55f, IsleKit.DarkWood);       // floor (closes the path under the walls)
-        BoothWalls(shell, true, IsleKit.Red);
-        Piece lettersShell = b.Empty("Letters Shell", -22f, 8f, Floor, false);
-        Sdk.Set(b.AddScript(lettersShell, "PuzzleSoundProof"), "material", 0);                // Wood
-        OnPad("Letters Walls", shell, snowy).Under(lettersShell);
-
-        var roof = new MeshBuilder();
-        var floor = new MeshBuilder();
-        var sign = new MeshBuilder();
-        BoothDressing(roof, floor, sign, true, Letter);
-        OnPad("Letters Roof", roof, snowy);
-        OnPad("Letters Floor", floor, bare);
-        var plaques = new MeshBuilder();
-        Plaque(plaques, new Vector3(-23.55f, 2.4f, 6.85f), 90f, Star, 0.28f);
-        Plaque(plaques, new Vector3(-23.55f, 2.4f, 7.45f), 90f, Bell, 0.28f);
-        Plaque(plaques, new Vector3(-23.55f, 2.4f, 8.05f), 90f, Moon, 0.28f);
-        Plaque(plaques, new Vector3(-23.55f, 1.78f, 9.1f), 90f, Sock, 0.16f);                 // by the Letters button's lamp
-        OnPad("Letters Plaques", plaques, bare, false);
-        OnPad("Letters Sign", sign, bare, false);
-    }
-
-    void BuildLedgerBooth(Material snowy, Material bare, Piece lobby4)
-    {
-        var walls = new MeshBuilder();
-        BoothWalls(walls, false, IsleKit.Green);
-        var roof = new MeshBuilder();
-        var floor = new MeshBuilder();
-        var sign = new MeshBuilder();
-        BoothDressing(roof, floor, sign, false, Candle);
-        OnPad("Ledger Walls", walls, snowy).Under(lobby4);
-        OnPad("Ledger Roof", roof, snowy).Under(lobby4);
-        OnPad("Ledger Floor", floor, bare).Under(lobby4);
-        var plaques = new MeshBuilder();
-        Plaque(plaques, new Vector3(23.55f, 2.4f, 7.75f), -90f, Holly, 0.28f);
-        Plaque(plaques, new Vector3(23.55f, 2.4f, 7.15f), -90f, Candle, 0.28f);
-        OnPad("Ledger Plaques", plaques, bare, false).Under(lobby4);
-        OnPad("Ledger Sign", sign, bare, false).Under(lobby4);
+        Frame count = Wall(new Vector3(0f, CountHigh, CountFace), 180f);
+        RectOn(mb, count, -1.08f, 1.08f, -0.26f, 0.26f, 0f, 0.012f, IsleKit.Gold);
+        RectOn(mb, count, -1.04f, 1.04f, -0.22f, 0.22f, 0.012f, 0.02f, IsleKit.Board);
+        Emblem(mb, Wall(new Vector3(-0.86f, CountHigh, CountFace), 180f), Sock, 0.24f, 0.02f, IsleKit.Board);
+        Emblem(mb, Wall(new Vector3(0.86f, CountHigh, CountFace), 180f), Tick, 0.24f, 0.02f, IsleKit.Board);
+        OnPad("Mantel Paint", mb, bare, false);
     }
 
     // ================================================================ the yard
@@ -677,8 +449,8 @@ public sealed class StockingSortPuzzle : PuzzleDef
         }
         b.MeshPiece("Yard Presents", gifts.ToMesh(), bare, false).Transform.position = b.WorldPoint(-7f, -2f, Floor, false);
 
-        // Christmas lights: the cottage's eaves, the parapet, the stair, a string on posts to the Letter Office, a
-        // ring round the yard (no posts where the wire lies on a building)
+        // Christmas lights: the cottage's eaves, the parapet, the stair (no posts: the wire lies on the building), and a
+        // ring on posts round the yard
         float F = Floor;
         Kit.LightString(b, "Eaves Lights", new List<Vector3> { new Vector3(-4.5f, F + 2.95f, -3.56f), new Vector3(0f, F + 2.95f, -3.56f), new Vector3(4.5f, F + 2.95f, -3.56f) },
             0.2f, 0.5f, false, false, 1311);
@@ -693,9 +465,6 @@ public sealed class StockingSortPuzzle : PuzzleDef
         Kit.LightString(b, "Stair Lights", new List<Vector3>
             { new Vector3(5.95f, F + 1.05f, -5.6f), new Vector3(5.95f, F + Deck + 1.05f, 0.7f), new Vector3(5.95f, F + Deck + 1.05f, 2.05f) },
             0.1f, 0.5f, false, false, 1314);
-        Kit.LightString(b, "Letters Path Lights", new List<Vector3>
-            { new Vector3(-5.0f, F + 2.3f, 2.5f), new Vector3(-10f, F + 2.3f, 5.0f), new Vector3(-15f, F + 2.3f, 6.0f), new Vector3(-19.6f, F + 2.3f, 6.0f) },
-            0.4f, 0.5f, false, true, 1315);
         Kit.LightRing(b, "Site Lights", 0f, 0f, 50f, 22f, F + 2.6f, false, 133);
     }
 

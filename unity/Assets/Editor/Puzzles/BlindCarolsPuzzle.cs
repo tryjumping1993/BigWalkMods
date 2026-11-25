@@ -1,14 +1,20 @@
-// Blind Carols (puzzle 9, blind mask): the Carol Chapel. An unseen choir sings four carols (five in a 4-player
-// lobby), dealt again from nine tunes on every start, and they can only be heard through the headphones of the pews
-// (Listening Chairs): each pew's microphone hangs beside its carol's speaker 120 to 420 m under the yard, and nothing
-// else in the game blocks music, so distance is the seal. The Listener sits in a pew and hums what they hear (the
-// pew yard is a radio dead zone, and a seated player hears nothing else). The Guide stands at the vestry's
-// soundproof window: they hear the humming by ear, see the room through the glass, hear the speaking tile the Hanger
-// holds up on the window niche, and steer the Hanger by intercom. The Hanger is inside the sealed vestry,
-// blindfolded (BlindWatch puts anyone in there without a blindfold out in the porch): they carry tiles from the bin
-// to the niche and hang the matches in the slots under each carol's colour. The blind turnstile opens only while
-// someone sits in the pews, and passing either vestry gate stops the puzzle, so the Hanger never hears the carols
-// first-hand. A 10-minute clock stops it too. Spec: puzzle-specs\BlindCarols.md (revision 2).
+// Blind Carols (puzzle 9, blind mask): the Carol Chapel, a blindfold-and-listening game in the open, with no clock.
+//
+// Four bell cotes stand round the chapel yard, 10 m and more apart, each with a painted bell, bands of its colour (red,
+// green, gold, blue) and a speaker on its face. On every start each speaker is dealt a different one of the game's nine
+// sound-peg tunes and plays it out loud, so whoever stands at a cote hears that cote's carol above the others. In the
+// vestry at the yard's north end a bin holds nine speaking tiles, one of each tune, and a peg board has four slots under
+// the cotes' colours. The vestry is for the blindfolded only: its turnstile lets in only a player wearing the blindfold,
+// and BlindWatch puts anyone in there without one out in the porch. Its south wall has an open hatch with a shelf behind
+// it (big enough to hold a tile up in, too small to climb through) and four narrow slits to see in by.
+//
+// The blind player carries a tile from the bin to the hatch. The sighted players walk between the cotes and the hatch,
+// compare the tile by ear with the carols, say which colour it is (or "take it back") and talk the blind player's hands
+// to that colour's slot. Everybody talks freely: nothing is soundproof. Four right tiles and a poke of the validator's
+// button win the gourd; a wrong board only shows the cross. Two can finish it (one blind, one listening); with three or
+// four, listeners can wait at the cotes and hum across the yard.
+// (Before the user's rules of 2026-11-24 this was a three-role relay on a 10-minute clock: carols heard only in pews'
+// headphones from speakers buried under the yard, a guide with an intercom at a soundproof window, a sealed vestry.)
 //
 // Coordinates: X east, Z north, h above the levelled pad (every part is placed on one plane, the ground at the
 // centre). Walls are 0.24 thick and centred on the room's lines (Z 6 and 11, X -1.5, 5.5 and 9.5).
@@ -23,7 +29,11 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
 
     const float T = 0.12f;           // half a wall's thickness
     const float WallH = 2.8f;
-    const float ClockSeconds = 600f;
+    // The hatch in the vestry's south wall, 1.0 x 0.6 m: a tile (0.45 m) can be held up in it, a player cannot get through
+    const float HatchX0 = 1.5f, HatchX1 = 2.5f, HatchSill = 0.8f, HatchTop = 1.4f;
+    // The slits beside it, 0.26 m wide: narrower than a tile's thin side (0.34 m); the room is seen through them from
+    // any eye height
+    const float SlitHalf = 0.13f, SlitSill = 0.4f, SlitTop = 2.1f;
 
     PuzzleBuilder b;
     float baseH;                     // the pad's level above the root's
@@ -41,71 +51,33 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
     static void Blk(MeshBuilder mb, float x0, float x1, float z0, float z1, float h0, float h1, Color c)
         => Kit.AddBox(mb, new Vector3((x0 + x1) * 0.5f, h0, (z0 + z1) * 0.5f), new Vector3(x1 - x0, h1 - h0, z1 - z0), c);
 
-    // A bell cote (a sealed little tower, decoration only) at (x, z) on a plinth 0.4 high; its painted bell and colour
-    // band go on the face towards the pews (north, or east for the west belfry)
-    static void Cote(MeshBuilder body, MeshBuilder paint, float x, float z, Color band, bool faceEast)
+    // A bell cote at (x, z), its face turned to 'yaw' (0 north, 90 east, -90 west): a little cream tower on a stone
+    // plinth with a listening step in front of it, bands of its colour all round, a painted gold bell on the face and
+    // under the bell the carol's speaker (a Sound Peg Answer: it plays out loud while the puzzle runs). A warm lamp
+    // lights the face by night (Winter Walk's RoomLights), so the colour can be read. Each cote is a mesh of its own,
+    // so that it takes its own lamp. Returns the speaker's answer component.
+    Component Cote(string colour, Color band, float x, float z, float yaw, int lamp, Material snowy, Material bare)
     {
-        Blk(body, x - 0.5f, x + 0.5f, z - 0.5f, z + 0.5f, 0.4f, 2.6f, IsleKit.Cream);
-        Blk(body, x - 0.6f, x + 0.6f, z - 0.6f, z + 0.6f, 2.6f, 2.75f, IsleKit.DarkWood);
-        if (faceEast)
+        // a point 'across' to the face's right and 'ahead' of the cote's middle, h above the pad
+        Vector3 At(float across, float h, float ahead)
         {
-            Blk(paint, x + 0.5f, x + 0.53f, z - 0.4f, z + 0.4f, 1.95f, 2.12f, band);
-            Blk(paint, x + 0.5f, x + 0.53f, z - 0.32f, z + 0.32f, 1.05f, 1.15f, band);
-            Kit.AddBall(paint, new Vector3(x + 0.5f, 1.55f, z), 0.2f, IsleKit.Gold);
+            Vector2 o = IsleKit.Turn(across, ahead, yaw);
+            return new Vector3(x + o.x, h, z + o.y);
         }
-        else
-        {
-            Blk(paint, x - 0.4f, x + 0.4f, z + 0.5f, z + 0.53f, 1.95f, 2.12f, band);
-            Blk(paint, x - 0.32f, x + 0.32f, z + 0.5f, z + 0.53f, 1.05f, 1.15f, band);
-            Kit.AddBall(paint, new Vector3(x, 1.55f, z + 0.5f), 0.2f, IsleKit.Gold);
-        }
-    }
-
-    // A carol: its speaker deep under the yard and a directional mic 0.5 m north of it, facing it
-    (Piece speaker, Piece mic) Carol(string colour, float x, float z, float depth)
-    {
-        Piece speaker = P("Peg Sound Mounted", x, z, depth, 0f).Named("Carol " + colour);
-        Piece mic = P("Directional Mic", x, z + 0.5f, depth, 180f).Named("Mic " + colour);
-        return (speaker, mic);
-    }
-
-    Piece Pew(string colour, float x, float z, float yaw, Piece mic)
-    {
-        Piece chair = P("Listening Chair", x, z, 0f, yaw).Named("Pew " + colour);
-        Sdk.Set(chair.Component("PuzzleListeningChair"), "microphone", mic.Component("PuzzleDirectionalMic"));
-        return chair;
-    }
-
-    Piece DeadZone(string name, float x, float z, Vector3 size)
-    {
-        Piece dead = P("Radio Dead Zone", x, z, size.y / 2f, 0f).Named(name);
-        BoxCollider box = dead.Go.GetComponent<BoxCollider>();
-        if (box == null) box = dead.Go.AddComponent<BoxCollider>();
-        box.size = size;
-        box.center = Vector3.zero;
-        return dead;
-    }
-
-    // The peg board on the vestry's north wall (pivot at its west end: slots run 0.45 m apart towards +X), its validator,
-    // and a colour bar over each slot
-    void Board(string tag, float pivotX, int sizeIndex, Component[] answers, Color[] colours, Piece group)
-    {
-        Piece validator = P("Validator", 3.5f, 10.86f, 1.65f, 180f).Named("Validator " + tag).Under(group);
-        Piece board = P("Peg Board", pivotX, 10.86f, 1.3f, 180f).Named("Carol Board " + tag).Under(group);
-        Component boardC = board.Component("PuzzlePegBoard");
-        Sdk.Set(boardC, "size", sizeIndex);
-        Sdk.Add(boardC, "answerFrom", answers);
-        var flaps = new int[answers.Length];
-        for (int i = 0; i < flaps.Length; i++) flaps[i] = 1;
-        Sdk.AddInts(boardC, "answerFromFlap", flaps);
-        Sdk.Set(boardC, "validator", validator.Component("PuzzleValidator"));
-        var marks = new MeshBuilder();
-        for (int i = 0; i < colours.Length; i++)
-        {
-            float x = pivotX + 0.45f * i;
-            Blk(marks, x - 0.15f, x + 0.15f, 10.85f, 10.88f, 1.56f, 1.68f, colours[i]);
-        }
-        MeshAt("Slot Marks " + tag, marks, IsleKit.Bare(b), false).Under(group);
+        var body = new MeshBuilder();
+        Kit.AddBox(body, At(0f, -0.6f, 0f), new Vector3(1.6f, 1.0f, 1.6f), IsleKit.Stone, yaw);          // plinth, top at 0.4
+        Kit.AddBox(body, At(0f, -0.3f, 1.5f), new Vector3(2.0f, 0.45f, 1.4f), IsleKit.Stone, yaw);        // listening step, top at 0.15
+        Kit.AddBox(body, At(0f, 0.4f, 0f), new Vector3(1.0f, 2.2f, 1.0f), IsleKit.Cream, yaw);
+        Kit.AddBox(body, At(0f, 2.6f, 0f), new Vector3(1.2f, 0.15f, 1.2f), IsleKit.DarkWood, yaw);
+        MeshAt("Cote " + colour, body, snowy);
+        var paint = new MeshBuilder();
+        Kit.AddBox(paint, At(0f, 2.28f, 0f), new Vector3(1.06f, 0.17f, 1.06f), band, yaw);
+        Kit.AddBox(paint, At(0f, 0.7f, 0f), new Vector3(1.06f, 0.1f, 1.06f), band, yaw);
+        Kit.AddBall(paint, At(0f, 1.9f, 0.5f), 0.2f, IsleKit.Gold);
+        MeshAt("Cote " + colour + " Paint", paint, bare, false);
+        Vector3 face = At(0f, 1.3f, 0.5f), lampAt = At(0f, 2.4f, 1.0f);
+        E("Room Light Night " + lamp + " FFE2B8 4.0 1.2", lampAt.x, lampAt.z, lampAt.y);
+        return P("Peg Sound Mounted", face.x, face.z, face.y, yaw).Named("Carol " + colour).Component("PuzzleSoundPegAnswer");
     }
 
     public override void Build(PuzzleBuilder builder)
@@ -119,16 +91,27 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
         IsleKit.CalmAir(b, "Blind Carols", 0f, 0f, new Vector3(40f, 130f, 36f), 0f, baseH - 10f, false);
 
         // ================= the vestry and its porch (room X -1.5..5.5, porch 5.5..9.5, Z 6..11) =================
-        Piece vestry = E("Vestry", 2f, 8.5f, 0f);
-        Sdk.Set(b.AddScript(vestry, "PuzzleSoundProof"), "material", 0);      // Wood
         var walls = new MeshBuilder();
         float xw = -1.5f - T, xe = 9.5f + T;
         Blk(walls, xw, xe, 6f - T, 11f + T, -0.6f, 0f, IsleKit.Stone);                     // footing
-        // south wall, the window opening X 0.8..3.2, h 0.9..2.3
-        Blk(walls, xw, 0.8f, 6f - T, 6f + T, 0f, WallH, IsleKit.Wood);
-        Blk(walls, 3.2f, xe, 6f - T, 6f + T, 0f, WallH, IsleKit.Wood);
-        Blk(walls, 0.8f, 3.2f, 6f - T, 6f + T, 0f, 0.9f, IsleKit.Wood);
-        Blk(walls, 0.8f, 3.2f, 6f - T, 6f + T, 2.3f, WallH, IsleKit.Wood);
+        // south wall: solid but for the hatch and two slits each side of it, a sill under and a lintel over each
+        float built = xw;
+        void Opening(float x0, float x1, float sill, float top)
+        {
+            Blk(walls, built, x0, 6f - T, 6f + T, 0f, WallH, IsleKit.Wood);
+            Blk(walls, x0, x1, 6f - T, 6f + T, 0f, sill, IsleKit.Wood);
+            Blk(walls, x0, x1, 6f - T, 6f + T, top, WallH, IsleKit.Wood);
+            built = x1;
+        }
+        foreach (float slit in new[] { -0.3f, 0.7f }) Opening(slit - SlitHalf, slit + SlitHalf, SlitSill, SlitTop);
+        Opening(HatchX0, HatchX1, HatchSill, HatchTop);
+        foreach (float slit in new[] { 3.3f, 4.3f }) Opening(slit - SlitHalf, slit + SlitHalf, SlitSill, SlitTop);
+        Blk(walls, built, xe, 6f - T, 6f + T, 0f, WallH, IsleKit.Wood);
+        // the hatch's frame on the outer face, and a sill board
+        Blk(walls, HatchX0 - 0.08f, HatchX0, 5.84f, 6f - T, HatchSill, HatchTop, IsleKit.DarkWood);
+        Blk(walls, HatchX1, HatchX1 + 0.08f, 5.84f, 6f - T, HatchSill, HatchTop, IsleKit.DarkWood);
+        Blk(walls, HatchX0 - 0.08f, HatchX1 + 0.08f, 5.84f, 6f - T, HatchTop, HatchTop + 0.08f, IsleKit.DarkWood);
+        Blk(walls, HatchX0 - 0.08f, HatchX1 + 0.08f, 5.78f, 6f - T, HatchSill - 0.06f, HatchSill, IsleKit.DarkWood);
         // north and west walls
         Blk(walls, xw, xe, 11f - T, 11f + T, 0f, WallH, IsleKit.Wood);
         Blk(walls, xw, -1.5f + T, 6f + T, 11f - T, 0f, WallH, IsleKit.Wood);
@@ -143,13 +126,14 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
         Blk(walls, 7.6f - T, 7.6f + T, 6.7f, 10.3f, 0f, WallH, IsleKit.Wood);
         // the roof over both
         Blk(walls, -1.7f, 9.7f, 5.7f, 11.3f, WallH, WallH + 0.24f, IsleKit.Red);
-        MeshAt("Vestry Walls", walls, snowy).Under(vestry);
+        MeshAt("Vestry Walls", walls, snowy);
 
-        // inside (never snowy): the floor, the window niche with its lip, the tile bin in the NW corner
+        // inside (never snowy): the floor, the shelf behind the hatch at its sill's height with a lip on the room's
+        // side (a tile set down there plays in the hatch), the tile bin in the NW corner
         var fit = new MeshBuilder();
         Blk(fit, -1.5f + T, 9.5f - T, 6f + T, 11f - T, 0f, 0.04f, IsleKit.Wood);
-        Blk(fit, 1.0f, 3.0f, 6f + T, 6.45f, 0f, 0.9f, IsleKit.DarkWood);
-        Blk(fit, 1.0f, 3.0f, 6.42f, 6.45f, 0.9f, 0.93f, IsleKit.DarkWood);
+        Blk(fit, HatchX0 - 0.2f, HatchX1 + 0.2f, 6f + T, 6.62f, 0f, HatchSill, IsleKit.DarkWood);
+        Blk(fit, HatchX0 - 0.2f, HatchX1 + 0.2f, 6.59f, 6.62f, HatchSill, HatchSill + 0.03f, IsleKit.DarkWood);
         const float binX0 = -1.32f, binX1 = 0.45f, binZ0 = 9.4f, binZ1 = 10.84f, binSide = 0.06f;
         Blk(fit, binX0, binX1, binZ0, binZ1, 0f, 0.6f, IsleKit.Wood);
         Blk(fit, binX0, binX1, binZ0, binZ0 + binSide, 0.6f, 0.95f, IsleKit.Wood);
@@ -157,17 +141,6 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
         Blk(fit, binX0, binX0 + binSide, binZ0 + binSide, binZ1 - binSide, 0.6f, 0.95f, IsleKit.Wood);
         Blk(fit, binX1 - binSide, binX1, binZ0 + binSide, binZ1 - binSide, 0.6f, 0.95f, IsleKit.Wood);
         MeshAt("Vestry Fittings", fit, bare);
-
-        // the window: wired soundproof glass, filling the opening exactly. The Glass prefab is Unity's 10 m Plane stood
-        // upright by a 90 degree X turn; Part keeps only the yaw (the pane would lie flat, an 11.5 x 10 m slab through
-        // the room), so put the turn back and size the plane directly: 2.4 m wide (local X), 1.4 m tall (local Z).
-        // Yaw 180 turns the one-sided plane's face towards the Guide.
-        Piece window = b.Part("Glass", 2f, 6f, baseH + 1.6f, 180f, false).Named("Vestry Window")
-            .Set("PuzzleGlass", "style", 0).Set("PuzzleGlass", "sound", 2).Set("PuzzleGlass", "wire", true);
-        window.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, 180f, 0f) * Quaternion.Euler(90f, 0f, 0f);
-        window.Transform.localScale = new Vector3(2.4f / 10f, 0.18683f, 1.4f / 10f);
-        BoxCollider pane = window.Go.GetComponent<BoxCollider>();
-        if (pane != null) pane.size = new Vector3(10f, 0.04f / 0.18683f, 10f);      // 4 cm thick rather than none
 
         // nine speaking tiles jumbled in the bin: which tile plays which tune is shuffled on every build; they stand in
         // a 3 x 3 grid (cells 0.55 x 0.44 m for a 0.448 x 0.337 m tile) with a little play in place and turn (up to
@@ -184,43 +157,10 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
             P("Peg Sound", x, z, 0.85f, yaw).Named("Speaking Tile " + (i + 1)).Set("PuzzleSoundPeg", "sound", tunes[i]);
         }
 
-        // the gates: in blindfolded (one way, east to west, locked unless someone sits in the pews), out (never locked)
-        Piece blindGate = IsleKit.BlindGate(b, 9.5f, 7.1f, -90f, baseH, false).Set("PuzzleNoItemsGate", "defaultLocked", true);
+        // the gates, neither ever locked: in blindfolded (one way, east to west), out (one way, west to east)
+        Piece blindGate = IsleKit.BlindGate(b, 9.5f, 7.1f, -90f, baseH, false).Set("PuzzleNoItemsGate", "defaultLocked", false);
         Piece wayOut = P("Gate No items", 9.5f, 9.9f, 0f, 90f).Named("Way Out")
             .Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-        Component sdk = b.Puzzle;
-        foreach (Piece gate in new[] { blindGate, wayOut })
-        {
-            gate.On("PuzzleNoItemsGate", "onEnter", sdk, "StopPuzzle");
-            gate.On("PuzzleNoItemsGate", "onExit", sdk, "StopPuzzle");
-        }
-        Component blindGateC = blindGate.Component("PuzzleNoItemsGate");
-
-        // the inner start switch (moves with the outside one) and live lamps, in the Guide's view
-        P("Switch Start", 5.5f - T - 0.073f, 9.7f, 1.25f, -90f).Named("Inner Start Switch");
-        P("Live Light", 5.5f - T - 0.005f, 9.7f, 1.6f, -90f).Named("Inner Live Light");
-        P("Live Light", 0.6f, 11f - T - 0.01f, 2.3f, 180f).Named("Vestry Live Light");
-
-        // intercoms: the Guide's mic outside plays in the room and the porch; the Hanger's mic plays at the window
-        Piece windowSpeaker = P("Intercom Speaker", 0.25f, 6f - T - 0.1f, 2.2f, 180f).Named("Window Speaker");
-        Piece vestrySpeaker = P("Intercom Speaker", 2.0f, 11f - T - 0.1f, 2.35f, 180f).Named("Vestry Speaker");
-        Piece porchSpeaker = P("Intercom Speaker", 7.6f + T + 0.1f, 7.6f, 2.2f, 90f).Named("Porch Speaker");
-        Piece guideMic = P("Intercom Mic", 3.75f, 6f - T - 0.02f, 1.35f, 180f).Named("Guide Mic");
-        Piece vestryMic = P("Intercom Mic", 4.4f, 11f - T - 0.02f, 1.3f, 180f).Named("Vestry Mic");
-        guideMic.Add("PuzzleIntercom", "speakers", vestrySpeaker.Component("PuzzleIntercomSpeaker"), porchSpeaker.Component("PuzzleIntercomSpeaker"));
-        vestryMic.Add("PuzzleIntercom", "speakers", windowSpeaker.Component("PuzzleIntercomSpeaker"));
-
-        // the clocks: one in the room (seen through the window), one over the belfry facing the pews
-        Piece vestryClock = P("Timer", -0.4f, 11f - T - 0.12f, 2.0f, 180f).Named("Vestry Clock").Set("PuzzleTimer", "duration", ClockSeconds);
-        Piece belfryClock = P("Timer", 2f, -9.5f + 0.12f, 3.0f, 0f).Named("Belfry Clock").Set("PuzzleTimer", "duration", ClockSeconds);
-        Component vClock = vestryClock.Component("PuzzleTimer"), bClock = belfryClock.Component("PuzzleTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", vClock, "StartTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", bClock, "StartTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", vClock, "ResetTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", bClock, "ResetTimer");
-        b.RootPiece.On("PuzzleSDK", "onWin", vClock, "PauseTimer");
-        b.RootPiece.On("PuzzleSDK", "onWin", bClock, "PauseTimer");
-        vestryClock.On("PuzzleTimer", "onFinished", sdk, "StopPuzzle");
 
         // a hook by the Way Out for a blindfold the plain gate will not let through, and three on the rack outside
         Piece back = P("Hook", 8.3f, 11f - T - 0.03f, 1.55f, 180f).Named("Blindfold Return");
@@ -242,98 +182,42 @@ public sealed class BlindCarolsPuzzle : PuzzleDef
         Sdk.Set(bw, "gateSkip", 1.2f);
         Sdk.Set(bw, "cooldown", 1.5f);
 
-        // warm room lamps so the Guide can see in at night (Winter Walk's RoomLights)
+        // warm room lamps so the others can see in at night (Winter Walk's RoomLights)
         E("Room Light 1 FFC88C 6.0 0.8", 0.5f, 8.5f, 2.5f);
         E("Room Light 2 FFC88C 6.0 0.8", 4.0f, 8.5f, 2.5f);
 
-        // ================= the yard: the Guide's step, the kerb behind the pews =================
+        // ================= the yard: the step under the hatch and the slits =================
         var yard = new MeshBuilder();
-        Blk(yard, 0.5f, 3.5f, 4.25f, 5.75f, -0.3f, 0.15f, IsleKit.Stone);
-        Blk(yard, -2.6f, 6.8f, -4.4f, -4.2f, -0.2f, 0.15f, IsleKit.Stone);
+        Blk(yard, -0.8f, 4.8f, 4.25f, 5.75f, -0.3f, 0.15f, IsleKit.Stone);
         MeshAt("Chapel Yard", yard, snowy);
 
-        // ================= the south belfry: plinth, red / green / gold cotes, a crossbeam with the clock =================
-        var belfry = new MeshBuilder();
-        var paint = new MeshBuilder();
-        Blk(belfry, -2.3f, 6.3f, -9.8f, -8.2f, -0.6f, 0.4f, IsleKit.Stone);
-        Cote(belfry, paint, -1.3f, -9f, IsleKit.Red, false);
-        Cote(belfry, paint, 0.9f, -9f, IsleKit.Green, false);
-        Cote(belfry, paint, 3.1f, -9f, IsleKit.Gold, false);
-        Blk(belfry, -2.7f, -2.5f, -9.62f, -9.42f, -0.3f, 3.4f, IsleKit.Wood);       // posts
-        Blk(belfry, 6.5f, 6.7f, -9.62f, -9.42f, -0.3f, 3.4f, IsleKit.Wood);
-        Blk(belfry, -2.8f, 6.8f, -9.62f, -9.42f, 3.2f, 3.4f, IsleKit.DarkWood);      // crossbeam
-        Blk(belfry, 0.4f, 3.6f, -9.62f, -9.5f, 2.78f, 3.2f, IsleKit.Board);          // the clock's panel, over the cotes
-        Blk(belfry, 1.55f, 2.45f, -9.62f, -9.5f, 1.9f, 2.78f, IsleKit.Board);        // the lamp's, between them
-        MeshAt("South Belfry", belfry, snowy);
-        MeshAt("South Belfry Paint", paint, bare, false);
-        P("Live Light", 2f, -9.5f + 0.006f, 2.4f, 0f).Named("Belfry Live Light");
-        DeadZone("Belfry Hush South", 2f, -7.5f, new Vector3(14f, 8f, 8f));          // X -5..9, Z -11.5..-3.5
+        // ================= the four bell cotes, each playing its carol, facing the yard's middle =================
+        // their speakers are 10.1 m (red to green, gold to blue), 12 m (green to gold) and 23 m (red to blue) apart,
+        // and the nearest (blue) is 11.7 m from the hatch
+        Component red = Cote("Red", IsleKit.Red, -12f, -1f, 90f, 1, snowy, bare);
+        Component green = Cote("Green", IsleKit.Green, -6f, -10f, 0f, 2, snowy, bare);
+        Component gold = Cote("Gold", IsleKit.Gold, 6f, -10f, 0f, 3, snowy, bare);
+        Component blue = Cote("Blue", IsleKit.Ice, 12f, -1f, -90f, 4, snowy, bare);
 
-        // the three carols every lobby has, and their pews (facing the cotes)
-        var red = Carol("Red", -8f, -8f, -120f);
-        var green = Carol("Green", 8f, -8f, -180f);
-        var gold = Carol("Gold", -8f, 8f, -240f);
-        Pew("Red", -1.3f, -6f, 180f, red.mic);
-        Pew("Green", 0.9f, -6f, 180f, green.mic);
-        Pew("Gold", 3.1f, -6f, 180f, gold.mic);
-
-        // ================= 2 and 3 players: a blue pew in the south belfry, a 4-slot board =================
-        Piece lobby23 = IsleKit.Lobby(b, "Lobby 2-3", true, true, false);
-        var blue = Carol("Blue", 8f, 8f, -300f);
-        blue.speaker.Under(lobby23);
-        blue.mic.Under(lobby23);
-        Pew("Blue", 5.3f, -6f, 180f, blue.mic).Under(lobby23);
-        var blueCote = new MeshBuilder();
-        var bluePaint = new MeshBuilder();
-        Cote(blueCote, bluePaint, 5.3f, -9f, IsleKit.Ice, false);
-        MeshAt("Blue Cote", blueCote, snowy).Under(lobby23);
-        MeshAt("Blue Cote Paint", bluePaint, bare, false).Under(lobby23);
-        Board("4", 1.025f, 3,
-            new[] { red.speaker.Component("PuzzleSoundPegAnswer"), green.speaker.Component("PuzzleSoundPegAnswer"),
-                    gold.speaker.Component("PuzzleSoundPegAnswer"), blue.speaker.Component("PuzzleSoundPegAnswer") },
-            new[] { IsleKit.Red, IsleKit.Green, IsleKit.Gold, IsleKit.Ice }, lobby23);
-        // whoever sits in a pew unlocks the blind turnstile; the box covers the chairs' whole footprint (they reach
-        // from Z -6.4 to -4.8, and from 0.4 m west to 1.1 m east of each pivot)
-        Piece pewRow = IsleKit.Sensor(b, "Pew Row", 2.1f, -5.9f, new Vector3(9.4f, 2.6f, 2.8f), baseH, false).Under(lobby23);
-        pewRow.Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
-        pewRow.On("PuzzlePresenceSensor", "onPressed", blindGateC, "Unlock");
-        pewRow.On("PuzzlePresenceSensor", "onReleased", blindGateC, "Lock");
-
-        // ================= 4 players: the West Belfry with blue and cream pews, a 5-slot board =================
-        Piece lobby4 = IsleKit.Lobby(b, "Lobby 4", false, false, true);
-        var blueW = Carol("Blue W", 0f, 0f, -360f);
-        var creamW = Carol("Cream W", 0f, -10f, -420f);
-        foreach (var c in new[] { blueW, creamW }) { c.speaker.Under(lobby4); c.mic.Under(lobby4); }
-        Pew("Blue W", -9f, 5.1f, -90f, blueW.mic).Under(lobby4);
-        Pew("Cream W", -9f, 2.9f, -90f, creamW.mic).Under(lobby4);
-        var west = new MeshBuilder();
-        var westPaint = new MeshBuilder();
-        Blk(west, -12.8f, -11.2f, 1.8f, 6.2f, -0.6f, 0.4f, IsleKit.Stone);
-        Cote(west, westPaint, -12f, 5.1f, IsleKit.Ice, true);
-        Cote(west, westPaint, -12f, 2.9f, IsleKit.Cream, true);
-        Blk(west, -13.1f, -10.9f, 1.5f, 6.5f, 2.75f, 2.95f, IsleKit.Red);           // one roof over both
-        Blk(west, -7.25f, -7.05f, 1.4f, 6.6f, -0.2f, 0.15f, IsleKit.Stone);          // kerb behind the pews
-        MeshAt("West Belfry", west, snowy).Under(lobby4);
-        MeshAt("West Belfry Paint", westPaint, bare, false).Under(lobby4);
-        DeadZone("Belfry Hush West", -10.25f, 4f, new Vector3(6.5f, 8f, 7f)).Under(lobby4);      // X -13.5..-7, Z 0.5..7.5
-        Board("5", 0.8f, 4,
-            new[] { red.speaker.Component("PuzzleSoundPegAnswer"), green.speaker.Component("PuzzleSoundPegAnswer"),
-                    gold.speaker.Component("PuzzleSoundPegAnswer"), blueW.speaker.Component("PuzzleSoundPegAnswer"),
-                    creamW.speaker.Component("PuzzleSoundPegAnswer") },
-            new[] { IsleKit.Red, IsleKit.Green, IsleKit.Gold, IsleKit.Ice, IsleKit.Cream }, lobby4);
-        // one sensor, one box over each pew row, so it lets go only when both rows are empty
-        Piece pewRow4 = P("Presence Sensor", 0f, 0f, 1.3f, 0f).Named("Pew Row 4").Under(lobby4);
-        BoxCollider south = pewRow4.Go.GetComponent<BoxCollider>();
-        if (south == null) south = pewRow4.Go.AddComponent<BoxCollider>();
-        south.center = new Vector3(1.3f, 0f, -5.9f);                 // X -2.5..5.1, Z -7.3..-4.5
-        south.size = new Vector3(7.6f, 2.6f, 2.8f);
-        BoxCollider westBox = pewRow4.Go.AddComponent<BoxCollider>();
-        westBox.isTrigger = south.isTrigger;
-        westBox.center = new Vector3(-8.6f, 0f, 3.6f);               // X -9.9..-7.3, Z 1.2..6.0
-        westBox.size = new Vector3(2.6f, 2.6f, 4.8f);
-        pewRow4.Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
-        pewRow4.On("PuzzlePresenceSensor", "onPressed", blindGateC, "Unlock");
-        pewRow4.On("PuzzlePresenceSensor", "onReleased", blindGateC, "Lock");
+        // ================= the peg board on the vestry's north wall, its validator, a colour bar over each slot =================
+        // The board's pivot is at its west end and its slots run 0.45 m apart towards +X: red, green, gold, blue. Each
+        // slot's answer is that cote's speaker (answerFromFlap 1 for each: a speaker has only the one). A right check
+        // wins; nothing is wired to a wrong one, so the cross is all it costs.
+        const float pivotX = 1.025f;
+        Piece validator = P("Validator", 3.5f, 10.86f, 1.65f, 180f).Named("Validator");
+        Component boardC = P("Peg Board", pivotX, 10.86f, 1.3f, 180f).Named("Carol Board").Component("PuzzlePegBoard");
+        Sdk.Set(boardC, "size", 3);      // Slots4
+        Sdk.Add(boardC, "answerFrom", red, green, gold, blue);
+        Sdk.AddInts(boardC, "answerFromFlap", 1, 1, 1, 1);
+        Sdk.Set(boardC, "validator", validator.Component("PuzzleValidator"));
+        Color[] colours = { IsleKit.Red, IsleKit.Green, IsleKit.Gold, IsleKit.Ice };
+        var marks = new MeshBuilder();
+        for (int i = 0; i < colours.Length; i++)
+        {
+            float x = pivotX + 0.45f * i;
+            Blk(marks, x - 0.15f, x + 0.15f, 10.85f, 10.88f, 1.56f, 1.68f, colours[i]);
+        }
+        MeshAt("Slot Marks", marks, bare, false);
 
         // ================= the start corner and the lights =================
         IsleKit.StartCorner(b, -5f, 0.5f, 90f, true, baseH, false);

@@ -1,21 +1,19 @@
-// Blizzard Walk: a whiteout maze with a three-link, one-way relay (3+ players; 2 with the speaker variant).
+// Blizzard Walk: a snow maze with a crow's nest over it. No clock, and nobody is shut in or out of earshot.
 //
-// A 21 x 21 m maze of 2.6 m packed-snow walls has twelve identical dead-end alcoves, each a Presence Sensor pad. A
-// caged crow's nest stands 14 m over the maze's closed centre cell on four stilts, its floor slatted so the maze shows
-// straight down through it; the only way up is the roofed switchback stair tower north of the maze and a caged bridge
-// (one closed enclosure, its only opening the tower's ground door). Every phase one alcove is lit, but its lamp shows
-// only on a plan without walls inside a windowless signal hut 289 m away (an ExtraSite on a knoll). The Caller in the
-// hut talks into an intercom that plays only into the headphones of the nest's two Listening Chairs; the Lookout sits
-// in one and shouts directions down to the Walker. When the phase bar runs out the Walker must stand in the lit
-// alcove and nobody in any other (Press In Order, timed mode). Six right in a row win (3 players: 22 s phases; 4: eight
-// at 20 s, a second Walker helping; 2: five at 26 s, with four intercom speakers in the maze instead of the Lookout).
-// A miss empties the bars and a 6 s regroup clock restarts the run. Radio dead zones round the maze and the hut, a
-// two-way No Items turnstile at the hut and Calm Air over both keep walkie-talkies, items and jetpacks out of it.
-// Quit: a Start Switch at the archway, in the hut, in the nest and inside the maze; stopping ends every copy and
-// resets the regroup clock. No custom code. Spec: puzzle-specs/BlizzardWalk.md (revision 2).
+// A 21 x 21 m maze of 2.6 m packed-snow walls has twelve identical dead-end alcoves, each a Presence Sensor pad with
+// a lamp on a mast over its closed end, turned to face the crow's nest. The nest is caged and stands 14 m over the
+// maze's closed centre cell on four stilts, its floor slatted so the maze shows straight down through it; the way up
+// is the roofed switchback stair tower north of the maze and a caged bridge. One alcove's lamp is lit. From the nest
+// the lit alcove and the whole maze are plain to see; in the corridors a walker sees only walls, and the lamp's glow
+// once they are close. Stand in the lit alcove for a moment and it counts, its lamp goes out and another lights
+// (Seek, in PuzzleScripts). Five alcoves win. One player can do it alone, climbing to look and walking from memory;
+// a group puts a lookout in the nest to call the walkers through.
+// Quit: a Start Switch at the archway, in the nest and inside the maze.
+// (Before the user's rules of 2026-11-24 the lamps were on a plan in a windowless signal hut 289 m away, called by
+// intercom into headphones in the nest, on 22 s phases: a three-link, one-way relay.)
 //
 // Maze-local coordinates: metres from the maze centre, x east, z north, heights above the root's level (the island
-// levels the site). Hut parts use hut-local (hx, hz), the hut's +z towards the maze, its door in its south wall.
+// levels the site).
 using System.Collections.Generic;
 using System.Globalization;
 using Bwm;
@@ -27,14 +25,13 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
     public override Vector2 Footprint => new Vector2(30f, 50f);      // levelled as a circle of radius 29.2 m
     public override Vector2? FixedSite => new Vector2(-1160f, -980f);      // layout-final: a level shelf by a wood, off pistes and the rail bench
 
-    // The signal hut: an ExtraSite on a knoll 289 m south of the maze, the rise between (layout-final)
-    public static readonly Vector2 HutSite = new Vector2(-1167f, -1269f);
-    const float HutRadius = 8f;
-    public override IEnumerable<Vector3> ExtraSites => new[] { new Vector3(HutSite.x, HutSite.y, HutRadius) };
+    const int Rounds = 5;               // alcoves to find
+    const float Dwell = 1.5f;           // seconds in the lit alcove before it counts
+    const float MastTop = 3.9f;         // the alcove lamps' height: over the 2.6 m walls
+    static readonly Color Warm = new Color(1f, 0.92f, 0.75f);      // near white: a lit lamp is a bright disc, an unlit one a dull one
 
     const float WallH = 2.6f, WallT = 0.4f, Sink = 0.5f, RidgeH = 0.35f;
     const float Deck = 14f, CageTop = 16.4f;
-    const float HutFloor = 0.05f;      // the hut's floor top above the ground at its centre
 
     // Interior walls (each a 3 m cell edge, built 3.4 m long): "x=c zA..B" runs north-south on x = c, "z=c xA..B"
     // east-west on z = c. A Prim maze on a 7 x 7 grid of 3 m cells, centre cell closed, seed 2563 (spec section 5).
@@ -60,8 +57,6 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
     };
 
     PuzzleBuilder b;
-    Vector2 hut;            // the hut's centre in maze-local coordinates
-    float hutYaw, hutBase;  // its heading (its +z towards the maze) and its floor's height above the root's level
 
     // ---- geometry helpers ----
 
@@ -161,28 +156,11 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
 
     static float F(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
-    // ---- hut helpers ----
-
-    Vector2 HutLocal(float hx, float hz) => hut + IsleKit.Turn(hx, hz, hutYaw);
-
-    Piece HutPart(string prefab, float hx, float hz, float h, float yaw)
-    {
-        Vector2 p = HutLocal(hx, hz);
-        return b.Part(prefab, p.x, p.y, hutBase + h, hutYaw + yaw, false);
-    }
-
     public override void Build(PuzzleBuilder builder)
     {
         b = builder;
-        Transform root = b.Root.transform;
-        Vector3 hutInRoot = root.InverseTransformPoint(new Vector3(HutSite.x, root.position.y, HutSite.y));
-        hut = new Vector2(hutInRoot.x, hutInRoot.z);
-        hutYaw = Mathf.Atan2(-hut.x, -hut.y) * Mathf.Rad2Deg;      // the hut's +z points at the maze, so its door faces away
-        hutBase = b.WorldPoint(hut.x, hut.y, 0f, true).y - root.position.y + HutFloor;
-
         b.DebugTeleport(0f, -17f);
         b.ClearGround(30f, 50f);
-        b.ClearGround(16f, 16f, hut.x, hut.y);
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
 
         // ================= the maze =================
@@ -217,7 +195,7 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
         // pad markers (identical, unnumbered): eight red lantern stones round each alcove and a gold-capped post at its
         // closed end; painted (no snow), so they read from the nest
         var markers = new MeshBuilder();
-        var pads = new UnityEngine.Object[Pads.Length];
+        var masts = new MeshBuilder();
         for (int i = 0; i < Pads.Length; i++)
         {
             var (px, pz, ox, oz) = Pads[i];
@@ -238,9 +216,20 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
             Kit.AddBox(markers, new Vector3(post.x, 0.9f, post.y), new Vector3(0.22f, 0.14f, 0.22f), IsleKit.Gold);
             // the pad: a 2 m sensor shifted 0.3 m towards the closed end, so it never reaches the corridor
             Vector2 s = centre + closed * 0.3f;
-            pads[i] = IsleKit.Sensor(b, "Pad " + (i + 1), s.x, s.y, new Vector3(2.0f, 2.6f, 2.0f), 0f, false).Component("PuzzlePresenceSensor");
+            IsleKit.Sensor(b, "Pad " + (i + 1), s.x, s.y, new Vector3(2.0f, 2.6f, 2.0f), 0f, false);
+            // its lamp: on a mast at the closed end, 3.9 m up, turned to look at the crow's nest, so the lookout sees
+            // the lit one as a bright disc; in the maze its light falls on the alcove's walls and snow
+            Kit.AddBox(masts, new Vector3(post.x, 1.0f, post.y), new Vector3(0.12f, MastTop - 1.15f, 0.12f), IsleKit.DarkWood);
+            Kit.AddBox(masts, new Vector3(post.x, MastTop - 0.15f, post.y), new Vector3(0.3f, 0.3f, 0.3f), IsleKit.Board);
+            Piece lamp = b.Part("Light 6", post.x, post.y, MastTop, 0f, false).Named("Pad Lamp " + (i + 1))
+                .Set("PuzzleLight", "color", Warm).Set("PuzzleLight", "range", 5f);
+            Vector3 head = lamp.Transform.position;
+            Vector3 toNest = (b.WorldPoint(0f, 0f, Deck + 1.4f, false) - head).normalized;
+            lamp.Transform.rotation = Quaternion.LookRotation(toNest, Vector3.up);
+            lamp.Transform.position = head + toNest * 0.3f;
         }
         b.MeshPiece("Pad Markers", markers.ToMesh(), bare).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
+        b.MeshPiece("Pad Masts", masts.ToMesh(), snowy).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
 
         // ================= stilts, crow's nest and caged bridge =================
         var nest = new MeshBuilder();
@@ -323,110 +312,25 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
         Blk(tower, -1.5f, 1.5f, Deck - 0.25f, Deck, T0 + 0.2f, 12.4f, IsleKit.DarkWood);                    // top landing, onto the bridge
         b.MeshPiece("Stair Tower", tower.ToMesh(), snowy).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
 
-        // ================= the signal hut (hut-local: door in the south wall, the board on the north side) =================
-        var shell = new MeshBuilder();
-        Blk(shell, -2.5f, 2.5f, -0.7f, 0f, -3.0f, 3.0f, IsleKit.Stone);         // floor
-        Blk(shell, -2.5f, 0.2f, -0.7f, 0f, -3.9f, -3.0f, IsleKit.Stone);        // the step the turnstile stands on
-        Blk(shell, -2.5f, -2.31f, -0.7f, 3.3f, -3.0f, -2.8f, IsleKit.Wood);     // south wall: a doorway exactly the turnstile
-        Blk(shell, -0.19f, 2.5f, -0.7f, 3.3f, -3.0f, -2.8f, IsleKit.Wood);
-        Blk(shell, -2.31f, -0.19f, 2.30f, 3.3f, -3.0f, -2.8f, IsleKit.Wood);
-        Blk(shell, -2.5f, 2.5f, -0.7f, 3.3f, 2.8f, 3.0f, IsleKit.Wood);         // north wall
-        Blk(shell, -2.5f, -2.3f, -0.7f, 3.3f, -2.8f, 2.8f, IsleKit.Wood);       // side walls
-        Blk(shell, 2.3f, 2.5f, -0.7f, 3.3f, -2.8f, 2.8f, IsleKit.Wood);
-        Blk(shell, -2.5f, 2.5f, 3.3f, 3.5f, -3.0f, 3.0f, IsleKit.DarkWood);     // roof (ceiling at 3.3)
-        Blk(shell, -2.8f, 2.8f, 3.5f, 3.62f, -3.3f, 3.3f, IsleKit.Red);
-        Piece shellPiece = b.MeshPiece("Signal Hut", shell.ToMesh(), snowy);
-        var room = new MeshBuilder();
-        Blk(room, -2.3f, 1.0f, 0f, 3.3f, -1.05f, -0.95f, IsleKit.Cream);        // vestibule partition (the dogleg: a 1.3 m gap at the right)
-        Blk(room, -2.3f, 2.3f, 0f, 3.3f, 1.4f, 1.5f, IsleKit.Cream);            // board partition, a closed void behind it
-        Blk(room, -1.05f, 1.05f, 0.6f, 2.7f, 1.34f, 1.40f, IsleKit.Board);      // the lamp board: the maze's plan without walls
-        Blk(room, -1.05f, -1.02f, 0.6f, 2.7f, 1.33f, 1.34f, IsleKit.Cream);
-        Blk(room, 1.02f, 1.05f, 0.6f, 2.7f, 1.33f, 1.34f, IsleKit.Cream);
-        Blk(room, -1.05f, 1.05f, 2.67f, 2.7f, 1.33f, 1.34f, IsleKit.Cream);
-        Blk(room, -1.05f, -0.15f, 0.6f, 0.63f, 1.33f, 1.34f, IsleKit.Cream);    // bottom edge, with the archway's gap
-        Blk(room, 0.15f, 1.05f, 0.6f, 0.63f, 1.33f, 1.34f, IsleKit.Cream);
-        Blk(room, -0.15f, 0.15f, 1.5f, 1.8f, 1.33f, 1.34f, IsleKit.Cream);      // the nest
-        Blk(room, 0f, 0.1f, 1.8f, 2.67f, 1.33f, 1.34f, IsleKit.Cream);          // the bridge
-        Piece roomPiece = b.MeshPiece("Signal Hut Room", room.ToMesh(), bare);
-        Vector3 hutAt = b.WorldPoint(hut.x, hut.y, hutBase, false);
-        Quaternion hutTurn = root.rotation * Quaternion.Euler(0f, hutYaw, 0f);
-        shellPiece.Transform.SetPositionAndRotation(hutAt, hutTurn);
-        roomPiece.Transform.SetPositionAndRotation(hutAt, hutTurn);
-
-        // lamps: pad (x, z) lights at hut (x / 10, height 1.65 + z / 10) on the board, facing the room; range 0.6 m so
-        // no glow reaches an outside face (every lamp is 0.8 m or more inside)
-        var lamps = new UnityEngine.Object[Pads.Length];
-        Piece lampGroup = b.Empty("Board Lamps", 0f, 0f, 0f, false);
-        for (int i = 0; i < Pads.Length; i++)
-            lamps[i] = HutPart("Light 8", Pads[i].x / 10f, 1.34f, 1.65f + Pads[i].z / 10f, 180f).Named("Lamp " + (i + 1)).Under(lampGroup)
-                .Set("PuzzleLight", "color", IsleKit.Gold).Set("PuzzleLight", "range", 0.6f).Component("PuzzleLight");
-        Piece hutMic = HutPart("Intercom Mic", 1.35f, 1.38f, 1.4f, 180f).Named("Hut Mic");
-        HutPart("Switch Start", 0.4f, -0.877f, 1.25f, 0f);
-        HutPart("Live Light", 0.4f, -0.944f, 1.42f, 0f);
-        HutPart("Confetti", 0f, 0.2f, 2.9f, 0f);
-        HutPart("Gate No items", -1.2f, -2.9f, 0f, 0f).Named("Hut Turnstile")
-            .Set("PuzzleNoItemsGate", "oneWay", false).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-
-        // ================= feedback =================
-        Piece Bar(string name, float x, float z, float h, float yaw, float scale, int total, bool inHut)
-        {
-            Piece bar = inHut ? HutPart("Progress Bar", x, z, h, yaw) : b.Part("Progress Bar", x, z, h, yaw, false);
-            return bar.Named(name).Scaled(scale, scale, scale).Set("PuzzleProgressBar", "total", total);
-        }
-        Piece rounds1 = Bar("Rounds Bar Nest", 0f, 2.0f, 16.0f, 180f, 0.6f, 6, false);
-        Piece rounds2 = Bar("Rounds Bar Hut", 0f, 1.345f, 2.95f, 180f, 0.55f, 6, true);
+        // ================= feedback: alcoves found, on the nest, in the maze's centre and by the archway =================
+        Piece Bar(string name, float x, float z, float h, float yaw, float scale)
+            => b.Part("Progress Bar", x, z, h, yaw, false).Named(name).Scaled(scale, scale, scale).Set("PuzzleProgressBar", "total", Rounds);
+        Bar("Seek Bar Nest", 0f, 2.0f, 16.0f, 180f, 0.6f);
+        Bar("Seek Bar Maze S", 0f, -1.76f, 3.3f, 180f, 0.7f);
+        Bar("Seek Bar Maze N", 0f, 1.76f, 3.3f, 0f, 0.7f);
         IsleKit.BoardOnPosts(b, "Count Board", -5f, -13.5f, 180f, 3.8f, 1.6f, 2.8f, IsleKit.Board);
-        Piece rounds3 = b.Part("Progress Bar", -5f, -13.5f - IsleKit.FaceZ, 2.2f, 180f).Named("Rounds Bar Archway").Set("PuzzleProgressBar", "total", 6);
-        var roundsBars = new UnityEngine.Object[] { rounds1.Component("PuzzleProgressBar"), rounds2.Component("PuzzleProgressBar"), rounds3.Component("PuzzleProgressBar") };
-        var phaseBars = new UnityEngine.Object[]
-        {
-            Bar("Phase Bar Hut", 0f, 1.345f, 0.35f, 180f, 0.55f, 10, true).Component("PuzzleProgressBar"),
-            Bar("Phase Bar Nest N", 0f, 2.0f, 15.65f, 180f, 0.6f, 10, false).Component("PuzzleProgressBar"),
-            Bar("Phase Bar Nest S", 0f, -2.0f, 15.65f, 0f, 0.6f, 10, false).Component("PuzzleProgressBar"),
-            Bar("Phase Bar Maze S", 0f, -1.76f, 3.3f, 180f, 0.7f, 10, false).Component("PuzzleProgressBar"),
-            Bar("Phase Bar Maze N", 0f, 1.76f, 3.3f, 0f, 0.7f, 10, false).Component("PuzzleProgressBar"),
-            Bar("Phase Bar Maze E", 1.76f, 0f, 3.3f, 90f, 0.7f, 10, false).Component("PuzzleProgressBar"),
-            Bar("Phase Bar Maze W", -1.76f, 0f, 3.3f, -90f, 0.7f, 10, false).Component("PuzzleProgressBar"),
-        };
-        Piece regroup = b.Part("Timer", 1.3f, 2.0f, 15.8f, 180f, false).Named("Regroup Timer").Set("PuzzleTimer", "duration", 6f);
-        Component regroupC = regroup.Component("PuzzleTimer");
+        b.Part("Progress Bar", -5f, -13.5f - IsleKit.FaceZ, 2.2f, 180f).Named("Seek Bar Archway").Set("PuzzleProgressBar", "total", Rounds);
 
-        // ================= the nest's chairs, and the 2-player speakers =================
-        // two back to back, so every direction is in front of someone; no microphone: they hear only the hut's intercom
-        Piece chairN = b.Part("Listening Chair", -0.9f, -0.45f, Deck, 0f, false).Named("Lookout Chair N");
-        Piece chairS = b.Part("Listening Chair", -1.6f, 0.45f, Deck, 180f, false).Named("Lookout Chair S");
-        Piece two = IsleKit.Lobby(b, "Two Players", true, false, false);
-        Piece three = IsleKit.Lobby(b, "Three Players", false, true, false);
-        Piece four = IsleKit.Lobby(b, "Four Players", false, false, true);
-        var listeners = new List<UnityEngine.Object> { chairN.Component("PuzzleListeningChair"), chairS.Component("PuzzleListeningChair") };
-        (string name, float x, float z, float yaw)[] beams = { ("S", 0f, -1.78f, 180f), ("N", 0f, 1.78f, 0f), ("E", 1.78f, 0f, 90f), ("W", -1.78f, 0f, -90f) };
-        foreach (var (name, x, z, yaw) in beams)
-        {
-            Vector2 right = IsleKit.Turn(1.5f, 0f, yaw);
-            listeners.Add(b.Part("Intercom Speaker", x + right.x, z + right.y, 2.95f, yaw, false).Named("Speaker " + name).Under(two).Component("PuzzleIntercomSpeaker"));
-        }
-        Sdk.Add(hutMic.Component("PuzzleIntercom"), "speakers", listeners.ToArray());
-
-        // ================= Press In Order: one copy per lobby size =================
-        (Piece group, int players, int rounds, float seconds)[] copies = { (two, 2, 5, 26f), (three, 3, 6, 22f), (four, 4, 8, 20f) };
-        foreach (var (group, players, rounds, seconds) in copies)
-        {
-            Piece order = b.Empty("Press In Order " + players, 0f, -13.5f, 0.5f, false).Under(group);
-            Component pio = b.AddScript(order, "PuzzlePressInOrder");
-            Sdk.Add(pio, "lights", lamps);
-            Sdk.Add(pio, "buttons", pads);
-            Sdk.Add(pio, "progressBars", roundsBars);
-            Sdk.Add(pio, "phaseBars", phaseBars);
-            Sdk.Set(pio, "rounds", rounds);
-            Sdk.Set(pio, "holdAtEnd", true);
-            Sdk.Set(pio, "phaseSeconds", seconds);
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStart", pio, "Begin");
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pio, "End");
-            Sdk.Wire(pio, "onFail", regroupC, "StartTimer");
-            regroup.On("PuzzleTimer", "onFinished", pio, "Begin");
-        }
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", regroupC, "ResetTimer");      // a pending regroup never restarts a stopped puzzle
-        rounds1.On("PuzzleProgressBar", "onFull", b.Puzzle, "Win");
+        // ================= the rule: go to the lit alcove; five found win (Seek.cs). Start deals, stop clears =================
+        Component seek = b.AddCustomScript(b.Empty("Maze Seek", 0f, -13.5f, 0.5f, false), "Seek");
+        Sdk.Set(seek, "sensorPrefix", "Pad ");
+        Sdk.Set(seek, "lampPrefix", "Pad Lamp ");
+        Sdk.Set(seek, "barPrefix", "Seek Bar");
+        Sdk.Set(seek, "rounds", Rounds);
+        Sdk.Set(seek, "dwell", Dwell);
+        Sdk.Set(seek, "need", 1);
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", seek, "Begin");
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", seek, "End");
 
         // ================= start corner and the other switches (all toggle together) =================
         IsleKit.StartCorner(b, 5.5f, -13.5f, 180f);
@@ -436,13 +340,8 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
         b.Part("Live Light", -0.9f, -1.706f, 1.42f, 180f, false);
         b.Part("Confetti", 0f, 0f, 16.2f, 0f, false);
 
-        // ================= radio dead zones and calm air =================
-        Piece mazeZone = b.Part("Radio Dead Zone", 0f, 0f, 10f, 0f, false).Named("Maze Dead Zone");
-        SetBox(mazeZone, new Vector3(90f, 60f, 90f));
-        Piece hutZone = b.Part("Radio Dead Zone", hut.x, hut.y, hutBase + 10f, hutYaw, false).Named("Hut Dead Zone");
-        SetBox(hutZone, new Vector3(120f, 100f, 120f));
+        // ================= calm air: no jetpack over the maze or up to the nest =================
         IsleKit.CalmAir(b, "Blizzard Walk", 0f, 2.5f, new Vector3(60f, 120f, 70f), 0f, -10f, false);
-        IsleKit.CalmAir(b, "Blizzard Hut", hut.x, hut.y, new Vector3(24f, 100f, 24f), hutYaw, hutBase - 10f, false);
 
         // ================= lights =================
         var rim = new List<Vector3>();
@@ -456,31 +355,5 @@ public sealed class BlizzardWalkPuzzle : PuzzleDef
         Kit.LightString(b, "Nest Lights", new List<Vector3> { new Vector3(-2.45f, 16.45f, -2.45f), new Vector3(2.45f, 16.45f, -2.45f), new Vector3(2.45f, 16.45f, 2.45f), new Vector3(-2.45f, 16.45f, 2.45f), new Vector3(-2.45f, 16.45f, -2.45f) }, 0.05f, 0.4f, false, false, 114);
         Kit.LightString(b, "Tower Lights", new List<Vector3> { new Vector3(-1.85f, 16.5f, 10.85f), new Vector3(1.85f, 16.5f, 10.85f), new Vector3(1.85f, 16.5f, 20.95f), new Vector3(-1.85f, 16.5f, 20.95f), new Vector3(-1.85f, 16.5f, 10.85f) }, 0.05f, 0.4f, false, false, 115);
         Kit.LightRing(b, "Site Lights", 0f, 2.5f, 34f, 44f, 2.6f, true, 116);
-
-        // a line of lamp posts from the tower's door, round the maze's west side, to the hut's door (about 300 m)
-        var path = new List<Vector2> { new Vector2(-2.5f, 22.5f), new Vector2(-20f, 22.5f), new Vector2(-20f, -17f), HutLocal(-6f, 5f), HutLocal(-6f, -6f), HutLocal(-3f, -6.5f) };
-        var line = new List<Vector3> { new Vector3(path[0].x, 2.6f, path[0].y) };
-        for (int i = 1; i < path.Count; i++)
-        {
-            int n = Mathf.Max(1, Mathf.CeilToInt((path[i] - path[i - 1]).magnitude / 15f));
-            for (int k = 1; k <= n; k++)
-            {
-                Vector2 p = Vector2.Lerp(path[i - 1], path[i], (float)k / n);
-                line.Add(new Vector3(p.x, 2.6f, p.y));
-            }
-        }
-        Kit.LightString(b, "Hut Line", line, 0.15f, 1.0f, true, true, 117);
-
-        Debug.Log("[BWM] BlizzardWalk: hut at local (" + Sdk.F(hut.x) + ", " + Sdk.F(hut.y) + "), " + Sdk.F(hut.magnitude) + " m, yaw " + Sdk.F(hutYaw)
-                  + ", floor " + Sdk.F(hutBase) + " m above the maze");
-    }
-
-    // A dead zone's trigger box, centred on its object
-    static void SetBox(Piece zone, Vector3 size)
-    {
-        BoxCollider box = zone.Go.GetComponent<BoxCollider>();
-        if (box == null) box = zone.Go.AddComponent<BoxCollider>();
-        box.size = size;
-        box.center = Vector3.zero;
     }
 }

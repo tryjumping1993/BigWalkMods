@@ -1,11 +1,15 @@
 // Light the Tree: the Lantern Ring. A great fir stands dark in a clearing; 17 m round it stand three lantern shelters
 // (two in a 2-player lobby), roofed timber booths open outward, away from the tree. Each shelter's own Hold Buttons are
 // on its left wall under split-flap pictures; the lamps for those buttons hang on the back wall of the NEXT shelter
-// clockwise, each above a picture, deep in its recess, so nobody ever sees their own lamps. The SDK's timed Press In
-// Order lights one lamp every phase: when the phase ends its owner must be holding the button under the same picture,
-// and nobody any other. The watcher calls the picture over the intercom. Twelve phases in a row (ten in Ring 2) light
-// the tree and drop the gourd; a slip stops the puzzle by itself. At every start the pictures are re-dealt and the
-// BoardShuffle script re-hangs each board's lamp+picture slots, so only the picture links lamp and button.
+// clockwise, each above a picture, deep in its recess, so nobody ever sees their own lamps. The SDK's Press In Order
+// lights one lamp and waits: its owner presses the button under the same picture, and the next lamp lights. The
+// watcher calls the picture across the ring (each shelter has an intercom to the others, as a help: nobody is shut in
+// and nothing is one-way). There is no clock: a lantern stays lit until the right button is pressed. Eight right
+// presses in a row (six in Ring 2) light the tree and drop the gourd; a wrong button ends the run, and the next start
+// deals new pictures. At every start the BoardShuffle script re-hangs each board's lamp+picture slots, so only the
+// picture links lamp and button.
+// (Before the user's rules of 2026-11-24: 5 s phases with the button held when each ran out, twelve in a row, after
+// a 20 s countdown.)
 //
 // Shelter-local coordinates (x', z'): origin at the centre of the back wall's inner face, Ring m from the centre; z'
 // points out of the mouth, x' to the right looking out. Parts face their local +z; yaw θ faces out of the mouth,
@@ -25,11 +29,8 @@ public sealed class LightTheTreePuzzle : PuzzleDef
     const float Floor = 0.25f;          // top of the pad above the root's level; every part stands on it
     const float Ring = 17f;             // centre to a shelter's back-wall inner face
     const float PadRadius = 23f;
-    const float Phase2 = 5f;            // seconds per phase (playtest may move these to 6)
-    const float Phase3 = 5f;
-    const int Rounds2 = 10;
-    const int Rounds3 = 12;
-    const float CountdownSeconds = 20f;
+    const int Rounds2 = 6;
+    const int Rounds3 = 8;
     const float LampRange = 0.25f;      // board lamps: no light reaches any outside face (nearest is 0.35 m away)
     const float ShelterLampRange = 3f;
     const float ShelterLampIntensity = 0.6f;    // low, so the booth is lit, not floodlit (tune in the game)
@@ -44,7 +45,6 @@ public sealed class LightTheTreePuzzle : PuzzleDef
     Material snowy;
 
     // Everything the root's events reach, gathered from both lobby groups
-    readonly List<Component> shelterTimers = new List<Component>();
     readonly List<Component> shelterLamps = new List<Component>();
     readonly List<Component> pios = new List<Component>();
 
@@ -99,14 +99,11 @@ public sealed class LightTheTreePuzzle : PuzzleDef
         // ---- the Ornament Case: a sealed legend of the eight pictures, two rows of four, at the tree's foot ----
         BuildCase();
 
-        // ---- the Count Board: the rounds spiral and the countdown ----
+        // ---- the Count Board: the rounds spiral ----
         CountBoard("Count Board", 0f, -7f, 180f, 3.0f, 0.9f, 2.8f, IsleKit.Board, Floor);
-        Piece mainBar = b.Part("Progress Bar", -0.75f, -7.16f, Floor + 2.0f, 180f, false).Named("Rounds Bar Main")
+        Piece mainBar = b.Part("Progress Bar", 0f, -7.16f, Floor + 2.0f, 180f, false).Named("Rounds Bar Main")
             .Set("PuzzleProgressBar", "style", 1).Set("PuzzleProgressBar", "total", Rounds3).Scaled(0.4f, 0.4f, 1f);
-        Piece countdown = b.Part("Timer", 0.95f, -7.13f, Floor + 2.0f, 180f, false).Named("Countdown")
-            .Set("PuzzleTimer", "duration", CountdownSeconds);
         Component mainBarC = mainBar.Component("PuzzleProgressBar");
-        Component countdownC = countdown.Component("PuzzleTimer");
 
         IsleKit.StartCorner(b, 4.5f, -7f, 180f, true, Floor, false);
 
@@ -116,20 +113,13 @@ public sealed class LightTheTreePuzzle : PuzzleDef
 
         // ---- the two lobby rings: each a whole puzzle with its own Press In Order ----
         Piece ring2 = IsleKit.Lobby(b, "Ring 2", true, false, false);
-        BuildRing(ring2, "2", new[] { 0f, 180f }, new[] { -0.8f, 0f, 0.8f }, new[] { 0.6f, 1.3f, 2.0f }, 1.3f, Rounds2, Phase2, mainBarC);
+        BuildRing(ring2, "2", new[] { 0f, 180f }, new[] { -0.8f, 0f, 0.8f }, new[] { 0.6f, 1.3f, 2.0f }, Rounds2, mainBarC);
         Piece ring3 = IsleKit.Lobby(b, "Ring 3", false, true, true);
-        BuildRing(ring3, "3", new[] { 0f, 120f, 240f }, new[] { -0.6f, 0.6f }, new[] { 0.8f, 1.7f }, 1.25f, Rounds3, Phase3, mainBarC);
+        BuildRing(ring3, "3", new[] { 0f, 120f, 240f }, new[] { -0.6f, 0.6f }, new[] { 0.8f, 1.7f }, Rounds3, mainBarC);
 
         // ---- events ----
         Piece root = b.RootPiece;
         root.On("PuzzleSDK", "onPuzzleStart", shuffleC, "Shuffle");
-        root.On("PuzzleSDK", "onPuzzleStart", countdownC, "StartTimer");
-        root.On("PuzzleSDK", "onPuzzleStop", countdownC, "ResetTimer");
-        foreach (Component t in shelterTimers)
-        {
-            root.On("PuzzleSDK", "onPuzzleStart", t, "StartTimer");
-            root.On("PuzzleSDK", "onPuzzleStop", t, "ResetTimer");
-        }
         foreach (Component l in shelterLamps)
         {
             root.On("PuzzleSDK", "onPuzzleStart", l, "TurnOn");
@@ -138,7 +128,7 @@ public sealed class LightTheTreePuzzle : PuzzleDef
         foreach (Component pio in pios)
         {
             root.On("PuzzleSDK", "onPuzzleStop", pio, "End");
-            Sdk.Wire(countdownC, "onFinished", pio, "Begin");
+            root.On("PuzzleSDK", "onPuzzleStart", pio, "Begin");      // wired after Shuffle, so the boards are re-hung first
             Sdk.Wire(pio, "onFail", b.Puzzle, "StopPuzzle");
         }
         mainBar.On("PuzzleProgressBar", "onFull", b.Puzzle, "Win");
@@ -228,7 +218,7 @@ public sealed class LightTheTreePuzzle : PuzzleDef
 
     // One lobby ring under 'group': the shelters at 'angles' (clockwise), each with slotX.Length buttons; shelter X's back
     // wall carries the lamps and pictures of next(X), and its left wall X's own buttons under copies of those pictures
-    void BuildRing(Piece group, string tag, float[] angles, float[] slotX, float[] buttonZ, float holdBarZ, int rounds, float phase, Component mainBar)
+    void BuildRing(Piece group, string tag, float[] angles, float[] slotX, float[] buttonZ, int rounds, Component mainBar)
     {
         int n = angles.Length, slots = slotX.Length;
         var displays = new Component[n, slots];     // Display Xk: the picture over Lamp Xk, on prev(X)'s back wall
@@ -236,7 +226,6 @@ public sealed class LightTheTreePuzzle : PuzzleDef
         var speakers = new Component[n];
         var mics = new Component[n];
         var roundBars = new List<Component> { mainBar };
-        var phaseBars = new List<Component>();
         var structure = new MeshBuilder();
 
         // Pass 1: the shelters, their boards (next station's lamps) and their own fittings
@@ -268,25 +257,14 @@ public sealed class LightTheTreePuzzle : PuzzleDef
                 lamps[y, k] = lamp.Component("PuzzleLight");
             }
 
-            // back wall: the phase bar over the board
-            Piece phaseBar = PartAt("Progress Bar", theta, 0f, 0.10f, 2.55f, theta).Named("Phase Bar " + x)
-                .Set("PuzzleProgressBar", "style", 0).Scaled(0.75f, 0.75f, 1f).Under(group);
-            phaseBars.Add(phaseBar.Component("PuzzleProgressBar"));
-
-            // left wall: the holder's bar and the speaker
-            Piece holdBar = PartAt("Progress Bar", theta, -1.30f, holdBarZ, 2.10f, theta + 90f).Named("Hold Bar " + x)
-                .Set("PuzzleProgressBar", "style", 0).Scaled(0.45f, 0.45f, 1f).Under(group);
-            phaseBars.Add(holdBar.Component("PuzzleProgressBar"));
+            // left wall: the speaker
             Piece speaker = PartAt("Intercom Speaker", theta, -1.30f, 1.25f, 2.35f, theta + 90f).Named("Speaker " + x).Under(group);
             speakers[s] = speaker.Component("PuzzleIntercomSpeaker");
 
-            // right wall: rounds bar, countdown, intercom mic, quit knob and live lamp
+            // right wall: rounds bar, intercom mic, quit knob and live lamp
             Piece roundsBar = PartAt("Progress Bar", theta, 1.30f, 1.3f, 2.40f, theta - 90f).Named("Rounds Bar " + x)
                 .Set("PuzzleProgressBar", "style", 0).Set("PuzzleProgressBar", "total", rounds).Scaled(0.6f, 0.6f, 1f).Under(group);
             roundBars.Add(roundsBar.Component("PuzzleProgressBar"));
-            Piece timer = PartAt("Timer", theta, 1.32f, 1.3f, 1.75f, theta - 90f).Named("Countdown " + x)
-                .Set("PuzzleTimer", "duration", CountdownSeconds).Scaled(0.5f, 0.5f, 1f).Under(group);
-            shelterTimers.Add(timer.Component("PuzzleTimer"));
             Piece mic = PartAt("Intercom Mic", theta, 1.38f, 0.5f, 1.25f, theta - 90f).Named("Intercom " + x).Under(group);
             mics[s] = mic.Component("PuzzleIntercom");
             PartAt("Switch Start", theta, 1.327f, 2.1f, 1.25f, theta - 90f).Named("Quit Knob " + x).Under(group);
@@ -345,10 +323,8 @@ public sealed class LightTheTreePuzzle : PuzzleDef
                 Sdk.Add(pio, "buttons", buttons[s, k]);
             }
         Sdk.Add(pio, "progressBars", roundBars.ToArray());
-        Sdk.Add(pio, "phaseBars", phaseBars.ToArray());
         Sdk.Set(pio, "rounds", rounds);
-        Sdk.Set(pio, "holdAtEnd", true);
-        Sdk.Set(pio, "phaseSeconds", phase);
+        Sdk.Set(pio, "holdAtEnd", false);      // no clock: the lit lantern waits for its button
         pios.Add(pio);
     }
 }

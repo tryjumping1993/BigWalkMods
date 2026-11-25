@@ -1,21 +1,27 @@
-// Blind Sculptor (puzzle 15, blind mask, invisible ink): the Snow Sculptor's Court. A walled court holds a snow
-// plinth with a five-slot peg board (the "sculpture") and twelve carving tiles lying in four sloped racks. The tiles
-// are painted in invisible ink: blank to everyone except the player looking through the ink telescope on the
-// watchtower outside the court's glass east wall. The commission (five pictures) is dealt at each start onto a
-// split-flap Display inside a kiosk whose closed back faces the court and the tower.
-//   - The sculptor wears a blindfold and goes in through the blind turnstile.
-//   - The patron reads the commission in the kiosk and calls it out to the watchtower.
-//   - The spotter, at the ink telescope, finds those pictures among the twelve blank-looking tiles and talks the
-//     blind sculptor to each tile and onto the right slot. The sculptor presses the check button on the plinth.
-// Eight minutes on the tower's clock; two wrong checks (or the clock) stop the puzzle and the next start re-deals.
-// In 4-player lobbies the commission is split over two kiosks (three flaps and two). The court is blind-only:
-// BlindWatch (a host script) puts anyone inside it who is not wearing a blindfold straight back outside.
+// Blind Sculptor (puzzle 15, blind mask): the Snow Sculptor's Court. A blindfold game for a group, in the open, with
+// no clock.
+//
+// A walled court holds a snow plinth with a five-slot peg board (the "sculpture") and twelve picture tiles lying in
+// four sloped racks. Starting the puzzle deals the commission: five of the twelve pictures, in order, on a split-flap
+// Display on the board at the watchtower's south rail. Two copies of it hang outside the court: on the south wall
+// between the turnstiles, and on a board at the north end of the guides' step.
+//   - The sculptor puts on a blindfold and goes in through the blind turnstile. The court is for the blindfolded
+//     only: BlindWatch (a host script) puts anyone inside it who is not wearing a blindfold straight back outside.
+//   - Everyone else guides. From the watchtower's deck, or from the stone step along the court's east railing, they
+//     see the commission, the tiles' pictures and the board, and talk the sculptor to each of the five tiles and onto
+//     the right slot: the commission's leftmost picture goes on the board's leftmost slot (the end with the marker),
+//     and so on along. The telescope on the deck is a plain one, for reading the far racks.
+//   - The sculptor presses the check button on the plinth. Right wins the gourd; wrong only shows the cross, and
+//     they carry on.
+// Two players can finish it (one blind, one guiding); it is built for three or four, who take turns under the
+// blindfold. Nobody is shut in and nothing muffles a voice: the court's east side is a railing of bars, not glass.
+// (Before the user's rules of 2026-11-24: tiles in invisible ink that only the tower's ink telescope showed, the
+// commission hidden in a kiosk, an eight-minute clock, and two wrong checks stopped the puzzle and dealt again.)
 // The picture set is the Peg set (index 1, the game's set B), reserved for this puzzle island-wide: the board
 // matches tiles by picture only, so no other island puzzle may use Peg tiles.
 //
-// Spec: Z:\Temp\claude\BigWalkMods\puzzle-specs\BlindSculptor.md (revision 2 and its review notes).
 // Local coordinates: x right, z forward (+z north at yaw 0). Court parts stand on the level pad (onGround: false,
-// measured from the root's level, pad top at Floor); the tower and the kiosks stand on the ground under their centres.
+// measured from the root's level, pad top at Floor); the tower stands on the ground under its centre.
 using System.Collections.Generic;
 using Bwm;
 using UnityEngine;
@@ -25,12 +31,18 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
     public override string Name => "BlindSculptor";
     public override Vector2 Footprint => new Vector2(38f, 32f);
     public override Vector2? FixedSite => new Vector2(-1674f, -798f);      // layout-final: north shore, a sheltered court on its own flat
-    public override float Yaw => 0f;      // glass side (+x) to the open ground east; kiosk openings face south, away from the tower
+    public override float Yaw => 0f;      // the railing side (+x) to the open ground east, where the watchtower stands
 
     const float Floor = 0.25f;            // the pad's top, above the root's level
-    const float WallTop = 3.0f;           // court walls, above the pad
+    const float WallTop = 3.0f;           // the stone walls (west, north, south), above the pad
+    const float RailTop = 2.0f;           // the east railing, above the pad
+    const float StepTop = 0.6f;           // the guides' step outside the railing, above the pad
     const float Deck = 4.2f;              // the watchtower's platform, above the ground under it
     static readonly Color SnowWhite = new Color(0.93f, 0.95f, 0.98f);
+
+    // A five-flap Display's pivot is the middle of flap 1 (its reader's far left) and its frame runs on 1.4 m to the
+    // reader's right, so the frame's middle is 0.7 m along from the pivot; its body is 0.168 m deep behind the pivot
+    const float FlapsMid = 0.7f, DisplayBack = 0.168f;
 
     // Racks: centre (x, z) and the Peg image in each bay (z - 0.65, z, z + 0.65)
     static readonly Vector2[] RackAt = { new Vector2(-4.6f, 6.4f), new Vector2(1.2f, 6.5f), new Vector2(-4.6f, -1.9f), new Vector2(3.8f, 3.0f) };
@@ -43,7 +55,8 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
     static readonly float SlopeHighX = SlopeLowX - (SlopeHighH - SlopeLowH) / Mathf.Tan(55f * Mathf.Deg2Rad);      // about -0.085
     const float LipHeight = 0.12f;
 
-    // Letterbox through the south wall (centre x, width, slot height, outer and inner mouth bottoms above the pad)
+    // Letterbox through the south wall (centre x, width, slot height, outer and inner mouth bottoms above the pad):
+    // a tile that has left the court (in a pocket, or carried out through the way out) is posted back in here
     const float SlotX = -1.0f, SlotW = 0.6f, SlotH = 0.32f, SlotOuter = 1.2f, SlotInner = 0.95f;
 
     public override void Build(PuzzleBuilder b)
@@ -54,10 +67,9 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
         Material bare = IsleKit.Bare(b);
         float rootY = b.Root.transform.position.y;
         float tower = b.WorldPoint(13.4f, 2.0f).y - rootY;      // ground under the watchtower, above the root's level
-        float kioskA = b.WorldPoint(16f, -8f).y - rootY;
-        float kioskB = b.WorldPoint(4f, -13.5f).y - rootY;
 
-        // ---- the court: pad, stone walls (3 m, sheer), the glass east wall, the plinth and the four racks ----
+        // ---- the court: pad, stone walls (3 m, sheer) on three sides, the railing on the east, the plinth and the
+        //      four racks ----
         var court = new MeshBuilder();
         Kit.AddBox(court, new Vector3(0f, Floor - 1.75f, 2f), new Vector3(13.5f, 1.75f, 13.5f), IsleKit.Stone);      // the level pad, sunk 1.5 m
         Block(court, -6.3f, -6.0f, -4.3f, 8.3f, Floor, Floor + WallTop, IsleKit.Stone);      // west
@@ -84,19 +96,44 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
             Floor + SlotOuter + 0.02f * drop + 0.005f, Floor + SlotOuter + 0.02f * drop + 0.005f, Floor + SlotInner - 0.28f * drop + 0.005f, Floor + SlotInner - 0.28f * drop + 0.005f, IsleKit.DarkWood);
         // the plaque on the south wall's inner face for the inside stop switch and its live lamp
         Block(court, -0.3f, 0.6f, -4.0f, -3.83f, Floor + 0.95f, Floor + 1.65f, IsleKit.Board);
-        // east wall: a stone sill to 0.9 m, six panes of clear glass between stone posts, a cap from 2.9 to 3.1 m
+        // the plaque on the south wall's outer face, between the letterbox and the way out, for a copy of the commission
+        Block(court, -0.45f, 1.75f, -4.36f, -4.3f, Floor + 1.4f, Floor + 2.1f, IsleKit.Board);
+        // east side, where the guides look in: a stone sill to 0.9 m and corner piers as high as the walls; between
+        // them a railing to RailTop, slim bars 0.3 m apart (no player passes) between stone piers. Bars, not glass:
+        // the game's glass muffles voices. The railing is low so that the watchtower's deck sees the board and the
+        // north and west racks over it in clear air (its top rail lies between those sight lines and the east rack's)
         Block(court, 5.85f, 6.15f, -4.3f, 8.3f, Floor, Floor + 0.9f, IsleKit.Stone);
-        Block(court, 5.85f, 6.15f, -4.3f, 8.3f, Floor + 2.9f, Floor + 3.1f, IsleKit.Stone);
-        Block(court, 5.85f, 6.15f, -4.3f, -3.85f, Floor + 0.9f, Floor + 2.9f, IsleKit.Stone);      // end posts
-        Block(court, 5.85f, 6.15f, 7.85f, 8.3f, Floor + 0.9f, Floor + 2.9f, IsleKit.Stone);
+        Block(court, 5.85f, 6.15f, -4.3f, -3.85f, Floor + 0.9f, Floor + WallTop, IsleKit.Stone);      // corner piers
+        Block(court, 5.85f, 6.15f, 7.85f, 8.3f, Floor + 0.9f, Floor + WallTop, IsleKit.Stone);
         for (int k = 0; k < 5; k++)
         {
-            float z = -2.0f + 2f * k;      // posts between the panes (pane centres -3, -1, 1, 3, 5, 7)
-            Block(court, 5.85f, 6.15f, z - 0.15f, z + 0.15f, Floor + 0.9f, Floor + 2.9f, IsleKit.Stone);
+            float z = -2.0f + 2f * k;      // piers between the bays (bay centres -3, -1, 1, 3, 5, 7)
+            Block(court, 5.85f, 6.15f, z - 0.15f, z + 0.15f, Floor + 0.9f, Floor + RailTop + 0.1f, IsleKit.Stone);
         }
+        for (int bay = 0; bay < 6; bay++)
+        {
+            float z = -3f + 2f * bay;
+            Block(court, 5.95f, 6.05f, z - 0.85f, z + 0.85f, Floor + RailTop - 0.06f, Floor + RailTop, IsleKit.DarkWood);      // top rail
+            for (int k = 0; k < 4; k++)
+            {
+                float bz = z + (k - 1.5f) * 0.34f;
+                Block(court, 5.98f, 6.02f, bz - 0.02f, bz + 0.02f, Floor + 0.9f, Floor + RailTop - 0.06f, IsleKit.DarkWood);
+            }
+        }
+        // the guides' step along the outside of the railing: a player's eyes are only 0.6 m above their feet and the
+        // sill's top is 1.15 m above the ground, so they stand on this to look in (three risers of 0.28 m)
+        float rise = (Floor + StepTop) / 3f;
+        float[] treadX = { 6.15f, 7.15f, 7.5f, 7.85f };
+        for (int s = 0; s < 3; s++)
+            Block(court, treadX[s], treadX[s + 1], -4.3f, 8.3f, Floor - 1.75f, Floor + StepTop - s * rise, IsleKit.Stone);
+        // a board on two posts just past the step's north end, facing south along it, for the guides' copy of the commission
+        Block(court, 6.15f, 6.27f, 8.72f, 8.84f, Floor - 0.75f, Floor + 2.2f, IsleKit.DarkWood);
+        Block(court, 8.43f, 8.55f, 8.72f, 8.84f, Floor - 0.75f, Floor + 2.2f, IsleKit.DarkWood);
+        Block(court, 6.27f, 8.43f, 8.75f, 8.81f, Floor + 1.4f, Floor + 2.1f, IsleKit.Board);
+        Block(court, 6.0f, 8.7f, 8.5f, 9.0f, Floor + 2.2f, Floor + 2.3f, IsleKit.Red);      // a little roof over it
         // the sculpture plinth: 0.6 x 4.2 x 1.6 m of packed snow, the board, check screen and button on its east face
         Block(court, -1.5f, -0.9f, 0.1f, 4.3f, Floor, Floor + 1.6f, SnowWhite);
-        // the racks: a sloped face rising west (so it looks east at the tower), a lip on its low edge, three bays
+        // the racks: a sloped face rising west (so it looks east at the guides), a lip on its low edge, three bays
         for (int r = 0; r < RackAt.Length; r++) Rack(court, RackAt[r]);
         Piece courtMesh = b.MeshPiece("Court", court.ToMesh(), snowy);
         courtMesh.Transform.position = b.WorldPoint(0f, 0f, 0f, false);
@@ -111,17 +148,12 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
         Block(outline, SlotX - 0.11f, SlotX + 0.11f, -4.33f, -4.3f, oy1 + 0.1f, oy1 + 0.32f, IsleKit.Cream);      // a little tile above it
         b.MeshPiece("Letterbox Mark", outline.ToMesh(), bare, false).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
 
-        // Glass panes: clear, muffling (the spotter must still be heard), 1.7 x 2.0 m, centred 1.9 m up
-        for (int k = 0; k < 6; k++)
-            b.Part("Glass", 6.0f, -3f + 2f * k, Floor + 1.9f, -90f, false).Named("Court Glass " + (k + 1))
-                .Pane(1.7f, 2.0f).Set("PuzzleGlass", "style", 2).Set("PuzzleGlass", "sound", 0);
-
-        // Christmas lights along the wall tops (no posts: the wire lies just over the coping)
+        // Christmas lights along the three stone walls' tops, corner pier to corner pier (no posts: the wire lies
+        // just over the coping); none across the railing, where the guides look in
         Kit.LightString(b, "Court Lights", new List<Vector3>
         {
-            new Vector3(-6.15f, Floor + WallTop + 0.15f, -4.15f), new Vector3(-6.15f, Floor + WallTop + 0.15f, 8.15f),
-            new Vector3(6.0f, Floor + 3.1f + 0.15f, 8.15f), new Vector3(6.0f, Floor + 3.1f + 0.15f, -4.15f),
-            new Vector3(-6.15f, Floor + WallTop + 0.15f, -4.15f),
+            new Vector3(6.0f, Floor + WallTop + 0.15f, -4.15f), new Vector3(-6.15f, Floor + WallTop + 0.15f, -4.15f),
+            new Vector3(-6.15f, Floor + WallTop + 0.15f, 8.15f), new Vector3(6.0f, Floor + WallTop + 0.15f, 8.15f),
         }, 0f, 0.5f, false, false, 157);
 
         // ---- gates: blind entry (locked while the puzzle is off), plain one-way exit (never locked) ----
@@ -133,7 +165,8 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
         b.Part("Switch Start", 0.0f, -3.775f, Floor + 1.25f, 0f, false).Named("Inside Stop Switch");
         b.Part("Live Light", 0.35f, -3.82f, Floor + 1.42f, 0f, false).Named("Inside Live Light");
 
-        // ---- the twelve inked tiles, lying face up the slope in their bays (face east and 35 degrees up) ----
+        // ---- the twelve tiles, lying face up the slope in their bays (face east and 35 degrees up), their pictures
+        //      plain to everyone ----
         Vector2 n = new Vector2(Mathf.Cos(35f * Mathf.Deg2Rad), Mathf.Sin(35f * Mathf.Deg2Rad));      // face normal: (east, up)
         float midX = (SlopeLowX + SlopeHighX) / 2f, midH = (SlopeLowH + SlopeHighH) / 2f;
         for (int r = 0; r < RackAt.Length; r++)
@@ -144,18 +177,18 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
                 Piece tile = b.Part("Peg Tile", x, z, Floor + h, 90f, false).Named("Tile " + image + " (" + RackName[r] + ")");
                 tile.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(-35f, 90f, 0f);
                 tile.Set("PuzzlePegTile", "imageSet", 1)      // Peg (the game's set B): reserved for this puzzle on the island
-                    .Set("PuzzlePegTile", "image", image)
-                    .Set("PuzzlePegTile", "invisibleInkView", true);
+                    .Set("PuzzlePegTile", "image", image);
             }
 
-        // ---- the watchtower: deck 4.2 m, west edge 6 m from the glass, the stair climbing from the east ----
+        // ---- the watchtower, the guides' high viewpoint: deck 4.2 m, west edge 6 m from the railing, the stair
+        //      climbing from the east ----
         var tw = new MeshBuilder();
         float t0 = tower;
         foreach (float lx in new[] { 12.15f, 14.65f })
             foreach (float lz in new[] { 0.75f, 3.25f })
                 Block(tw, lx - 0.13f, lx + 0.13f, lz - 0.13f, lz + 0.13f, t0 - 0.4f, t0 + Deck - 0.2f, IsleKit.DarkWood);      // legs
         Block(tw, 12.0f, 14.8f, 0.6f, 3.4f, t0 + Deck - 0.2f, t0 + Deck, IsleKit.Wood);      // the deck
-        Block(tw, 12.0f, 12.15f, 0.6f, 3.4f, t0 + Deck, t0 + Deck + 0.3f, IsleKit.DarkWood);      // a 0.3 m kerb on the west edge only
+        Block(tw, 12.0f, 12.15f, 0.6f, 3.4f, t0 + Deck, t0 + Deck + 0.3f, IsleKit.DarkWood);      // a 0.3 m kerb on the west edge only: nothing between the guides and the court
         foreach (float rz in new[] { 0.63f, 3.37f })      // rails 1.1 m on the south and north edges
         {
             foreach (float px in new[] { 12.05f, 13.4f, 14.75f })
@@ -177,8 +210,9 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
                 t0 + Deck + 0.94f, t0 + 0.35f + 0.94f, t0 + 0.35f + 0.94f, t0 + Deck + 0.94f,
                 t0 + Deck + 1.0f, t0 + 0.35f + 1.0f, t0 + 0.35f + 1.0f, t0 + Deck + 1.0f, IsleKit.Wood);
         }
-        // the tally board on the south rail, facing north: the clock above, the strike bar below
-        Block(tw, 12.2f, 14.6f, 0.6f, 0.66f, t0 + Deck + 0.7f, t0 + Deck + 2.1f, IsleKit.Board);
+        // the commission board on the south rail, facing north across the deck (a little thicker than the rail and
+        // its posts, which run through it)
+        Block(tw, 12.2f, 14.6f, 0.56f, 0.70f, t0 + Deck + 0.7f, t0 + Deck + 2.1f, IsleKit.Board);
         Block(tw, 12.1f, 12.2f, 0.58f, 0.68f, t0 + Deck, t0 + Deck + 2.25f, IsleKit.DarkWood);
         Block(tw, 14.6f, 14.7f, 0.58f, 0.68f, t0 + Deck, t0 + Deck + 2.25f, IsleKit.DarkWood);
         Block(tw, 12.0f, 14.8f, 0.45f, 0.95f, t0 + Deck + 2.25f, t0 + Deck + 2.35f, IsleKit.Red);      // a little roof over it
@@ -189,52 +223,48 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
             new Vector3(18.95f, t0 + 1.4f, 2.65f),
         }, 0.15f, 0.45f, false, false, 158);
 
-        // the ink telescope stands on the deck (its pillar's foot is 1.1 m under its pivot), looking west into the court
-        b.Part("Telescope", 12.5f, 2.0f, t0 + Deck + 1.1f, -90f, false).Named("Ink Telescope")
-            .Set("PuzzleTelescope", "invisibleInkView", true);
-        Piece clock = b.Part("Timer", 13.4f, 0.80f, t0 + Deck + 1.55f, 0f, false).Named("Court Clock")
-            .Set("PuzzleTimer", "duration", 480f);
-        Piece strikes = b.Part("Progress Bar", 13.4f, 0.80f, t0 + Deck + 0.95f, 0f, false).Named("Strikes")
-            .Scaled(0.5f, 1f, 1f).Set("PuzzleProgressBar", "total", 2).Set("PuzzleProgressBar", "style", 0);
-        Component clockC = clock.Component("PuzzleTimer");
-        Component strikesC = strikes.Component("PuzzleProgressBar");
+        // a plain telescope on the deck (its pillar's foot is 1.1 m under its pivot), looking west into the court
+        b.Part("Telescope", 12.5f, 2.0f, t0 + Deck + 1.1f, -90f, false).Named("Tower Telescope")
+            .Set("PuzzleTelescope", "invisibleInkView", false);
 
-        // ---- lobby groups: 2-3 players get one five-flap kiosk, 4 players two kiosks (three flaps and two) ----
-        Piece three = IsleKit.Lobby(b, "Three Players", true, true, false);
-        Piece four = IsleKit.Lobby(b, "Four Players", false, false, true);
+        // ---- the commission: five flaps on the tower's board, 1.7 m above the deck, facing north: a guide at the
+        //      north rail has it in front and the court on their right. Flap 1 is its reader's far left (the east
+        //      end). The copies always show what it shows: one on the south wall's outer plaque, one on the board
+        //      at the step's north end, both facing south, 2 m above the ground ----
+        Piece commission = b.Part("Display", 13.4f + FlapsMid, 0.70f + DisplayBack, t0 + Deck + 1.7f, 0f, false).Named("Commission")
+            .Set("PuzzleDisplay", "size", 3);      // Five
+        Component commissionC = commission.Component("PuzzleDisplay");
+        b.Part("Display", 0.65f - FlapsMid, -4.36f - DisplayBack, Floor + 1.75f, 180f, false).Named("Commission Copy Entry")
+            .Set("PuzzleDisplay", "size", 3).Set("PuzzleDisplay", "copyDisplay", commissionC);
+        b.Part("Display", 7.35f - FlapsMid, 8.75f - DisplayBack, Floor + 1.75f, 180f, false).Named("Commission Copy Step")
+            .Set("PuzzleDisplay", "size", 3).Set("PuzzleDisplay", "copyDisplay", commissionC);
+        // a warm lamp before each of the three, lit only as far as it is night (Winter Walk's RoomLights)
+        b.Empty("Room Light Night 1 FFE2B0 4.0 1.2", 13.4f, 1.7f, t0 + Deck + 2.0f, false);
+        b.Empty("Room Light Night 2 FFE2B0 4.0 1.2", 0.65f, -5.3f, Floor + 2.2f, false);
+        b.Empty("Room Light Night 3 FFE2B0 4.0 1.2", 7.35f, 7.8f, Floor + 2.2f, false);
 
-        // Kiosk A (all lobbies) and Kiosk B (4 players only): closed north, east, west and roof; open to the south
-        b.MeshPiece("Kiosk A", Kiosk(16f, -8f, kioskA).ToMesh(), snowy).Transform.position = b.WorldPoint(0f, 0f, 0f, false);
-        Piece kioskBMesh = b.MeshPiece("Kiosk B", Kiosk(4f, -13.5f, kioskB).ToMesh(), snowy);
-        kioskBMesh.Transform.position = b.WorldPoint(0f, 0f, 0f, false);
-        kioskBMesh.Under(four);
-        // warm lamps in each kiosk (Winter Walk's RoomLights; it skips inactive objects, so Kiosk B is lit only with it)
-        b.Empty("Room Light 1 FFE2B0 4.0 1.2", 16f, -8f, kioskA + 2.4f, false);
-        b.Empty("Room Light 2 FFE2B0 4.0 1.2", 4f, -13.5f, kioskB + 2.4f, false).Under(four);
+        // ---- the sculpture: a board, its check screen and button on the plinth's east face (slot 1 at the pivot
+        //      end, z 0.9: facing the board, from the court or from the tower, slot 1 is at the far left) ----
+        Piece board = b.Part("Peg Board", -0.9f, 0.9f, Floor + 1.1f, 90f, false).Named("Sculpture Board");
+        Piece check = b.Part("Validator", -0.9f, 3.7f, Floor + 1.35f, 90f, false).Named("Check Screen");
+        Piece poke = b.Part("Button Poke", -0.9f, 3.7f, Floor + 0.65f, 90f, false).Named("Check Button");
+        Component boardC = board.Component("PuzzlePegBoard");
+        Component checkC = check.Component("PuzzleValidator");
+        Sdk.Set(boardC, "size", 4);      // Slots5
+        Sdk.Set(boardC, "startMarker", true);
+        for (int flap = 1; flap <= 5; flap++)
+        {
+            Sdk.Add(boardC, "answerFrom", commissionC);
+            Sdk.AddInts(boardC, "answerFromFlap", flap);
+        }
+        Sdk.Set(boardC, "validator", checkC);
+        Sdk.Set(checkC, "pokeButton", poke.Component("PuzzlePokeButton"));
 
-        // Displays on the kiosks' inner north walls, facing south into the kiosk
-        Piece commission5 = b.Part("Display", 16f, -7.37f, kioskA + 1.7f, 180f, false).Named("Commission 5")
-            .Set("PuzzleDisplay", "size", 3).Under(three);      // Five
-        Piece commission3 = b.Part("Display", 16f, -7.37f, kioskA + 1.7f, 180f, false).Named("Commission 3")
-            .Set("PuzzleDisplay", "size", 2).Under(four);       // Three
-        Piece commission2 = b.Part("Display", 4f, -12.87f, kioskB + 1.7f, 180f, false).Named("Commission 2")
-            .Set("PuzzleDisplay", "size", 1).Under(four);       // Two
-        Component c5 = commission5.Component("PuzzleDisplay"), c3 = commission3.Component("PuzzleDisplay"), c2 = commission2.Component("PuzzleDisplay");
-
-        // The sculpture: a board, its check screen and button on the plinth's east face, one set per lobby group at
-        // the same place (slot 1 at the pivot end, z 0.9; facing the board, slot 1 is at the sculptor's far left)
-        Sculpture(b, three, "3", strikesC, new[] { c5, c5, c5, c5, c5 }, new[] { 1, 2, 3, 4, 5 });
-        Sculpture(b, four, "4", strikesC, new[] { c3, c3, c3, c2, c2 }, new[] { 1, 2, 3, 1, 2 });
-
-        // ---- events: the clock, the strikes and the blind entry follow the puzzle; the only win is the Validator ----
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", clockC, "StartTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", blindEntry.Component("PuzzleNoItemsGate"), "Unlock");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", clockC, "ResetTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", strikesC, "Reset");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", blindEntry.Component("PuzzleNoItemsGate"), "Lock");
-        b.RootPiece.On("PuzzleSDK", "onWin", clockC, "PauseTimer");
-        clock.On("PuzzleTimer", "onFinished", b.Puzzle, "StopPuzzle");       // out of time: stop, so the next start re-deals
-        strikes.On("PuzzleProgressBar", "onFull", b.Puzzle, "StopPuzzle");   // second wrong check
+        // ---- events: the blind entry is open while the puzzle runs. The only win is the Validator's; a wrong check
+        //      is wired to nothing, so the cross is all it costs ----
+        Component entryGate = blindEntry.Component("PuzzleNoItemsGate");
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", entryGate, "Unlock");
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", entryGate, "Lock");
 
         // ---- BlindWatch: the court is blind-only. Anyone inside its box (wall outer faces, from just under the pad
         //      to 4.5 m up: wall tops, plinth and racks included) without a blindfold is put out at the Exit Point ----
@@ -258,42 +288,8 @@ public sealed class BlindSculptorPuzzle : PuzzleDef
         IsleKit.BlindfoldHook(b, -6.6f, -7.8f, 90f, 0f, true, " C");
         IsleKit.StartCorner(b, -1.5f, -8.5f, 0f);
         Kit.LightRing(b, "Site Lights", 5f, -2f, 36f, 28f, 2.6f, true, 151);
-        // no jetpacks over the court, the tower or the kiosks: from 10 m under the ground to 140 m up, 60 x 56 m
+        // no jetpacks over the court, the step or the tower: from 10 m under the ground to 140 m up, 60 x 56 m
         IsleKit.CalmAir(b, "Blind Sculptor", 4f, 0f, new Vector3(60f, 150f, 56f), 0f, -10f);
-    }
-
-    // The peg board, check screen and check button of one lobby group, on the plinth's east face
-    static void Sculpture(PuzzleBuilder b, Piece group, string tag, Component strikes, Component[] answerFrom, int[] flaps)
-    {
-        Piece board = b.Part("Peg Board", -0.9f, 0.9f, Floor + 1.1f, 90f, false).Named("Sculpture Board " + tag).Under(group);
-        Piece check = b.Part("Validator", -0.9f, 3.7f, Floor + 1.35f, 90f, false).Named("Check Screen " + tag).Under(group);
-        Piece poke = b.Part("Button Poke", -0.9f, 3.7f, Floor + 0.65f, 90f, false).Named("Check Button " + tag).Under(group);
-        Component boardC = board.Component("PuzzlePegBoard");
-        Component checkC = check.Component("PuzzleValidator");
-        Sdk.Set(boardC, "size", 4);      // Slots5
-        Sdk.Set(boardC, "startMarker", true);
-        for (int i = 0; i < answerFrom.Length; i++)
-        {
-            Sdk.Add(boardC, "answerFrom", answerFrom[i]);
-            Sdk.AddInts(boardC, "answerFromFlap", flaps[i]);
-        }
-        Sdk.Set(boardC, "validator", checkC);
-        Sdk.Set(checkC, "pokeButton", poke.Component("PuzzlePokeButton"));
-        check.On("PuzzleValidator", "onIncorrect", strikes, "Increment");
-    }
-
-    // A kiosk at (cx, cz) on ground 'g' (above the root's level): inside 3.0 x 1.6 m, walls 2.6 m, open to the south
-    static MeshBuilder Kiosk(float cx, float cz, float g)
-    {
-        var mb = new MeshBuilder();
-        float x0 = cx - 1.5f, x1 = cx + 1.5f, z0 = cz - 0.8f, z1 = cz + 0.8f, w = 0.15f;
-        Block(mb, x0 - w, x1 + w, z1, z1 + w, g - 0.3f, g + 2.6f, IsleKit.Wood);      // north (the display's wall)
-        Block(mb, x0 - w, x0, z0, z1, g - 0.3f, g + 2.6f, IsleKit.Wood);              // west
-        Block(mb, x1, x1 + w, z0, z1, g - 0.3f, g + 2.6f, IsleKit.Wood);              // east
-        Block(mb, x0 - 0.35f, x1 + 0.35f, z0 - 0.45f, z1 + 0.3f, g + 2.6f, g + 2.75f, IsleKit.Red);      // roof, reaching out over the opening
-        Block(mb, x0 - w, x1 + w, z0 - 0.05f, z0 + 0.05f, g + 2.35f, g + 2.6f, IsleKit.Green);          // fascia over the opening
-        Block(mb, x0, x1, z0, z1, g - 0.3f, g + 0.05f, IsleKit.DarkWood);            // floor boards
-        return mb;
     }
 
     // One rack at centre c: body with the 55 degree face, lip, back shelf, end walls and two dividers

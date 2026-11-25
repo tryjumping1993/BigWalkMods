@@ -1,21 +1,24 @@
-// Reindeer Count: Roll Call in the Reindeer Shed (spec: puzzle-specs/ReindeerCount.md, revision 2, 2026-11-22).
+// Reindeer Count: how many noses are glowing? A counting puzzle one player can finish, with no clock.
 //
-// A sealed, roofed timber shed (32 x 32 m inside) holds twenty reindeer stalls round a decorated fir. Each of three
-// walls (West, East, North) has one long window band of glass, 1 m tall, and outside each runs a raised gallery. Each
-// closed stall is a roofed box open on one side only, aimed at one gallery, with a red "nose" lamp on its back wall:
-// the West gallery sees only west-facing stalls, the East only east-facing ones, the North (4-player lobbies) only
-// north-facing ones; two open pavilions show to West and East. No one place sees two kinds of stall.
+// A sealed, roofed timber shed (32 x 32 m inside) holds twenty reindeer round a decorated fir: eighteen in closed
+// stalls and two under open pavilions. Each of three walls (West, East, North) has one long window band of glass,
+// 1 m tall, and outside each runs a raised gallery with its own stair. A closed stall is a roofed box open on one
+// side only, aimed at one gallery, and its reindeer's nose is on the back wall: a lamp in the middle of a painted
+// red disc. Six stalls face each gallery, and no other gallery sees into them. The two pavilions (one gold, one
+// green, the tops of their posts red round a hanging lamp) are open all round and show from every gallery, so each
+// is counted once, not once a window.
 //
-// South of the shed stands the Tally Barn, windowless and sealed, its door shut while the puzzle runs. On its floor is
-// a 1:3 plan of the shed with a pressure pad at every stall's spot. Press In Order in its timed mode lights one nose
-// at a time; the spotters work out who can see it and describe where it is; when the phase runs out the presser must
-// be standing on that stall's pad and on no other. Thirteen in a row win (15 in 4p, 10 in 2p); one miss empties the
-// bar. The lists for the other lobby sizes are switched off (PuzzleHider), so only one is ever live.
+// At every start some of the twenty noses light, a different number each time (6 to 13; the CountDeal script).
+// Walk round the galleries, count the lit noses through each window band, add them up, set the counter on the
+// Counting Post beside the start corner to the total and press the button under its check screen. A right count
+// wins. A wrong one shows the cross and lights a different set of noses, so the number cannot be found by trying
+// them all. One player can do it alone; a group puts someone on each gallery and adds up at the post.
+// (Before the user's rules of 2026-11-24 this was Roll Call: spotters on the galleries called one lit nose at a time
+// to a presser shut in a sealed Tally Barn with a floor plan of pressure pads, on 7 s phases, thirteen in a row.)
 //
-// The stalls are placed at build time by a seeded search, and the build proves its sight lines: every lamp seen from
-// its own gallery, no lamp from any other gallery, no point outside the shed (ground to 40 m up, 60 m out) that sees
-// two kinds, the barn sealed but for its door, and the guessing odds of a short team under the spec's limits. Any
-// failure fails the build. No custom code.
+// The stalls are placed at build time by a seeded search, and the build proves its sight lines: every nose seen from
+// its own gallery, no closed stall's nose from any other gallery, and no point outside the shed (ground to 40 m up,
+// 60 m out) that sees the stalls of two galleries, so no one place shows them all. Any failure fails the build.
 //
 // Coordinates: local metres, x east, z north (+z forward), heights above the top of one level pad (Floor above the
 // root); every piece is placed onGround: false on that pad. Yaw: 0 faces +z, 90 +x, -90 -x, 180 -z.
@@ -34,8 +37,13 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
     public override Vector2? FixedSite => new Vector2(-1590f, -720f);
 
     const float Floor = 0.2f;           // the pad's top, above the root's level
+    const int Least = 6, Most = 13;     // how many of the twenty noses a deal lights
+    // CountDeal finds its parts by name: every lamp whose name starts with NosePrefix, and the check screen. Nothing
+    // else in the puzzle may have a name that starts with NosePrefix.
+    const string NosePrefix = "Nose ", CheckName = "Nose Validator";
+    // Near-white: the fir's lights, and every nose lamp (a lamp's colour tints its lens lit or not, so a red lamp
+    // looks the same on and off; this one is a dull disc when off and a bright one when lit, on the nose's red paint)
     static readonly Color Warm = new Color(1f, 0.92f, 0.75f);
-    static readonly Color NoseRed = new Color(0.95f, 0.1f, 0.08f);
 
     PuzzleBuilder b;
     readonly List<Solid> solids = new List<Solid>();
@@ -55,19 +63,13 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         foreach (string line in log) Debug.Log("[BWM] Reindeer Count: " + line);
         solids.AddRange(plan.Solids);
 
-        Piece eastGroup = IsleKit.Lobby(b, "East Gallery", false, true, true);
-        Piece northGroup = IsleKit.Lobby(b, "North Gallery", false, false, true);
-
         // ---- meshes, one per group of solids ----
-        Emit("Ground Pad", "Pad", snowy, true, null);
-        Emit("Reindeer Shed", "Shed", snowy, true, null);
-        Emit("Shed Inside", "Inside", bare, true, null);
-        Emit("West Gallery Deck", "West Gallery", snowy, true, null);
-        Emit("East Gallery Deck", "East Gallery", snowy, true, eastGroup);
-        Emit("North Gallery Deck", "North Gallery", snowy, true, northGroup);
-        Emit("Way Out Vestibule", "Vestibule", snowy, true, null);
-        Emit("Tally Barn", "Barn", snowy, true, null);
-        Emit("Barn Floor", "Barn Floor", bare, true, null);
+        Emit("Ground Pad", "Pad", snowy);
+        Emit("Reindeer Shed", "Shed", snowy);
+        Emit("Shed Inside", "Inside", bare);
+        Emit("West Gallery Deck", "West Gallery", snowy);
+        Emit("East Gallery Deck", "East Gallery", snowy);
+        Emit("North Gallery Deck", "North Gallery", snowy);
 
         // the fir in the middle of the shed (indoors: no snow on it), its warm white and gold lights (no red: red is
         // the noses' colour)
@@ -82,22 +84,16 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         }
         Kit.LightString(b, "Shed Tree Lights", spiral, 0.05f, 0.3f, false, false, 2513, new[] { Warm, IsleKit.Gold });
 
-        BuildPlan(plan, bare, northGroup);
-
-        // ================= the shed: lamps, glass, guard, way out, room lights =================
-        var lamps = new Dictionary<string, Component>();
-        var pads = new Dictionary<string, Component>();
+        // ================= the shed: the noses, the glass, the room lights =================
+        // One lamp a stall, "Nose 1" to "Nose 20": a disc on a closed stall's back wall, in the middle of its red
+        // paint, and a pendant under a pavilion's roof, between the red tops of its posts. Their light stops inside
+        // the stall (range 1.5 m), so no glow shows where the lamp itself does not.
         foreach (Stall s in plan.Stalls)
         {
             Piece lamp = s.Kind == Kind.P
                 ? b.Part("Light 2", s.C.x, s.C.y, Floor + PavPivot, 0f, false)
                 : b.Part("Light 6", s.Lamp.x, s.Lamp.z, Floor + LampH, s.Yaw, false);
-            lamp.Named("Nose " + s.Name).Set("PuzzleLight", "color", NoseRed).Set("PuzzleLight", "range", 1.5f);
-            lamps[s.Name] = lamp.Component("PuzzleLight");
-            Vector2 pad = PlanPoint(s.C);
-            pads[s.Name] = IsleKit.Sensor(b, "Pad " + s.Name, pad.x, pad.y, new Vector3(1f, 2.6f, 1f), Floor + Slab, false)
-                .Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1)
-                .Component("PuzzlePresenceSensor");
+            lamp.Named(NosePrefix + s.Nose).Set("PuzzleLight", "color", Warm).Set("PuzzleLight", "range", 1.5f);
         }
 
         // eight panes per window band, flush with the wall's outer face (no ledge outside), between the mullions
@@ -108,123 +104,92 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             Pane("Window East " + (k + 1), ShedOut - 0.02f, along, 90f);
             Pane("Window North " + (k + 1), -NWinX + k * (PaneW + Mullion) + PaneW / 2f, ShedZ1 - 0.02f, 0f);
         }
-
-        // Backstop only: nobody can be inside the sealed shed. If a glitch puts someone there, a running run ends.
-        Piece guard = IsleKit.Sensor(b, "Shed Guard", HX, HZ, new Vector3(32f, 4.6f, 32f), Floor, false)
-            .Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
-        // One way, from the shed out into the vestibule (front is the inside), for anyone a glitch puts inside
-        b.Part("Gate No items", GateX, GateZ, Floor, 180f, false).Named("Way Out")
-            .Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
         int light = 1;
         foreach (float dx in new[] { -8f, 8f })
             foreach (float dz in new[] { -8f, 8f })
                 b.Empty("Room Light " + light++ + " FFE6C4 12 1.1", HX + dx, HZ + dz, Floor + 4.2f, false);
 
-        // ================= the Tally Barn =================
-        b.Part("Door", 0f, (BarnZ0 + BarnInZ0) / 2f, Floor + Slab, 0f, false).Named("Barn Door")
-            .Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", false);      // voices from the galleries must come in
-        b.Part("Switch Start", -2.0f, BarnInZ0 + SwitchBack, Floor + Slab + 1.25f, 0f, false).Named("Start Barn");
-        b.Part("Live Light", -2.35f, BarnInZ0 + LiveBack, Floor + Slab + 1.42f, 0f, false).Named("Live Barn");
-        float barnBarZ = BarnInZ1 - BarBack;
-        Piece barnRounds = b.Part("Progress Bar", 0f, barnBarZ, Floor + Slab + 2.6f, 180f, false).Named("Barn Rounds")
-            .Set("PuzzleProgressBar", "total", 13);
-        Piece barnPhase = b.Part("Progress Bar", 0f, barnBarZ, Floor + Slab + 1.9f, 180f, false).Named("Barn Phase")
-            .Set("PuzzleProgressBar", "total", 7);
-        b.Part("Confetti", 0f, -12.0f, Floor + Slab + 0.2f, 0f, false).Named("Barn Confetti");
-        float speakerZ = BarnInZ1 - SpeakerBack;
-        Piece speakerWest = b.Part("Intercom Speaker", -4f, speakerZ, Floor + Slab + 2.4f, 180f, false).Named("Speaker West");
-        Piece speakerEast = b.Part("Intercom Speaker", 4f, speakerZ, Floor + Slab + 2.4f, 180f, false).Named("Speaker East").Under(eastGroup);
-        Piece speakerNorth = b.Part("Intercom Speaker", -4f, speakerZ, Floor + Slab + 1.6f, 180f, false).Named("Speaker North").Under(northGroup);
-        b.Empty("Room Light 5 FFE6C4 8 1.0", 0f, -14.5f, Floor + 2.9f, false);
-        b.Empty("Room Light 6 FFE6C4 8 1.0", 0f, -20.5f, Floor + 2.9f, false);
-
-        // ================= the galleries: bars on the solid wall at one end of each window, a mic at the other =================
-        Piece Bar(string name, float x, float z, float height, float yaw, int total)
-            => b.Part("Progress Bar", x, z, Floor + Deck + height, yaw, false).Named(name).Scaled(GalleryBar, GalleryBar, GalleryBar)
-                .Set("PuzzleProgressBar", "total", total);
-        float wx = -ShedOut - BarBack * GalleryBar, ex = ShedOut + BarBack * GalleryBar, nz = ShedZ1 + BarBack * GalleryBar;
-        Piece westRounds = Bar("West Rounds", wx, SideBarZ, 0.95f, -90f, 13), westPhase = Bar("West Phase", wx, SideBarZ, 0.65f, -90f, 7);
-        Piece eastRounds = Bar("East Rounds", ex, SideBarZ, 0.95f, 90f, 13).Under(eastGroup), eastPhase = Bar("East Phase", ex, SideBarZ, 0.65f, 90f, 7).Under(eastGroup);
-        Piece northRounds = Bar("North Rounds", NorthBarX, nz, 0.95f, 0f, 15).Under(northGroup), northPhase = Bar("North Phase", NorthBarX, nz, 0.65f, 0f, 7).Under(northGroup);
-        // the window runs from just above the deck, so each mic hangs on the solid wall just past the window's end
-        Piece micWest = b.Part("Intercom Mic", -ShedOut - MicBack, MicSideZ, Floor + Deck + 0.45f, -90f, false).Named("Mic West");
-        Piece micEast = b.Part("Intercom Mic", ShedOut + MicBack, MicSideZ, Floor + Deck + 0.45f, 90f, false).Named("Mic East").Under(eastGroup);
-        Piece micNorth = b.Part("Intercom Mic", MicNorthX, ShedZ1 + MicBack, Floor + Deck + 0.45f, 0f, false).Named("Mic North").Under(northGroup);
-        micWest.Add("PuzzleIntercom", "speakers", speakerWest.Component("PuzzleIntercomSpeaker"));
-        micEast.Add("PuzzleIntercom", "speakers", speakerEast.Component("PuzzleIntercomSpeaker"));
-        micNorth.Add("PuzzleIntercom", "speakers", speakerNorth.Component("PuzzleIntercomSpeaker"));
+        // confetti on each gallery, for whoever is still up there when the count is checked
         b.Part("Confetti", -17.3f, 17.5f, Floor + Deck + 0.2f, 0f, false).Named("West Confetti");
-        b.Part("Confetti", 17.3f, 17.5f, Floor + Deck + 0.2f, 0f, false).Named("East Confetti").Under(eastGroup);
-        b.Part("Confetti", 8.5f, 26.3f, Floor + Deck + 0.2f, 0f, false).Named("North Confetti").Under(northGroup);
+        b.Part("Confetti", 17.3f, 17.5f, Floor + Deck + 0.2f, 0f, false).Named("East Confetti");
+        b.Part("Confetti", 8.5f, 26.3f, Floor + Deck + 0.2f, 0f, false).Named("North Confetti");
 
-        // ================= the start corner outside the barn door, facing arriving players =================
+        // ================= the start corner and the Counting Post, side by side on the pad, facing arriving players =================
         IsleKit.StartCorner(b, -4.0f, -27.5f, 180f, true, Floor, false);
-        // a U of lights open to the south: nothing on the approach to the barn door, every post 7 m or more from a stair
+        Piece check = CountingPost(bare);
+
+        // ================= the rule: start lights some of the noses and tells the check screen how many (CountDeal);
+        // a wrong count lights a different set; stop puts them all out. A right count wins by itself =================
+        Component deal = b.AddCustomScript(b.Empty("Count Deal", PostX, PostZ, Floor + 0.5f, false), "CountDeal");
+        Sdk.Set(deal, "lampPrefix", NosePrefix);
+        Sdk.Set(deal, "validator", CheckName);
+        Sdk.Set(deal, "least", Least);
+        Sdk.Set(deal, "most", Most);
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", deal, "Deal");
+        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", deal, "Dark");
+        check.On("PuzzleCountValidator", "onIncorrect", deal, "Redeal");      // deals again 3 s later, once the cross has been seen
+
+        // ================= lights: a U round the site, open to the south where players arrive, every post 7 m or
+        // more from a stair; a short string under the Counting Post's roof =================
         var site = new List<Vector3>();
         foreach (Vector2 p in new[] { new Vector2(-26f, -33f), new Vector2(-26f, -1f), new Vector2(-26f, 31f), new Vector2(0f, 31f),
                                       new Vector2(26f, 31f), new Vector2(26f, -1f), new Vector2(26f, -33f) })
             site.Add(new Vector3(p.x, Floor + 2.6f, p.y));
         Kit.LightString(b, "Site Lights", site, 0.4f, 0.5f, false, true, 2514);
-
-        // ================= Press In Order: one list per lobby size, each on its own Lobby group =================
-        Component bar(Piece p) => p.Component("PuzzleProgressBar");
-        var lists = new List<RollCall>
-        {
-            new RollCall("Roll Call 2", true, false, false, new[] { Kind.W, Kind.P }, 10, 8f,
-                new[] { bar(barnRounds), bar(westRounds) }, new[] { bar(barnPhase), bar(westPhase) }),
-            new RollCall("Roll Call 3", false, true, false, new[] { Kind.W, Kind.E, Kind.P }, 13, 7f,
-                new[] { bar(barnRounds), bar(westRounds), bar(eastRounds) }, new[] { bar(barnPhase), bar(westPhase), bar(eastPhase) }),
-            new RollCall("Roll Call 4", false, false, true, new[] { Kind.W, Kind.E, Kind.N }, 15, 7f,
-                new[] { bar(barnRounds), bar(westRounds), bar(eastRounds), bar(northRounds) },
-                new[] { bar(barnPhase), bar(westPhase), bar(eastPhase), bar(northPhase) }),
-        };
-        var oddsLists = new List<(string name, List<Kind> pairs, int rounds, int lobby)>();
-        Piece root = b.RootPiece;
-        foreach (RollCall rc in lists)
-        {
-            Piece group = IsleKit.Lobby(b, rc.Name, rc.Two, rc.Three, rc.Four);
-            Component pio = b.AddScript(group, "PuzzlePressInOrder");
-            var pairs = new List<Kind>();
-            foreach (Kind kind in rc.Kinds)
-                foreach (Stall s in plan.Stalls)
-                    if (s.Kind == kind)
-                    {
-                        Sdk.Add(pio, "lights", lamps[s.Name]);
-                        Sdk.Add(pio, "buttons", pads[s.Name]);
-                        pairs.Add(kind);
-                    }
-            foreach (Component c in rc.Bars) Sdk.Add(pio, "progressBars", c);
-            foreach (Component c in rc.Phases) Sdk.Add(pio, "phaseBars", c);
-            Sdk.Set(pio, "rounds", rc.Rounds);
-            Sdk.Set(pio, "holdAtEnd", true);
-            Sdk.Set(pio, "phaseSeconds", rc.Phase);
-            root.On("PuzzleSDK", "onPuzzleStart", pio, "Begin");
-            root.On("PuzzleSDK", "onPuzzleStop", pio, "End");
-            guard.On("PuzzlePresenceSensor", "onPressed", pio, "End");
-            oddsLists.Add((rc.Name, pairs, rc.Rounds, rc.Two ? 2 : rc.Three ? 3 : 4));
-        }
-        barnRounds.On("PuzzleProgressBar", "onFull", b.Puzzle, "Win");      // Win on one bar only
-
-        // ---- check 7: the guessing odds of a team short of a spotter, from the lists just built ----
-        bool oddsOk = GuessingOdds(oddsLists, out List<string> oddsLines);
-        foreach (string line in oddsLines) Debug.Log("[BWM] Reindeer Count: " + line);
-        if (!oddsOk) throw new Exception("Reindeer Count: a short team's guessing odds are over the spec's limits (see the table above)");
+        float eaveZ = PostZ - 0.36f, eaveH = Floor + PostHigh + 0.28f;      // the front edge of the post's little roof
+        Kit.LightString(b, "Counting Post Lights", new List<Vector3> { new Vector3(PostX - PostWide / 2f - 0.35f, eaveH, eaveZ), new Vector3(PostX + PostWide / 2f + 0.35f, eaveH, eaveZ) },
+            0.12f, 0.3f, false, false, 2515);
     }
 
-    // One Press In Order list
-    sealed class RollCall
+    // ---- the Counting Post: a roofed board on posts (IsleKit.BoardOnPosts, 0.12 m thick) east of the start corner,
+    // facing south. Its middle, its south face, its width and its face's foot and top above the pad ----
+    const float PostX = 3.0f, PostZ = -27.5f, PostFace = PostZ - 0.06f, PostWide = 2.8f, PostLow = 0.6f, PostHigh = 2.5f;
+    // Parts facing south run left to right towards +x, and their own +x points west. A Count Input is 1.02 m wide
+    // from 0.66 m west of its pivot (its + and - panel) to 0.36 m east, 0.84 m tall about its pivot, and its back is
+    // 0.17 m behind the pivot; a Count Validator's back is at its pivot (part-metrics)
+    const float CounterX = 2.5f, CounterH = 1.2f, CounterBack = 0.17f, CheckX = 3.75f, CheckH = 1.7f;
+
+    // Builds the post and returns its check screen
+    Piece CountingPost(Material bare)
     {
-        public readonly string Name; public readonly bool Two, Three, Four; public readonly Kind[] Kinds;
-        public readonly int Rounds; public readonly float Phase; public readonly Component[] Bars, Phases;
-        public RollCall(string name, bool two, bool three, bool four, Kind[] kinds, int rounds, float phase, Component[] bars, Component[] phases)
-        { Name = name; Two = two; Three = three; Four = four; Kinds = kinds; Rounds = rounds; Phase = phase; Bars = bars; Phases = phases; }
-    }
+        Piece post = IsleKit.BoardOnPosts(b, "Counting Post", PostX, PostZ, 180f, PostWide, PostLow, PostHigh, IsleKit.Board, false);
+        post.Transform.position = b.WorldPoint(PostX, PostZ, Floor, false);      // on the pad's top
 
-    // ---- part sizes behind their pivots (world\part-metrics.tsv) ----
-    const float SwitchBack = 0.073f, LiveBack = 0.006f, BarBack = 0.101f, SpeakerBack = 0.1f, MicBack = 0.02f;
-    const float GalleryBar = 0.4f;
-    const float SideBarZ = 0.25f;       // a 0.4 bar is 1.43 m long: z -0.47..0.97, on the solid wall before the window (z 1)
-    const float NorthBarX = -8.85f;     // x -9.57..-8.13, before the window (x -8)
+        // the counter (the game's + and - counter, 0 to 99) on the left and the check screen on the right
+        Piece counter = b.Part("Count Input", CounterX, PostFace - CounterBack, Floor + CounterH, 180f, false).Named("Counter");
+        Piece check = b.Part("Count Validator", CheckX, PostFace, Floor + CheckH, 180f, false).Named(CheckName);
+        Component checkC = check.Component("PuzzleCountValidator");
+        Sdk.Set(checkC, "input", counter.Component("PuzzleCountInput"));
+        // The Count Validator prefab carries its own poke button (a child 0.51 m under the screen, already its
+        // pokeButton): one press checks, and the screen re-arms it after each result.
+        Component pokeC = check.Component("PuzzlePokeButton");
+        pokeC.gameObject.name = "Check Button";
+        Sdk.Set(checkC, "pokeButton", pokeC);
+
+        // a bracket under the counter, and over it a painted reindeer with a glowing nose, to say what is counted:
+        // flat paint on the board's face, each layer 2 cm prouder than the one under it
+        var trim = new MeshBuilder();
+        float mid = CounterX - 0.15f;      // the counter's middle
+        Kit.AddBox(trim, new Vector3(mid, CounterH - 0.42f - 0.065f, PostFace - 0.3f), new Vector3(1.1f, 0.06f, 0.6f), IsleKit.DarkWood);
+        void Paint(float x, float y0, float wide, float tall, Color colour, int layer = 1)
+            => Kit.AddBox(trim, new Vector3(x, y0, PostFace - 0.01f * layer), new Vector3(wide, tall, 0.02f * layer), colour);
+        var brown = new Color(0.45f, 0.3f, 0.18f);
+        var dark = new Color(0.16f, 0.11f, 0.08f);
+        Paint(mid, 1.78f, 0.36f, 0.42f, brown);                                  // the head
+        foreach (float side in new[] { -1f, 1f })
+        {
+            Paint(mid + side * 0.24f, 2.06f, 0.12f, 0.08f, brown);               // ears
+            Paint(mid + side * 0.12f, 2.20f, 0.05f, 0.24f, IsleKit.Cream);       // antlers
+            Paint(mid + side * 0.21f, 2.32f, 0.14f, 0.05f, IsleKit.Cream);
+            Paint(mid + side * 0.09f, 2.05f, 0.05f, 0.05f, dark, 2);             // eyes
+            Paint(mid + side * 0.24f, 1.875f, 0.10f, 0.04f, IsleKit.Gold);       // rays beside the nose
+        }
+        var south = new Vector2(0f, -1f);
+        AddSolid(trim, Solid.Roundel(new Vector3(mid, 1.895f, PostFace), south, 0.11f, 0.04f, NoseRed, ""));       // the nose's red paint
+        AddSolid(trim, Solid.Roundel(new Vector3(mid, 1.895f, PostFace), south, 0.06f, 0.06f, Warm, ""));          // and the lamp, lit
+        OnPad("Counting Post Paint", trim, bare, false);
+        return check;
+    }
 
     // A clear glass pane in a window band, centred at (x, z) half way up the band; yaw 90 on the side walls, 0 on the
     // north (PuzzleBuilder.Part keeps the Glass prefab upright; Pane sizes it in metres)
@@ -243,14 +208,13 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
     }
 
     // Every solid of one group into one mesh piece
-    void Emit(string name, string group, Material material, bool collider, Piece parent)
+    void Emit(string name, string group, Material material)
     {
         var mb = new MeshBuilder();
         foreach (Solid s in solids)
             if (s.Group == group) AddSolid(mb, s);
         if (mb.VertexCount == 0) throw new Exception("Reindeer Count: nothing in group " + group);
-        Piece piece = OnPad(name, mb, material, collider);
-        if (parent != null) piece.Under(parent);
+        OnPad(name, mb, material);
     }
 
     // A convex solid's faces, flat-shaded, each wound to face out (Make oriented them)
@@ -261,107 +225,14 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
                 mb.Tri(s.P[f[0]], s.P[f[k]], s.P[f[k + 1]], s.Colour);
     }
 
-    // ---- the floor plan in the barn: the shed at 1:3, north up, centred at (0, -17.5) ----
-    void BuildPlan(Layout plan, Material bare, Piece northGroup)
-    {
-        const float y0 = Slab, yIce = Slab + 0.01f, yLine = Slab + 0.02f, yTop = Slab + 0.03f;
-        Color shedLine = IsleKit.DarkWood, stallLine = IsleKit.DarkWood, pane = new Color(0.45f, 0.7f, 0.9f);
-        Color westMark = IsleKit.Green, eastMark = IsleKit.Gold, northMark = new Color(0.25f, 0.45f, 0.8f);
-
-        // the cream ground, walkable
-        var ground = new MeshBuilder();
-        Kit.AddBox(ground, new Vector3(0f, y0, PlanCentre.y), new Vector3(12.0f, 0.01f, 12.0f), IsleKit.Cream);
-        OnPad("Floor Plan Ground", ground, bare);
-
-        var mb = new MeshBuilder();
-        void Strip(Vector2 a, Vector2 c, float width, float y, float h, Color colour)
-        {
-            Vector2 d = c - a;
-            float len = d.magnitude;
-            if (len < 1e-4f) return;
-            Vector2 mid = (a + c) / 2f;
-            Kit.AddBox(mb, new Vector3(mid.x, y, mid.y), new Vector3(width, h, len + width), colour, Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg);
-        }
-        Vector2 P(float x, float z) => PlanPoint(new Vector2(x, z));
-
-        // the shed's outline (its wall centre lines) with the three window bands marked over it
-        float wi = (ShedOut + ShedIn) / 2f, s0 = (ShedZ0 - 0.15f), s1 = (ShedZ1 - 0.15f);
-        Strip(P(-wi, s0), P(wi, s0), 0.06f, yLine, 0.01f, shedLine);
-        Strip(P(-wi, s1), P(wi, s1), 0.06f, yLine, 0.01f, shedLine);
-        Strip(P(-wi, s0), P(-wi, s1), 0.06f, yLine, 0.01f, shedLine);
-        Strip(P(wi, s0), P(wi, s1), 0.06f, yLine, 0.01f, shedLine);
-        Strip(P(-wi, WinZ0), P(-wi, WinZ1), 0.1f, yTop, 0.01f, pane);
-        Strip(P(wi, WinZ0), P(wi, WinZ1), 0.1f, yTop, 0.01f, pane);
-        Strip(P(-NWinX, s1), P(NWinX, s1), 0.1f, yTop, 0.01f, pane);
-
-        // each pad's square in pale ice, each stall's outline as a U (its gap on the open side), pavilions as four dots
-        foreach (Stall s in plan.Stalls)
-        {
-            Vector2 c = PlanPoint(s.C);
-            Kit.AddBox(mb, new Vector3(c.x, yIce, c.y), new Vector3(0.96f, 0.01f, 0.96f), IsleKit.Ice);
-            if (s.Kind == Kind.P)
-            {
-                foreach (float sx in new[] { -1f, 1f })
-                    foreach (float sz in new[] { -1f, 1f })
-                    {
-                        Vector2 post = PlanPoint(s.At(sx * PavHalf, sz * PavHalf));
-                        Kit.AddBox(mb, new Vector3(post.x, yLine, post.y), new Vector3(0.09f, 0.01f, 0.09f), stallLine);
-                    }
-                continue;
-            }
-            Vector2 bl = PlanPoint(s.At(-StallW / 2f, -StallD / 2f)), br = PlanPoint(s.At(StallW / 2f, -StallD / 2f));
-            Vector2 fl = PlanPoint(s.At(-StallW / 2f, StallD / 2f)), fr = PlanPoint(s.At(StallW / 2f, StallD / 2f));
-            Strip(bl, br, 0.05f, yLine, 0.01f, stallLine);
-            Strip(bl, fl, 0.05f, yLine, 0.01f, stallLine);
-            Strip(br, fr, 0.05f, yLine, 0.01f, stallLine);
-        }
-
-        // the landmarks: the fir (a green disc with a gold star), the hay (gold), the trough (ice), the sledge (green and gold)
-        Vector2 firAt = P(HX, HZ);
-        Kit.AddDisc(mb, new Vector3(firAt.x, yLine, firAt.y), 1.8f / 3f, 0.01f, IsleKit.Green);
-        Kit.AddDisc(mb, new Vector3(firAt.x, yTop, firAt.y), 0.12f, 0.01f, IsleKit.Gold, 10);
-        foreach (Mark m in plan.Marks)
-        {
-            Vector2 c = PlanPoint(m.C);
-            Color colour = m.Name == "Hay" ? IsleKit.Gold : m.Name == "Trough" ? IsleKit.Ice : IsleKit.Green;
-            Kit.AddBox(mb, new Vector3(c.x, yLine, c.y), new Vector3(m.Size.x / 3f, 0.01f, m.Size.z / 3f), colour, m.Yaw);
-            if (m.Name == "Sledge")
-                Kit.AddBox(mb, new Vector3(c.x, yTop, c.y), new Vector3(m.Size.x / 3f * 0.7f, 0.01f, 0.04f), IsleKit.Gold, m.Yaw);
-        }
-
-        // the West and East galleries as strips outside the outline, each with its letter south of it
-        Strip(P(-17.3f, 0f), P(-17.3f, 18f), 0.6f, yLine, 0.01f, westMark);
-        Strip(P(17.3f, 0f), P(17.3f, 18f), 0.6f, yLine, 0.01f, eastMark);
-        Letter(Strip, "W", P(-17.3f, 0f) + new Vector2(0f, -0.75f), 0.5f, yLine, westMark);
-        Letter(Strip, "E", P(17.3f, 0f) + new Vector2(0f, -0.75f), 0.5f, yLine, eastMark);
-        OnPad("Floor Plan", mb, bare, false);
-
-        // the North gallery's mark, in 4-player lobbies only
-        var north = new MeshBuilder();
-        mb = north;
-        Vector2 na = P(-9f, 26.3f), nb = P(9f, 26.3f);
-        na.y = Mathf.Min(na.y, BarnInZ1 - 0.3f); nb.y = na.y;
-        Strip(na, nb, 0.5f, yLine, 0.01f, northMark);
-        Letter(Strip, "N", new Vector2(na.x - 0.55f, na.y), 0.45f, yLine, northMark);
-        OnPad("Floor Plan North", north, bare, false).Under(northGroup);
-    }
-
-    // A capital W, E or N drawn in strips, centred at 'c', 'size' tall, read facing north
-    static void Letter(Action<Vector2, Vector2, float, float, float, Color> strip, string letter, Vector2 c, float size, float y, Color colour)
-    {
-        float[][] strokes = letter == "W" ? new[] { new[] { 0f, 1f, 0.25f, 0f }, new[] { 0.25f, 0f, 0.5f, 0.6f }, new[] { 0.5f, 0.6f, 0.75f, 0f }, new[] { 0.75f, 0f, 1f, 1f } }
-            : letter == "E" ? new[] { new[] { 0f, 0f, 0f, 1f }, new[] { 0f, 1f, 0.8f, 1f }, new[] { 0f, 0.5f, 0.65f, 0.5f }, new[] { 0f, 0f, 0.8f, 0f } }
-            : new[] { new[] { 0f, 0f, 0f, 1f }, new[] { 0f, 1f, 0.8f, 0f }, new[] { 0.8f, 0f, 0.8f, 1f } };
-        foreach (float[] s in strokes)
-            strip(c + new Vector2((s[0] - 0.5f) * size, (s[1] - 0.5f) * size), c + new Vector2((s[2] - 0.5f) * size, (s[3] - 0.5f) * size), 0.05f, y, 0.01f, colour);
-    }
-
-    // ==== PURE BEGIN: geometry, placement and sight checks (no editor calls; tested offline against stubs) ====
+    // ==== PURE BEGIN: geometry, placement and sight checks (no editor calls; run offline as well as in the build) ====
 
     public enum Kind { W, E, N, P }
     public const int Gw = 0, Ge = 1, Gn = 2;          // the galleries
     public static string GalleryName(int g) => g == Gw ? "West" : g == Ge ? "East" : "North";
-    // Whether gallery g is meant to see a stall of this kind
+    // Whether gallery g must see a stall of this kind: its own six closed stalls, and from the West and East the
+    // pavilions. A pavilion is open all round, so the North gallery sees it too wherever nothing stands in the way:
+    // the search neither asks for that nor forbids it.
     public static bool Sees(int g, Kind k) => k == Kind.P ? g != Gn : (int)k == g;
 
     // ---- the shed (local metres, heights above the pad top) ----
@@ -369,35 +240,33 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
     public const float ShedOut = 16.3f, ShedIn = 16f, ShedZ0 = -7.3f, ShedZ1 = 25.3f, ShedInZ0 = -7f, ShedInZ1 = 25f;
     public const float Eaves = 4.6f, RoofTop = 4.9f, Ridge = 6.0f, Sill = 3.0f, Head = 4.0f;
     public const float WinZ0 = 1f, WinZ1 = 17f, NWinX = 8f, Mullion = 0.05f, PaneW = (16f - 7f * Mullion) / 8f;
-    public const float GateX = 10f, GateZ = -7.15f, GateX0 = 8.99f, GateX1 = 11.11f, GateTop = 2.3f;   // the Way Out's frame
-    // The decks stand 2.9 m up (the spec had 2.5): players' eyes are only 0.6 m above their feet, so a standing eye is at
-    // 3.5 m, mid-window, where the spec's sight lines put it. Eye points: crouch 0.4, stand 0.6, 1.0, jump 1.6 above the deck.
+    // The decks stand 2.9 m up: players' eyes are only 0.6 m above their feet, so a standing eye is at 3.5 m,
+    // mid-window. Eye points: crouch 0.4, stand 0.6, 1.0, jump 1.6 above the deck.
     public const float Deck = 2.9f;
     public const int StairSteps = 10, Stand = 1;
     public static readonly float[] EyeUp = { 0.4f, 0.6f, 1.0f, 1.6f };
-    public const float MicSideZ = 17.5f, MicNorthX = 8.5f;     // mics on the solid wall just past each window's end, at eye height
     // ---- the stalls ----
     public const float StallW = 2.0f, StallD = 2.8f, StallWall = 0.15f, StallRoof = 2.65f, LampH = 2.2f;
     public const float LampOut = 0.142f, DiscOut = 0.222f;      // a Light 6's pivot and face in front of its back (part-metrics)
     public const float PavHalf = 1.2f, PavPost = 0.15f, PavBulb = 2.25f, PavPivot = 2.6f;
+    // The noses' paint: a red disc on a closed stall's back wall, behind and round its lamp (0.48 m across), and the
+    // tops of a pavilion's posts, from PavRed up, round its pendant. Below that the posts, and the roof, are in the
+    // pavilion's own colour (by the order they were placed in: one gold, one green), so that the same pavilion can
+    // be told from every gallery.
+    public const float NoseDisc = 0.42f, PavRed = 1.9f;
+    public static readonly Color NoseRed = new Color(0.95f, 0.1f, 0.08f);
+    public static readonly Color[] PavColours = { IsleKit.Gold, IsleKit.Green };
     public const float MinApart = 4.8f, FirClear = 4.5f, MarkClear = 3.6f, Spread = 13.5f;
-    // Regions: North stalls z <= 13 (13 m or more from the North deck); West, East and pavilions anywhere. The spec's
-    // West x >= -4 and East x <= 4 left almost no layout that passes check 3 (a stall's lit side walls show up to about
-    // 45 degrees off its axis), and the checks themselves enforce what those regions were for
+    // Regions: North stalls z <= 13 (13 m or more from the North deck); West, East and pavilions anywhere (keeping
+    // West stalls to x >= -4 and East to x <= 4 left almost no layout that passes the galleries' check: a stall's lit
+    // side walls show up to about 45 degrees off its axis)
     public const float NorthMaxZ = 13f;
     public const int Tries = 600, SampleStep = 3;      // candidates per stall; every third exterior point is checked while drawing
     public static readonly int[] Rejects = new int[6];   // diagnostics: candidates refused for (own sight, hiding another, seen from W, E, N, outside)
     public static string LastFail = "";     // which stall the last failed draw could not place
-    // ---- the barn ----
-    public const float BarnX = 6.5f, BarnIn = 6.2f, BarnZ0 = -24f, BarnZ1 = -11f, BarnInZ0 = -23.7f, BarnInZ1 = -11.3f;
-    public const float Slab = 0.15f, BarnWall = 3.2f, BarnRidge = 5.2f, DoorHalf = 0.63f, DoorTop = Slab + 2.05f;
-    public static readonly Vector2 PlanCentre = new Vector2(0f, -17.5f);
     // ---- the search ----
     public const int SeedBase = 2512, SeedSpan = 2000;
     public const int FoundSeed = 2570;                 // the seed the last search found: tried first, so builds are stable
-    // Pavilions against the North gallery: false (the default) checks them only against West and East, since they are
-    // dark in 4-player lobbies, the only ones with a North gallery; true also forbids the North gallery to see them.
-    public static readonly bool StrictPavilions = false;
 
     public static Vector2 Turn(float x, float z, float yaw)
     {
@@ -405,7 +274,6 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         return new Vector2(x * Mathf.Cos(a) + z * Mathf.Sin(a), -x * Mathf.Sin(a) + z * Mathf.Cos(a));
     }
     public static float Aim(Vector2 from, Vector2 to) => Mathf.Atan2(to.x - from.x, to.y - from.y) * Mathf.Rad2Deg;
-    public static Vector2 PlanPoint(Vector2 shed) => new Vector2(shed.x / 3f, PlanCentre.y + (shed.y - HZ) / 3f);
     static Vector3 V(Vector2 p, float y) => new Vector3(p.x, y, p.y);
     static float Ax(Vector3 v, int k) => k == 0 ? v.x : k == 1 ? v.y : v.z;
 
@@ -417,7 +285,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         public Vector3 Min, Max;
         public Color Colour; public string Group;  // the mesh it is drawn in ("" = none: a check volume only)
         public bool Check = true;                  // takes part in the sight checks
-        public bool Sure = true;                   // surely blocks sight (false: rails, bars, generous volumes; these only make "must see" harder)
+        public bool Sure = true;                   // surely blocks sight (false: decks, rails, generous volumes; these only make "must see" harder)
         public int Owner = -1;                     // the stall it belongs to; -2 the fir and landmarks; -1 fixed
 
         public static Solid Make(Vector3[] p, int[][] f, Color colour, string group)
@@ -486,6 +354,27 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             return Make(p, f.ToArray(), Color.white, group);
         }
 
+        // A round plate of 16 sides standing against a wall: its back's middle at 'centre', facing along 'facing'
+        // (x, z; a unit vector), 'thick' deep (the noses' red paint)
+        public static Solid Roundel(Vector3 centre, Vector2 facing, float radius, float thick, Color colour, string group)
+        {
+            const int n = 16;
+            Vector3 across = new Vector3(-facing.y, 0f, facing.x), front = new Vector3(facing.x, 0f, facing.y) * thick;
+            var p = new Vector3[2 * n];
+            for (int i = 0; i < n; i++)
+            {
+                float a = 2f * Mathf.PI * i / n;
+                p[i] = centre + (across * Mathf.Sin(a) + Vector3.up * Mathf.Cos(a)) * radius;
+                p[n + i] = p[i] + front;
+            }
+            var f = new List<int[]>();
+            var cap0 = new int[n]; var cap1 = new int[n];
+            for (int i = 0; i < n; i++) { cap0[i] = i; cap1[i] = n + i; }
+            f.Add(cap0); f.Add(cap1);
+            for (int i = 0; i < n; i++) { int j = (i + 1) % n; f.Add(new[] { i, j, n + j, n + i }); }
+            return Make(p, f.ToArray(), colour, group);
+        }
+
         // Whether the segment a .. a + d passes through the solid's inside (touching a face does not count)
         public bool Hits(Vector3 a, Vector3 d)
         {
@@ -532,6 +421,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
     public sealed class Stall
     {
         public Kind Kind; public int Number, Id; public Vector2 C; public float Yaw;     // Id: the order it was placed in (its solids' Owner)
+        public int Nose;                                       // 1 to 20: its lamp is "Nose <n>"
         public Vector3 Lamp;                                   // the lamp part's pivot (x, height, z)
         public readonly List<Vector3> Targets = new List<Vector3>();     // [0] the lamp's disc or bulb, then points its light reaches
         public readonly int[] Seen = new int[3];               // eye points of each gallery that see the lamp
@@ -554,8 +444,6 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
     {
         var watch = Stopwatch.StartNew();
         List<Solid> fixedSolids = FixedSolids();
-        if (!BarnSealed(fixedSolids, out string barnWhy)) throw new Exception("Reindeer Count: check 6 (barn seal) failed: " + barnWhy);
-        log.Add("check 6: the barn is sealed but for its door (rays from a grid inside, 64 directions)");
         List<Vector3> outside = ExteriorPoints(fixedSolids), sample = new List<Vector3>();
         for (int k = 0; k < outside.Count; k += SampleStep) sample.Add(outside[k]);
         int unplaced = 0, spacing = 0, gallery = 0, exterior = 0;
@@ -568,14 +456,14 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             if (layout == null) { unplaced++; continue; }
             if (!Spacing(layout, out lastWhy)) { spacing++; continue; }
             if (!Galleries(layout, out lastWhy)) { gallery++; continue; }
-            if (!Exterior(layout, outside, out lastWhy, out List<string> table)) { exterior++; log.Add("seed " + seed + " failed check 4: " + lastWhy); continue; }
+            if (!Exterior(layout, outside, out lastWhy, out List<string> table)) { exterior++; log.Add("seed " + seed + " failed outside the shed: " + lastWhy); continue; }
             log.Add("seed " + seed + (seed == FoundSeed ? " (FoundSeed)" : " passed: set ReindeerCountPuzzle.FoundSeed = " + seed + " so later builds start there")
                 + "; tried " + (n + 1) + " seeds (" + unplaced + " would not place, " + spacing + " failed spacing, " + gallery + " the galleries, "
                 + exterior + " the exterior) in " + (watch.ElapsedMilliseconds / 1000f).ToString("0.0") + " s");
-            log.Add("check 5: no other stall, landmark or the fir within 1.6 m of a lamp; pads 1.6 m or more apart");
-            log.Add("check 3 and 8: stalls (kind, centre, yaw; eye points of " + (21 * EyeUp.Length) + " per gallery that see its lamp: West / East / North):");
+            log.Add("spacing: no other stall, landmark or the fir within 1.6 m of a nose's lamp");
+            log.Add("stalls (kind, nose, centre, yaw; eye points of " + (21 * EyeUp.Length) + " per gallery that see its lamp: West / East / North):");
             foreach (Stall s in layout.Stalls)
-                log.Add("  " + s.Name + "  (" + s.C.x.ToString("0.0") + ", " + s.C.y.ToString("0.0") + ") yaw " + s.Yaw.ToString("0") + ": "
+                log.Add("  " + s.Name + "  Nose " + s.Nose + "  (" + s.C.x.ToString("0.0") + ", " + s.C.y.ToString("0.0") + ") yaw " + s.Yaw.ToString("0") + ": "
                     + s.Seen[Gw] + " / " + s.Seen[Ge] + " / " + s.Seen[Gn]);
             log.AddRange(table);
             return layout;
@@ -613,8 +501,8 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         AddLandmarks(layout);
 
         // A candidate is kept only if its own gallery still sees its lamp from three standing points or more, it takes
-        // no stall already placed below three, and no other gallery sees its light (more stalls only hide more, so a
-        // candidate that passes now still passes at the end; the full checks run again on the finished layout)
+        // no stall already placed below three, and no other gallery sees a closed stall's light (more stalls only hide
+        // more, so a candidate that passes now still passes at the end; the full checks run again on the finished layout)
         Vector3[][,,] eyes = { Eyes(Gw), Eyes(Ge), Eyes(Gn) };
         var seen = new List<bool[][]>();          // per placed stall and gallery: which of the 7 standing points see its lamp
         int[] kindsSeen = drawPoints == null ? null : new int[drawPoints.Count];      // per sample point: the kinds it sees so far
@@ -664,14 +552,14 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
                     // no other gallery sees its light
                     for (int g = 0; g < 3 && ok; g++)
                     {
-                        if (Sees(g, kind) || (kind == Kind.P && g == Gn && !StrictPavilions)) continue;
+                        if (kind == Kind.P || Sees(g, kind)) continue;
                         foreach (Vector3 eye in eyes[g])
                         {
                             foreach (Vector3 t in st.Targets) if (Visible(eye, t, withSure)) { ok = false; Rejects[2 + g]++; break; }
                             if (!ok) break;
                         }
                     }
-                    // no point outside (a sample of check 4's) that sees it already sees a kind it must not go with: each
+                    // no point outside (a sample of Exterior's) that sees it already sees a kind it must not go with: each
                     // placed stall's footprint was taken with fewer stalls in the way, so footprints only shrink later
                     bool[] foot = null;
                     if (ok && drawPoints != null)
@@ -699,12 +587,14 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
                 }
                 if (!placed) { LastFail = kind + " stall " + (i + 1); return null; }
             }
-        // number each kind from north to south, then west to east, so the names read in order on the plan
+        // number each kind from north to south, then west to east; the noses run on through the kinds (West 1 to 6,
+        // East 7 to 12, North 13 to 18, the pavilions 19 and 20)
         layout.Stalls.Sort((p, q) => p.Kind != q.Kind ? p.Kind.CompareTo(q.Kind) : p.C.y != q.C.y ? q.C.y.CompareTo(p.C.y) : p.C.x.CompareTo(q.C.x));
         for (int i = 0, n = 0; i < layout.Stalls.Count; i++)
         {
             if (i > 0 && layout.Stalls[i].Kind != layout.Stalls[i - 1].Kind) n = 0;
             layout.Stalls[i].Number = ++n;
+            layout.Stalls[i].Nose = i + 1;
         }
         return layout;
     }
@@ -730,7 +620,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         return s;
     }
 
-    // A stall's walls, roof, lamp and sight targets, and its reindeer
+    // A stall's walls, roof, lamp and sight targets, its nose's red paint, and its reindeer
     static void AddStall(List<Solid> into, Stall s)
     {
         const string g = "Inside";
@@ -744,6 +634,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             Add(into, Solid.Box(s.At(side, back + len / 2f), 0f, new Vector3(StallWall, StallRoof, len), s.Yaw, wall, g), s.Id);
             Add(into, Solid.Box(s.At(0f, 0f), StallRoof, new Vector3(StallW, 0.15f, StallD), s.Yaw, roof, g), s.Id);
             s.Lamp = V(s.At(0f, back + LampOut), LampH);
+            Add(into, Solid.Roundel(V(s.At(0f, back), LampH), Turn(0f, 1f, s.Yaw), NoseDisc, 0.03f, NoseRed, g), s.Id, false, false);     // paint: drawn only
             s.Targets.Add(V(s.At(0f, back + DiscOut + 0.01f), LampH));                     // the lamp's disc
             s.Targets.Add(V(s.At(-0.6f, back + 0.02f), LampH));                            // the back wall beside it
             s.Targets.Add(V(s.At(0.6f, back + 0.02f), LampH));
@@ -754,10 +645,14 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         }
         else
         {
+            Color own = PavColours[s.Id % PavColours.Length];
             foreach (float sx in new[] { -1f, 1f })
                 foreach (float sz in new[] { -1f, 1f })
-                    Add(into, Solid.Box(s.At(sx * PavHalf, sz * PavHalf), 0f, new Vector3(PavPost, StallRoof, PavPost), s.Yaw, wall, g), s.Id);
-            Add(into, Solid.Box(s.At(0f, 0f), StallRoof, new Vector3(2 * PavHalf + 0.3f, 0.15f, 2 * PavHalf + 0.3f), s.Yaw, roof, g), s.Id);
+                {
+                    Add(into, Solid.Box(s.At(sx * PavHalf, sz * PavHalf), 0f, new Vector3(PavPost, PavRed, PavPost), s.Yaw, own, g), s.Id);
+                    Add(into, Solid.Box(s.At(sx * PavHalf, sz * PavHalf), PavRed, new Vector3(PavPost, StallRoof - PavRed, PavPost), s.Yaw, NoseRed, g), s.Id);
+                }
+            Add(into, Solid.Box(s.At(0f, 0f), StallRoof, new Vector3(2 * PavHalf + 0.3f, 0.15f, 2 * PavHalf + 0.3f), s.Yaw, own, g), s.Id);
             s.Lamp = V(s.C, PavPivot);
             s.Targets.Add(V(s.C, PavBulb));
             float inner = PavHalf - PavPost / 2f - 0.02f;
@@ -788,7 +683,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         }
         Part(0f, -0.38f, 0.3f, new Vector3(0.16f, 0.55f, 0.18f), brown);                  // neck
         Part(0f, -0.5f, 0.82f, new Vector3(0.2f, 0.2f, 0.36f), brown);                    // head
-        Part(0f, -0.7f, 0.86f, new Vector3(0.08f, 0.08f, 0.06f), dark);                   // nose (dark: red is the lamps')
+        Part(0f, -0.7f, 0.86f, new Vector3(0.08f, 0.08f, 0.06f), dark);                   // its own nose (dark: the red one is the lamp's disc on the wall)
         Part(0f, 0.82f, 0.3f, new Vector3(0.1f, 0.1f, 0.08f), IsleKit.Cream);             // tail
         Add(into, Solid.Box(s.At(x, 0.25f), 0.02f, new Vector3(0.5f, 0.42f, 1.1f), s.Yaw, Color.white, ""), s.Id);
         Add(into, Solid.Box(s.At(x, 0.05f), 0f, new Vector3(0.6f, 1.7f, 1.6f), s.Yaw, Color.white, ""), s.Id, true, false);
@@ -826,7 +721,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         Add(layout.Solids, Solid.Frustum(new Vector2(HX, HZ), 0.5f, 1.3f, 4.35f, 0.15f, ""), -2, true, false);
     }
 
-    // Everything that never moves: the shed's shell and floor, the galleries, the vestibule, the barn and the pad
+    // Everything that never moves: the shed's shell and floor, the galleries and the pad
     public static List<Solid> FixedSolids()
     {
         var list = new List<Solid>();
@@ -837,7 +732,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
 
         Add2(Solid.Block(-27f, 27f, -1.5f, 0f, -35f, 33f, IsleKit.Stone, "Pad"), false);
 
-        // ---- the shed: walls with the three window bands and the Way Out's frame, mullions, roof and ridge ----
+        // ---- the shed: walls with the three window bands and their mullions, a blank south wall, roof and ridge ----
         const string sh = "Shed";
         foreach (float sx in new[] { -1f, 1f })
         {
@@ -861,9 +756,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             float m1 = -NWinX + k * (PaneW + Mullion), m0 = m1 - Mullion;
             Add2(Solid.Block(m0, m1, Sill, Head, ShedInZ1, ShedZ1, dark, sh));
         }
-        Add2(Solid.Block(-i, GateX0, low, Eaves, ShedZ0, ShedInZ0, wood, sh));
-        Add2(Solid.Block(GateX1, i, low, Eaves, ShedZ0, ShedInZ0, wood, sh));
-        Add2(Solid.Block(GateX0, GateX1, GateTop, Eaves, ShedZ0, ShedInZ0, wood, sh));
+        Add2(Solid.Block(-i, i, low, Eaves, ShedZ0, ShedInZ0, wood, sh));
         Add2(Solid.Block(-o - 0.15f, o + 0.15f, Eaves, RoofTop, ShedZ0 - 0.15f, ShedZ1 + 0.15f, dark, sh));
         Add2(Solid.ExtrudeX(-o - 0.15f, o + 0.15f, new[] { new Vector2(ShedZ0 - 0.15f, RoofTop), new Vector2(ShedZ1 + 0.15f, RoofTop), new Vector2(HZ, Ridge) }, dark, sh));
         Add2(Solid.Block(-i, i, -0.1f, 0.02f, ShedInZ0, ShedInZ1, dark, "Inside"));
@@ -889,10 +782,6 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             Add2(Solid.Block(sx * (o + 0.8f) - sx * 0.15f, sx * (o + 0.8f), Deck - 0.2f, Deck + 1.0f, 0f, 0.15f, dark, g), true, false);   // post beside the stair
             for (int s = 0; s < StairSteps; s++)
                 Add2(Solid.Block(sx * (o + 0.8f), outX, low, Deck * (s + 1) / StairSteps, -0.3f * StairSteps + 0.3f * s, -0.3f * StairSteps + 0.3f * (s + 1), IsleKit.Stone, g), true, false);
-            // the bars and the mic on the wall
-            float bx0 = wallX, bx1 = wallX + sx * BarBackPure * 0.4f;
-            Add2(Solid.Block(bx0, bx1, Deck + 0.55f, Deck + 1.05f, -0.47f, 0.97f, Color.white, ""), true, false);
-            Add2(Solid.Block(wallX, wallX + sx * 0.08f, Deck + 0.29f, Deck + 0.61f, MicSideZ - 0.1f, MicSideZ + 0.1f, Color.white, ""), true, false);
         }
         {
             const string g = "North Gallery";
@@ -911,48 +800,13 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
             Add2(Solid.Block(-9f, -8.85f, Deck - 0.2f, Deck + 1.0f, 25.95f, 26.1f, dark, g), true, false);
             for (int s = 0; s < StairSteps; s++)
                 Add2(Solid.Block(-9f - 0.3f * StairSteps + 0.3f * s, -9f - 0.3f * StairSteps + 0.3f * (s + 1), low, Deck * (s + 1) / StairSteps, 26.1f, 27.3f, IsleKit.Stone, g), true, false);
-            Add2(Solid.Block(NorthBarXPure - 0.72f, NorthBarXPure + 0.72f, Deck + 0.55f, Deck + 1.05f, ShedZ1, ShedZ1 + 0.04f, Color.white, ""), true, false);
-            Add2(Solid.Block(MicNorthX - 0.1f, MicNorthX + 0.1f, Deck + 0.29f, Deck + 0.61f, ShedZ1, ShedZ1 + 0.08f, Color.white, ""), true, false);
         }
 
-        // ---- the Way Out's vestibule: a baffle and a roof, so no straight line runs from outside to the gate ----
-        {
-            const string g = "Vestibule";
-            Add2(Solid.Block(8.5f, 8.65f, low, 3.0f, -10.7f, ShedZ0, wood, g));
-            Add2(Solid.Block(8.5f, 8.65f, 2.4f, 3.0f, -12.15f, -10.7f, wood, g));             // over the exit
-            Add2(Solid.Block(8.5f, 12.5f, low, 3.0f, -12.3f, -12.15f, wood, g));
-            Add2(Solid.Block(12.35f, 12.5f, low, 3.0f, -12.15f, ShedZ0, wood, g));
-            Add2(Solid.Block(8.65f, 11.0f, low, 3.0f, -9.675f, -9.525f, wood, g));             // the baffle
-            Add2(Solid.Block(8.4f, 12.6f, 3.0f, 3.2f, -12.4f, ShedZ0 + 0.25f, dark, g));       // roof, into the shed's wall
-        }
-
-        // ---- the Tally Barn: walls, a flat ceiling under the gable (the seal), closed gables, roof, floor slab ----
-        {
-            const string g = "Barn";
-            const float top = BarnWall + 0.05f;
-            Add2(Solid.Block(-BarnX, BarnX, low, top, BarnInZ1, BarnZ1, wood, g));
-            Add2(Solid.Block(-BarnX, -DoorHalf, low, top, BarnZ0, BarnInZ0, wood, g));
-            Add2(Solid.Block(DoorHalf, BarnX, low, top, BarnZ0, BarnInZ0, wood, g));
-            Add2(Solid.Block(-DoorHalf, DoorHalf, DoorTop, top, BarnZ0, BarnInZ0, wood, g));   // lintel
-            Add2(Solid.Block(-DoorHalf, DoorHalf, low, Slab, BarnZ0, BarnInZ0, wood, g));      // under the door
-            Add2(Solid.Block(-BarnX, -BarnIn, low, top, BarnInZ0, BarnInZ1, wood, g));
-            Add2(Solid.Block(BarnIn, BarnX, low, top, BarnInZ0, BarnInZ1, wood, g));
-            Add2(Solid.Block(-BarnX, BarnX, BarnWall, BarnWall + 0.15f, BarnZ0, BarnZ1, dark, g));
-            float mid = (BarnZ0 + BarnZ1) / 2f;
-            foreach (float sx in new[] { -1f, 1f })
-                Add2(Solid.ExtrudeX(Mathf.Min(sx * BarnX, sx * BarnIn), Mathf.Max(sx * BarnX, sx * BarnIn),
-                    new[] { new Vector2(BarnZ0, BarnWall + 0.1f), new Vector2(BarnZ1, BarnWall + 0.1f), new Vector2(mid, BarnRidge + 0.05f) }, wood, g));
-            float slope = (BarnRidge - BarnWall) / (mid - BarnZ0), eave = BarnWall - 0.4f * slope;
-            Add2(Solid.ExtrudeX(-BarnX - 0.3f, BarnX + 0.3f, new[] { new Vector2(BarnZ0 - 0.4f, eave), new Vector2(mid, BarnRidge), new Vector2(mid, BarnRidge + 0.2f), new Vector2(BarnZ0 - 0.4f, eave + 0.2f) }, dark, g));
-            Add2(Solid.ExtrudeX(-BarnX - 0.3f, BarnX + 0.3f, new[] { new Vector2(BarnZ1 + 0.4f, eave), new Vector2(mid, BarnRidge), new Vector2(mid, BarnRidge + 0.2f), new Vector2(BarnZ1 + 0.4f, eave + 0.2f) }, dark, g));
-            Add2(Solid.Block(-BarnIn, BarnIn, -0.1f, Slab, BarnInZ0, BarnInZ1, IsleKit.Wood, "Barn Floor"));
-        }
         return list;
     }
-    const float BarBackPure = 0.101f, NorthBarXPure = -8.85f;
 
-    // Where a sight line from outside enters the shed: true only through a window band or the Way Out's frame (the
-    // glass is clear and the gate is counted as an open hole). The roof, walls and ridge stop every other line.
+    // Where a sight line from outside enters the shed: true only through a window band (the glass is clear). The
+    // roof, walls and ridge stop every other line.
     static bool EntersByOpening(Vector3 a, Vector3 b2)
     {
         Vector3 d = b2 - a;
@@ -970,7 +824,6 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         Vector3 p = a + d * tEnter;
         if (axis == 0) return p.z >= WinZ0 && p.z <= WinZ1 && p.y >= Sill && p.y <= Head;
         if (axis == 2 && a.z > ShedZ1) return p.x >= -NWinX && p.x <= NWinX && p.y >= Sill && p.y <= Head;
-        if (axis == 2 && a.z < ShedZ0) return p.x >= GateX0 && p.x <= GateX1 && p.y >= 0f && p.y <= GateTop;
         return false;
     }
 
@@ -1005,29 +858,24 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         return list.ToArray();
     }
 
-    // Check 5: nothing of another stall, the fir or a landmark within 1.6 m of a lamp; pads apart and inside the barn
+    // Spacing: nothing of another stall, the fir or a landmark within 1.6 m of a lamp
     public static bool Spacing(Layout layout, out string why)
     {
         why = "";
-        for (int i = 0; i < layout.Stalls.Count; i++)
+        foreach (Stall s in layout.Stalls)
         {
-            Stall s = layout.Stalls[i];
             Vector3 lamp = s.Kind == Kind.P ? V(s.C, PavBulb) : s.Targets[0];
             foreach (Solid o in layout.Solids)
             {
                 if (o.Owner == s.Id || o.Owner == -1 || !o.Sure) continue;      // not its own stall, the shell, or generous check volumes
                 if (o.Distance(lamp) < 1.6f) { why = s.Name + "'s lamp is within 1.6 m of " + (o.Owner >= 0 ? layout.Stalls.Find(q => q.Id == o.Owner).Name : "a landmark"); return false; }
             }
-            Vector2 pad = PlanPoint(s.C);
-            if (Mathf.Abs(pad.x) > BarnIn - 0.6f - 0.5f || pad.y < BarnInZ0 + 1.1f || pad.y > BarnInZ1 - 1.1f) { why = "pad " + s.Name + " is too near the barn's wall"; return false; }
-            for (int j = 0; j < i; j++)
-                if ((PlanPoint(layout.Stalls[j].C) - pad).magnitude < 1.6f - 1e-3f) { why = "pads " + layout.Stalls[j].Name + " and " + s.Name + " are under 1.6 m apart"; return false; }
         }
         return true;
     }
 
-    // Check 3: every lamp seen from its own gallery (the disc, from the stand eye on the deck's centre line, at three
-    // points along it or more), and no light of it from any eye point of another gallery
+    // The galleries: every lamp seen from its own gallery (the disc, from the stand eye on the deck's centre line, at
+    // three points along it or more), and no light of a closed stall's from any eye point of another gallery
     public static bool Galleries(Layout layout, out string why)
     {
         why = "";
@@ -1044,7 +892,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         foreach (Stall s in layout.Stalls)
             for (int g = 0; g < 3; g++)
             {
-                if (Sees(g, s.Kind) || (s.Kind == Kind.P && g == Gn && !StrictPavilions)) continue;
+                if (s.Kind == Kind.P || Sees(g, s.Kind)) continue;
                 foreach (Vector3 eye in eyes[g])
                     foreach (Vector3 t in s.Targets)
                         if (Visible(eye, t, sure)) { why = s.Name + "'s light is seen from the " + GalleryName(g) + " gallery at (" + eye.x.ToString("0.0") + ", " + eye.y.ToString("0.0") + ", " + eye.z.ToString("0.0") + ")"; return false; }
@@ -1060,7 +908,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
     }
 
     // The exterior eye points: outside the shed's box and every sure solid, from H - 60 to H + 60, 0.6 to 40 m up;
-    // 1 m apart (0.5 m in height) within 6 m of a window band or the Way Out's frame, 3 m (2 m) beyond
+    // 1 m apart (0.5 m in height) within 6 m of a window band, 3 m (2 m) beyond
     public static List<Vector3> ExteriorPoints(List<Solid> fixedSolids)
     {
         var sure = new List<Solid>();
@@ -1079,7 +927,7 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
                     var p = new Vector3(HX - 60f + 3f * i, k == 20 ? 40f : 0.6f + 2f * k, HZ - 60f + 3f * j);
                     if (Keep(p)) points.Add(p);
                 }
-        // near each opening: the window bands (side walls, north wall) and the gate's frame
+        // near each opening: the window bands (side walls, north wall)
         void Near(Vector3 c0, Vector3 c1, Vector3 outward)
         {
             for (int u = 0; u <= 6; u++)
@@ -1098,22 +946,18 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         Near(new Vector3(-ShedOut, Sill, WinZ0), new Vector3(-ShedOut, Head, WinZ1), new Vector3(-1f, 0f, 0f));
         Near(new Vector3(ShedOut, Sill, WinZ0), new Vector3(ShedOut, Head, WinZ1), new Vector3(1f, 0f, 0f));
         Near(new Vector3(-NWinX, Sill, ShedZ1), new Vector3(NWinX, Head, ShedZ1), new Vector3(0f, 0f, 1f));
-        Near(new Vector3(GateX0, 0f, ShedZ0), new Vector3(GateX1, GateTop, ShedZ0), new Vector3(0f, 0f, -1f));
         return points;
     }
 
-    // Kinds seen together that would leak an answer in some lobby: W with E (3 and 4 players), or two of W, E and N
-    // (4 players). Pavilions are dark in 4-player lobbies, so they go with either W or E; StrictPavilions also forbids
-    // a pavilion with N.
+    // Kinds that no one place may see together: the closed stalls of two galleries (any two of W, E and N), or one
+    // spot would show more than its own window's share. The pavilions go with any of them.
     static bool Conflict(int mask)
     {
-        bool w = (mask & 1) != 0, e = (mask & 2) != 0, n = (mask & 4) != 0, p = (mask & 8) != 0;
-        if (w && e) return true;
-        if (n && (w || e)) return true;
-        return StrictPavilions && n && p;
+        bool w = (mask & 1) != 0, e = (mask & 2) != 0, n = (mask & 4) != 0;
+        return (w && e) || (n && (w || e));
     }
 
-    // Check 4: no exterior point sees two kinds; counts per kind the points that see it
+    // Outside the shed: no exterior point sees two galleries' stalls; counts per kind the points that see it
     public static bool Exterior(Layout layout, List<Vector3> points, out string why, out List<string> table)
     {
         why = "";
@@ -1138,8 +982,8 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
                 conflicts++;
             }
         }
-        table.Add("check 4: " + points.Count + " exterior points; seeing W " + perKind[0] + ", E " + perKind[1] + ", N " + perKind[2] + ", P " + perKind[3]
-            + "; seeing two kinds: " + conflicts);
+        table.Add("outside the shed: " + points.Count + " exterior points; seeing W " + perKind[0] + ", E " + perKind[1] + ", N " + perKind[2] + ", P " + perKind[3]
+            + "; seeing two galleries' stalls: " + conflicts);
         return conflicts == 0;
     }
 
@@ -1148,76 +992,6 @@ public sealed class ReindeerCountPuzzle : PuzzleDef
         string s = "";
         for (int k = 0; k < 4; k++) if ((mask & (1 << k)) != 0) s += ((Kind)k).ToString();
         return s;
-    }
-
-    // Check 6: rays from a 1 m grid inside the barn, 0.4 to 2.8 m above the slab, in 64 directions: none leaves the
-    // barn except through the door's frame
-    public static bool BarnSealed(List<Solid> fixedSolids, out string why)
-    {
-        why = "";
-        var barn = new List<Solid>();
-        foreach (Solid s in fixedSolids) if (s.Group == "Barn" || s.Group == "Barn Floor") barn.Add(s);
-        var dirs = new Vector3[64];
-        float golden = Mathf.PI * (3f - Mathf.Sqrt(5f));
-        for (int i = 0; i < 64; i++)
-        {
-            float y = 1f - 2f * (i + 0.5f) / 64f, r = Mathf.Sqrt(1f - y * y), a = golden * i;
-            dirs[i] = new Vector3(r * Mathf.Cos(a), y, r * Mathf.Sin(a));
-        }
-        for (float x = -5.5f; x <= 5.51f; x += 1f)
-            for (float z = BarnInZ0 + 0.7f; z <= BarnInZ1 - 0.69f; z += 1f)
-                for (float h = 0.4f; h <= 2.81f; h += 0.6f)
-                {
-                    var p = new Vector3(x, Slab + h, z);
-                    foreach (Vector3 dir in dirs)
-                    {
-                        Vector3 d = dir * 30f;
-                        bool blocked = false;
-                        foreach (Solid s in barn) if (s.Hits(p, d)) { blocked = true; break; }
-                        if (blocked) continue;
-                        if (d.z >= 0f) { why = "a ray from (" + x + ", " + (Slab + h) + ", " + z + ") gets out away from the door"; return false; }
-                        float t = (BarnZ0 - p.z) / d.z;
-                        Vector3 q = p + d * t;
-                        if (Mathf.Abs(q.x) > DoorHalf + 1e-3f || q.y < Slab - 1e-3f || q.y > DoorTop + 1e-3f)
-                        { why = "a ray from (" + x + ", " + (Slab + h) + ", " + z + ") gets out at (" + q.x.ToString("0.00") + ", " + q.y.ToString("0.00") + ")"; return false; }
-                    }
-                }
-        return true;
-    }
-
-    // Check 7: per list, the chance a team short of one spotter clears a run by guessing the stalls nobody sees.
-    // Press In Order picks uniformly and only a wrong hold at the phase end fails, so a round is won with chance
-    // (seen + 1) / pairs (the seen ones, or one right guess among the unseen). Limits: 0.5 % (3-player list, either
-    // spotter missing) and 1 % (4-player list, any one spotter missing).
-    public static bool GuessingOdds(List<(string name, List<Kind> pairs, int rounds, int lobby)> lists, out List<string> lines)
-    {
-        lines = new List<string> { "guessing odds (list, team, chance per round, rounds, chance per run):" };
-        bool ok = true;
-        foreach (var list in lists)
-        {
-            var galleries = new List<int> { Gw };
-            if (list.lobby >= 3) galleries.Add(Ge);
-            if (list.lobby >= 4) galleries.Add(Gn);
-            int n = list.pairs.Count;
-            if (galleries.Count == 1) { lines.Add("  " + list.name + ": one spotter + presser is the intended team (" + n + " pairs, " + list.rounds + " rounds)"); continue; }
-            // every set of galleries with at least one spotter missing and at least one present
-            for (int mask = 1; mask < (1 << galleries.Count) - 1; mask++)
-            {
-                var present = new List<int>();
-                for (int i = 0; i < galleries.Count; i++) if ((mask & (1 << i)) != 0) present.Add(galleries[i]);
-                int seen = 0;
-                foreach (Kind k in list.pairs)
-                    foreach (int g in present) if (Sees(g, k)) { seen++; break; }
-                int unseen = n - seen;
-                double round = (seen + (unseen > 0 ? 1.0 : 0.0)) / n, run = Math.Pow(round, list.rounds);
-                int missing = galleries.Count - present.Count;
-                string team = string.Join("+", present.ConvertAll(g => GalleryName(g))) + " spotter(s) + presser";
-                lines.Add("  " + list.name + ": " + team + ": " + round.ToString("0.000") + " x " + list.rounds + " = " + (run * 100).ToString("0.0000") + " %");
-                if (missing == 1 && list.lobby == 3 && run > 0.005) ok = false;
-                if (missing == 1 && list.lobby == 4 && run > 0.01) ok = false;
-            }
-        }
-        return ok;
     }
 
     // ==== PURE END ====

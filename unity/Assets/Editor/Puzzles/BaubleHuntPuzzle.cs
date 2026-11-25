@@ -1,17 +1,19 @@
-// Bauble Hunt (revision 2 of the spec, puzzle-specs/BaubleHunt.md): a palisaded fir wood, the Bauble Wood, holds
-// sixteen frosted baubles on little racks among its drifts. They are Peg Tiles with Invisible Ink View, so their
-// pictures are blank to the naked eye. A Spotter on the lookout tower north of the wood has the Invisible Ink
-// telescope, the only thing that shows them. In a sealed Hut set into the wood's south wall a Reader sees a Display
-// of the baubles wanted (three; five in a lobby of four), describes them over the intercom and hangs what arrives on
-// the Peg Board. A Hunter in the wood, who sees no picture, carries the blanks the Spotter calls out to a hooded
-// posting box that drops them into the Hut one at a time. Eight designs, two tiles each, every combination of three
-// features (dark or light body, high or low band, stars or dots). The answer is checked only while one player holds
-// an N-Hold button in the Hut, one on the tower and one in the wood (and a second Hunter at the Far Post with four).
-// A wrong check stops the puzzle; the next start deals again.
+// Bauble Hunt: a palisaded fir wood, the Bauble Wood, holds sixteen frosted baubles on little racks among its drifts.
+// They are Peg Tiles with Invisible Ink View: blank to the naked eye, their pictures show only through the Invisible
+// Ink telescope on the lookout tower north of the wood. South of the wood, in the open, stands the Bauble Stand: a
+// Display of the three baubles wanted, a three-slot Peg Board under it and a check screen with its button.
 //
-// In lobbies of three and four the Hut's and the wood's ways in lock while the puzzle runs, and stepping into the
-// Hut's way out stops it. No way out ever locks. Four start knobs (the corner, the Hut, the tower, the wood's post),
-// which move together.
+// One player climbs the tower and reads the blank baubles through the telescope; the others walk the wood, fetch the
+// ones the spotter picks out and hang them on the board in the Display's order (left to right); anyone presses the
+// check button. A right board wins the gourd, a wrong one only shows the cross. Nobody is shut in, nothing locks,
+// there is no clock, and everyone can talk to everyone (a walkie-talkie on the tower and one by the stand help over
+// the 25 m between them). A hunter can lean a bauble on the Show Lectern in the wood for the spotter to read. One
+// patient player can finish it alone (read the Display, climb, look and remember, fetch); it is built for three or
+// four. The same in every lobby size. Eight designs, two tiles each, every combination of three features (dark or
+// light body, high or low band, stars or dots).
+// (Before the user's rules of 2026-11-24 the Display and the board were in a sealed Hut in the wood's south wall,
+// reached only by an intercom and a posting box; the answer was checked only while three players held buttons at
+// once, a wrong check stopped the puzzle, and the ways in locked while it ran.)
 //
 // Coordinates are local metres from the centre, +z north; heights are above the pad's top (Floor). Parts face their
 // local +z; yaw 90 faces +x, -90 faces -x, 180 faces -z. No custom code: the bauble sheet is drawn here in C#.
@@ -26,13 +28,20 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
     public override string Name => "BaubleHunt";
     public override Vector2 Footprint => new Vector2(28f, 43f);
     public override Vector2? FixedSite => new Vector2(-1310f, -830f);      // layout-final: a level wood-edge shelf by Northwest station
-    public override float Yaw => 0f;                                         // the long axis north-south: tower north, Hut south
+    public override float Yaw => 0f;                                         // the long axis north-south: tower north, stand south
 
     const float Floor = 0.25f;              // the pad's top above the root's level
-    const float WallH = 2.8f;               // palisade and Hut walls
+    const float WallH = 2.8f;               // the palisade
     const float DeckTop = 4.0f;             // the tower's deck
     static readonly Vector2 Eyepiece = new Vector2(0f, 9.75f);
     const float EyeHeight = 5.6f;
+    // The Bauble Stand: a board on posts (IsleKit.BoardOnPosts, 0.12 m thick) south of the wood, facing south. Its
+    // posts' middle, its south face, its width and its face's foot and top
+    const float StandZ = -13f, StandFace = StandZ - 0.06f, StandWide = 3.2f, StandLow = 0.7f, StandHigh = 2.5f;
+    const float DisplayBack = 0.168f;       // a Display's back is 0.168 m behind its pivot (part-metrics); a Peg Board's and a Validator's are at their pivots
+    const float SlotOne = -0.9f, SlotPitch = 0.45f;      // the board's pivot is its first slot; the others follow 0.45 m apart to the right of someone facing it
+    static readonly Vector2 WalkieStump = new Vector2(-3.1f, -14.5f);
+    const float StumpTop = 0.5f;
     const string SheetPath = "Assets/Textures/Baubles/BaubleSheet.png";
     const string SheetVersion = "bauble-sheet-1";
 
@@ -40,10 +49,9 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
     static readonly Color Log = new Color(0.40f, 0.28f, 0.18f);
     static readonly Color LogDark = new Color(0.31f, 0.21f, 0.13f);
     static readonly Color Plank = new Color(0.50f, 0.36f, 0.24f);
-    static readonly Color Floorboard = new Color(0.46f, 0.33f, 0.22f);
     static readonly float[] MarkX = { 0.35f, 0.5f, 0.65f, 0.42f, 0.58f };      // the five marks: three across the middle, two on the far row
 
-    // The baubles' racks (spec 4, "Baubles"): tile n and n + 8 show design n
+    // The baubles' racks: tile n and n + 8 show design n
     static readonly Vector2[] Racks =
     {
         new Vector2(-5.0f, 0.25f), new Vector2(-2.5f, 0.25f), new Vector2(2.5f, 0.25f), new Vector2(5.5f, 0.25f),
@@ -52,8 +60,6 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
         new Vector2(-6.0f, -7.05f),
     };
     static readonly Vector2 Lectern = new Vector2(0f, 0.25f);
-    static readonly Vector2 CentrePost = new Vector2(3.5f, -7.55f);
-    static readonly Vector2 FarPost = new Vector2(-9f, 0.25f);
     static readonly Vector2[] EmptyDrifts = { new Vector2(6.5f, -7.05f), new Vector2(-2.5f, -7.25f), new Vector2(8.5f, -0.25f) };
     // Firs in the wood (x, z, height): landmarks, each kept off every eyepiece-to-rack line (checked below)
     static readonly Vector3[] WoodFirs = { new Vector3(-9.0f, -7.1f, 4.0f), new Vector3(-0.5f, -7.1f, 3.5f), new Vector3(8.5f, -7.1f, 4.0f), new Vector3(-9.0f, -2.1f, 3.0f), new Vector3(-7.0f, 1.4f, 2.5f) };
@@ -68,22 +74,21 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
         CheckSightLines();
         b.ClearGround(30f, 45f);
         b.DebugTeleport(4f, -21f);
-        Sdk.Set(b.Puzzle, "gourdColor", new Color(0.42f, 0.07f, 0.12f));      // darker: a hard puzzle
-        // Winter Walk's jetpacks do not fire over the wood, the Hut or the tower (well past every wall)
+        Sdk.Set(b.Puzzle, "gourdColor", new Color(0.42f, 0.07f, 0.12f));      // a dark bauble's crimson
+        // Winter Walk's jetpacks do not fire over the wood, the stand or the tower (well past every wall)
         IsleKit.CalmAir(b, "Bauble Hunt", 0f, 0.2f, new Vector3(70f, 400f, 90f), 0f, -10f, false);
 
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
-        var works = new MeshBuilder();      // everything solid: pad, palisade, Hut, tower, racks, posts
+        var works = new MeshBuilder();      // everything solid: pad, palisade, tower, racks, lectern, the walkie's stump
         var trim = new MeshBuilder();       // painted bits that take no snow
 
         // ---- the pad: one level slab for the whole site, sunk 1.5 m ----
         Kit.AddBox(works, new Vector3(0f, Floor - 1.75f, 0f), new Vector3(28f, 1.75f, 43f), Snow);
 
         BuildPalisade(works);
-        BuildHut(works, trim);
-        BuildPostingBox(works, trim);
         BuildTower(works);
         BuildWoodFurniture(works, trim);
+        BuildStandFurniture(works, trim);
 
         b.MeshPiece("Bauble Hunt Works", works.ToMesh(), snowy);
         b.MeshPiece("Bauble Hunt Trim", trim.ToMesh(), bare);
@@ -162,18 +167,17 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
     // ================================================================ structures
 
     // The palisade: split logs 0.3 thick, 2.8 m tall with pointed tops, no gaps, centred on x = +-12, z = 3.75 and
-    // z = -10.25 (the Hut's north wall closes x -4..4); the wood's two gates in its south side, log lintels over them
+    // z = -10.25; two open gateways in its south side, 2.12 m wide and 2.3 m tall under log lintels
     void BuildPalisade(MeshBuilder mb)
     {
         LogRun(mb, new Vector2(-12f, -10.25f), new Vector2(-12f, 3.75f));
         LogRun(mb, new Vector2(-12f, 3.75f), new Vector2(12f, 3.75f));
         LogRun(mb, new Vector2(12f, 3.75f), new Vector2(12f, -10.25f));
-        // south side: x 12..9 | gate 9..6.9 | 6.9..4 | Hut | -4..-6.9 | gate -6.9..-9 | -9..-12
+        // south side: x 12..9 | gateway 9..6.9 | 6.9..-6.9 | gateway -6.9..-9 | -9..-12
         LogRun(mb, new Vector2(12f, -10.25f), new Vector2(9.01f, -10.25f));
-        LogRun(mb, new Vector2(6.89f, -10.25f), new Vector2(4f, -10.25f));
-        LogRun(mb, new Vector2(-4f, -10.25f), new Vector2(-6.89f, -10.25f));
+        LogRun(mb, new Vector2(6.89f, -10.25f), new Vector2(-6.89f, -10.25f));
         LogRun(mb, new Vector2(-9.01f, -10.25f), new Vector2(-12f, -10.25f));
-        Block(mb, 6.89f, 9.01f, 2.3f, WallH, -10.4f, -10.1f, LogDark);      // lintels: the gates are 2.3 m tall
+        Block(mb, 6.89f, 9.01f, 2.3f, WallH, -10.4f, -10.1f, LogDark);      // lintels
         Block(mb, -9.01f, -6.89f, 2.3f, WallH, -10.4f, -10.1f, LogDark);
     }
 
@@ -196,56 +200,6 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
         }
     }
 
-    // The Hut: outside x -4..4, z -16.25..-10.25, walls 0.25, 2.8 m, a closed roof. Two gate openings in its south wall
-    // (closed above from 2.3 m), a baffle making a vestibule, the posting hole in its north wall and the tray under it
-    void BuildHut(MeshBuilder mb, MeshBuilder trim)
-    {
-        // south wall, with the openings x 0.79..2.91 and -2.91..-0.79
-        Block(mb, -4f, -2.91f, 0f, WallH, -16.25f, -16f, Plank);
-        Block(mb, -0.79f, 0.79f, 0f, WallH, -16.25f, -16f, Plank);
-        Block(mb, 2.91f, 4f, 0f, WallH, -16.25f, -16f, Plank);
-        Block(mb, -2.91f, -0.79f, 2.3f, WallH, -16.25f, -16f, LogDark);
-        Block(mb, 0.79f, 2.91f, 2.3f, WallH, -16.25f, -16f, LogDark);
-        // north wall, with the posting hole x -0.275..0.275, 1.1..1.6
-        Block(mb, -4f, -0.275f, 0f, WallH, -10.5f, -10.25f, Plank);
-        Block(mb, 0.275f, 4f, 0f, WallH, -10.5f, -10.25f, Plank);
-        Block(mb, -0.275f, 0.275f, 0f, 1.1f, -10.5f, -10.25f, Plank);
-        Block(mb, -0.275f, 0.275f, 1.6f, WallH, -10.5f, -10.25f, Plank);
-        // west and east walls
-        Block(mb, -4f, -3.75f, 0f, WallH, -16f, -10.5f, Plank);
-        Block(mb, 3.75f, 4f, 0f, WallH, -16f, -10.5f, Plank);
-        // roof (overhanging south and the sides, flush on the wood's side)
-        Block(mb, -4.2f, 4.2f, WallH, WallH + 0.2f, -16.45f, -10.25f, LogDark);
-        // the baffle, floor to roof: the gates open into a 1.25 m corridor that turns into the room at both ends
-        Block(mb, -2.7f, 2.7f, 0f, WallH, -14.75f, -14.55f, Plank);
-        // floorboards (no snow indoors)
-        Block(trim, -3.75f, 3.75f, 0f, 0.02f, -16f, -10.5f, Floorboard);
-        // the inner tray under the hole: top falling from 1.05 at the wall to 0.85, with 0.12 m lips; holds two tiles
-        PrismX(mb, -0.45f, 0.45f, Plank, new Vector2(-10.5f, 0f), new Vector2(-10.5f, 1.05f), new Vector2(-11.1f, 0.85f), new Vector2(-11.1f, 0f));
-        Block(mb, -0.51f, 0.51f, 0f, 0.97f, -11.16f, -11.1f, LogDark);
-        Block(mb, -0.51f, -0.45f, 0f, 1.17f, -11.1f, -10.5f, LogDark);
-        Block(mb, 0.45f, 0.51f, 0f, 1.17f, -11.1f, -10.5f, LogDark);
-    }
-
-    // The posting box on the wood side of the Hut's north wall: closed north, east and above, its mouth on the west face
-    // (0.6 m deep, 1.2..1.8 m high); its floor a chute falling to the hole. The closed north face hides the chute and
-    // the tray from the telescope, due north. Built as wide inside as the hole (0.55 m), so a tile cannot catch beside it.
-    void BuildPostingBox(MeshBuilder mb, MeshBuilder trim)
-    {
-        const float X0 = -0.275f, X1 = 0.275f, T = 0.05f;
-        // the chute (solid underneath down to 1.0): 1.35 at the box's north side, 1.1 at the Hut's inner face
-        PrismX(mb, X0, X1, Plank, new Vector2(-9.65f, 1.0f), new Vector2(-9.65f, 1.35f), new Vector2(-10.25f, 1.174f), new Vector2(-10.25f, 1.0f));
-        PrismX(mb, X0, X1, Plank, new Vector2(-10.25f, 1.1f), new Vector2(-10.25f, 1.174f), new Vector2(-10.5f, 1.1f));
-        Block(mb, X0 - T, X1 + T, 1.0f, 1.9f, -9.65f - T, -9.65f, Plank);          // north face (closed)
-        Block(mb, X1, X1 + T, 1.0f, 1.9f, -10.25f, -9.65f, Plank);                  // east face (closed)
-        Block(mb, X0 - T, X1 + T, 1.8f, 1.9f, -10.25f, -9.65f - T, LogDark);        // roof
-        Block(mb, X0 - T, X0, 1.0f, 1.2f, -10.25f, -9.65f, Plank);                  // west face below the mouth
-        // painted frame round the mouth
-        Block(trim, X0 - T - 0.02f, X0 - T, 1.18f, 1.22f, -10.25f, -9.65f, IsleKit.Red);
-        Block(trim, X0 - T - 0.02f, X0 - T, 1.78f, 1.82f, -10.25f, -9.65f, IsleKit.Red);
-        Block(trim, X0 - T - 0.02f, X0 - T, 1.18f, 1.82f, -9.69f, -9.65f, IsleKit.Red);
-    }
-
     // The lookout tower: deck x -1.8..1.8, z 9.8..13.4 at 4.0 m on four log legs, 1.3 m solid rails except the scope
     // bay (south) and a stair opening at the north-east corner; a roof at 6.6 m. The bay: x -0.6..0.6, z 8.8..9.8, a
     // 0.5 m parapet in front and a low roof at 2.1 m over the deck. The stair falls to the ground at z 20.
@@ -260,7 +214,7 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
         Block(mb, -1.8f, 1.8f, d - 0.2f, d, 9.8f, 13.4f, Plank);            // deck
         Block(mb, -0.72f, 0.72f, d - 0.2f, d, 8.8f, 9.8f, Plank);           // bay floor
         // rails
-        Block(mb, -1.8f, -1.68f, d, r, 9.8f, 13.4f, LogDark);               // west (Tower Button, Mic, Speaker)
+        Block(mb, -1.8f, -1.68f, d, r, 9.8f, 13.4f, LogDark);               // west
         Block(mb, 1.68f, 1.8f, d, r, 9.8f, 13.4f, LogDark);                 // east (Tower Knob)
         Block(mb, -1.68f, 0.6f, d, r, 13.28f, 13.4f, LogDark);              // north, the stair opening x 0.6..1.8
         Block(mb, -1.68f, -0.72f, d, r, 9.8f, 9.92f, LogDark);              // south, either side of the bay
@@ -289,18 +243,12 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
         }
     }
 
-    // The racks, the posts and the Show Lectern
+    // The racks and the Show Lectern
     void BuildWoodFurniture(MeshBuilder mb, MeshBuilder trim)
     {
         for (int i = 0; i < Racks.Length; i++) BuildRack(mb, trim, Racks[i]);
-        // Centre Post: 0.28 square, 2.0 m (the Wood Speaker sits on top), a cap under it
-        Block(mb, CentrePost.x - 0.14f, CentrePost.x + 0.14f, -0.2f, 2.0f, CentrePost.y - 0.14f, CentrePost.y + 0.14f, Log);
-        Block(trim, CentrePost.x - 0.2f, CentrePost.x + 0.2f, 1.97f, 2.0f, CentrePost.y - 0.2f, CentrePost.y + 0.2f, IsleKit.Gold);
-        // Far Post: 0.28 square, 1.6 m (its button only in a lobby of four)
-        Block(mb, FarPost.x - 0.14f, FarPost.x + 0.14f, -0.2f, 1.6f, FarPost.y - 0.14f, FarPost.y + 0.14f, Log);
-        Block(trim, FarPost.x - 0.18f, FarPost.x + 0.18f, 1.6f, 1.66f, FarPost.y - 0.18f, FarPost.y + 0.18f, IsleKit.Red);
         // Show Lectern: 1.4 m wide, its face 1.0..1.3 m tilted about 65 degrees from level towards the tower (north),
-        // with a 6 cm lip; a solid wedge so a leant tile has a face to lie on
+        // with a 6 cm lip; a solid wedge so a tile leant on it for the spotter has a face to lie on
         float lx = Lectern.x, lz = Lectern.y;
         PrismX(mb, lx - 0.7f, lx + 0.7f, Plank,
             new Vector2(lz - 0.15f, 0f), new Vector2(lz + 0.08f, 0f), new Vector2(lz + 0.08f, 0.99f),
@@ -309,6 +257,15 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
         Quaternion faceTurn = Quaternion.Euler(-25f, 0f, 0f);
         OBox(mb, L(lx, 1.02f, lz + 0.1f), new Vector3(1.4f, 0.04f, 0.08f), faceTurn, LogDark);
         Block(trim, lx - 0.72f, lx + 0.72f, 1.3f, 1.33f, lz - 0.17f, lz - 0.06f, IsleKit.Red);
+    }
+
+    // What stands by the Bauble Stand besides the board itself (BuildParts): red bands painted along the top and the
+    // foot of its face, and a log stump out in front to the west with the stand's walkie-talkie on it
+    void BuildStandFurniture(MeshBuilder mb, MeshBuilder trim)
+    {
+        Block(trim, -StandWide / 2f, StandWide / 2f, StandHigh - 0.07f, StandHigh, StandFace - 0.012f, StandFace, IsleKit.Red);
+        Block(trim, -StandWide / 2f, StandWide / 2f, StandLow, StandLow + 0.07f, StandFace - 0.012f, StandFace, IsleKit.Red);
+        Block(mb, WalkieStump.x - 0.3f, WalkieStump.x + 0.3f, -0.2f, StumpTop, WalkieStump.y - 0.3f, WalkieStump.y + 0.3f, Log);
     }
 
     // The frame a rack's tile rests in: tipped back 15 degrees towards the eyepiece
@@ -387,12 +344,8 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
 
     // ================================================================ SDK parts
 
-    Piece P(string prefab, float x, float z, float h, float yaw, string name, Piece group = null)
-    {
-        Piece p = b.Part(prefab, x, z, Floor + h, yaw, false).Named(name);
-        if (group != null) p.Under(group);
-        return p;
-    }
+    Piece P(string prefab, float x, float z, float h, float yaw, string name)
+        => b.Part(prefab, x, z, Floor + h, yaw, false).Named(name);
 
     void BuildBaubles(Texture2D sheet)
     {
@@ -411,108 +364,51 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
 
     void BuildParts()
     {
-        Piece lobby2 = IsleKit.Lobby(b, "Lobby 2", true, false, false);
-        Piece lobby34 = IsleKit.Lobby(b, "Lobby 3-4", false, true, true);
-        Piece lobby23 = IsleKit.Lobby(b, "Lobby 2-3", true, true, false);
-        Piece lobby4 = IsleKit.Lobby(b, "Lobby 4", false, false, true);
-        Component sdk = b.Puzzle;
-
-        // ---- the start corner, south of the Hut, east of its way in ----
+        // ---- the start corner, in the open south of the stand ----
         IsleKit.StartCorner(b, 6f, -19.5f, 0f, true, Floor, false);
 
-        // ---- the Hut: Display above the chute, board, Validator and Hut Button on the west wall ----
-        Piece wanted3 = P("Display", 0f, -10.68f, 2.2f, 180f, "Wanted 3", lobby23).Set("PuzzleDisplay", "size", 2);      // Three
-        Piece wanted5 = P("Display", 0f, -10.68f, 2.2f, 180f, "Wanted 5", lobby4).Set("PuzzleDisplay", "size", 3);       // Five
-        Piece validator = P("Validator", -3.75f, -11.1f, 1.55f, 90f, "Validator");
-        Component validatorC = validator.Component("PuzzleValidator");
-        Sdk.Set(validatorC, "pokeButton", (UnityEngine.Object)null);      // checked only by the three-way hold
-        foreach (Transform t in validator.Go.GetComponentsInChildren<Transform>(true))
-            if (t != validator.Transform && t.GetComponent(Sdk.T("PuzzlePokeButton")) != null) t.gameObject.SetActive(false);
-        Board("Board 3", 2, wanted3, 3, validatorC, lobby23);      // Slots3
-        Board("Board 5", 4, wanted5, 5, validatorC, lobby4);       // Slots5
-        validator.On("PuzzleValidator", "onIncorrect", sdk, "StopPuzzle");
+        // ---- the Bauble Stand, where the Hut stood: a roofed board on posts facing south, out of the wood. On its
+        // face the Display of the three baubles wanted, the board's three slots under its three flaps, and the check
+        // screen beside them. Parts facing south run left to right towards +x.
+        Piece stand = IsleKit.BoardOnPosts(b, "Bauble Stand", 0f, StandZ, 180f, StandWide, StandLow, StandHigh, IsleKit.Board, false);
+        stand.Transform.position = b.WorldPoint(0f, StandZ, Floor, false);      // on the pad's top
+        Piece wanted = P("Display", SlotOne + SlotPitch, StandFace - DisplayBack, 2.0f, 180f, "Wanted Baubles").Set("PuzzleDisplay", "size", 2);      // Three
+        Piece board = P("Peg Board", SlotOne, StandFace, 1.3f, 180f, "Bauble Board").Set("PuzzlePegBoard", "size", 2);                               // Slots3
+        Piece check = P("Validator", 1.0f, StandFace, 1.6f, 180f, "Bauble Check Screen");
+        Component wantedC = wanted.Component("PuzzleDisplay"), boardC = board.Component("PuzzlePegBoard"), checkC = check.Component("PuzzleValidator");
+        Sdk.Add(boardC, "answerFrom", wantedC, wantedC, wantedC);      // slot n follows flap n, both counted from the left
+        Sdk.AddInts(boardC, "answerFromFlap", 1, 2, 3);
+        Sdk.Set(boardC, "validator", checkC);
+        // The Validator prefab carries its own poke button (a child 0.44 m under the screen, already its pokeButton):
+        // one press checks. A right board wins by itself; onIncorrect is not wired, so a wrong one only shows the cross.
+        Component pokeC = check.Component("PuzzlePokeButton");
+        pokeC.gameObject.name = "Bauble Check";
+        Sdk.Set(checkC, "pokeButton", pokeC);
 
-        Piece hutButton = P("Button N Hold", -3.75f, -14.25f, 1.15f, 90f, "Hut Button").Set("PuzzleButtonNHold", "group", "bauble");
-        P("Button N Hold", -1.68f, 11.4f, DeckTop + 1.15f, 90f, "Tower Button").Set("PuzzleButtonNHold", "group", "bauble");
-        P("Button N Hold", CentrePost.x, CentrePost.y - 0.14f, 1.15f, 180f, "Wood Button", lobby34).Set("PuzzleButtonNHold", "group", "bauble");
-        P("Button N Hold", FarPost.x, FarPost.y - 0.14f, 1.15f, 180f, "Far Button", lobby4).Set("PuzzleButtonNHold", "group", "bauble");
-        hutButton.On("PuzzleButtonNHold", "onAllHeld", validatorC, "Check");      // every member fires: wire one
-
-        // ---- the telescope in the tower's bay ----
+        // ---- the tower: the Invisible Ink telescope in its bay; a second start knob and its live light on the east rail ----
         P("Telescope", 0f, 9.55f, DeckTop + 1.1f, 180f, "Spotter Scope").Set("PuzzleTelescope", "invisibleInkView", true);
-
-        // ---- intercom: Hut to tower; tower to the Hut and the wood's post ----
-        Piece hutMic = P("Intercom Mic", 3.73f, -12.25f, 1.35f, -90f, "Hut Mic");
-        Piece hutSpeaker = P("Intercom Speaker", 3.65f, -11.25f, 1.85f, -90f, "Hut Speaker");
-        Piece towerMic = P("Intercom Mic", -1.66f, 12.4f, DeckTop + 1.35f, 90f, "Tower Mic");
-        Piece towerSpeaker = P("Intercom Speaker", -1.58f, 10.1f, DeckTop + 1.0f, 90f, "Tower Speaker");
-        Piece woodSpeaker = P("Intercom Speaker", CentrePost.x, CentrePost.y, 2.05f, 0f, "Wood Speaker");
-        hutMic.Add("PuzzleIntercom", "speakers", towerSpeaker.Component("PuzzleIntercomSpeaker"));
-        towerMic.Add("PuzzleIntercom", "speakers", hutSpeaker.Component("PuzzleIntercomSpeaker"), woodSpeaker.Component("PuzzleIntercomSpeaker"));
-
-        // ---- gates: one-way, front (local -z) to back ----
-        Piece hutIn34 = Gate("Hut Way In", 1.9f, -16.25f, 0f, lobby34);
-        Piece hutOut34 = Gate("Hut Way Out", -1.9f, -16.25f, 180f, lobby34);
-        Gate("Hut Way In", 1.9f, -16.25f, 0f, lobby2);
-        Gate("Hut Way Out", -1.9f, -16.25f, 180f, lobby2);
-        Piece woodIn34 = Gate("Wood Way In", 8f, -10.25f, 0f, lobby34);
-        Gate("Wood Way In", 8f, -10.25f, 0f, lobby2);
-        Gate("Wood Way Out", -8f, -10.25f, 180f, null);      // every lobby, never locked
-        hutOut34.On("PuzzleNoItemsGate", "onEnter", sdk, "StopPuzzle");      // the Reader leaving stops the puzzle
-
-        // ---- the other three start knobs, each with its live light ----
-        P("Switch Start", 3.677f, -13.55f, 1.25f, -90f, "Hut Knob");
-        P("Live Light", 3.744f, -13.55f, 1.42f, -90f, "Hut Live Light");
-        P("Switch Start", 1.607f, 11.4f, DeckTop + 1.25f, -90f, "Tower Knob");
-        P("Live Light", 1.674f, 11.4f, DeckTop + 1.42f, -90f, "Tower Live Light");
-        P("Switch Start", CentrePost.x + 0.213f, CentrePost.y, 1.25f, 90f, "Wood Knob");
-        P("Live Light", CentrePost.x + 0.146f, CentrePost.y, 1.42f, 90f, "Wood Live Light");
-
-        // ---- lamps, confetti, walkies ----
-        Piece hutLamp = P("Light 2", 0f, -12.55f, 2.75f, 0f, "Hut Lamp");
+        P("Switch Start", 1.607f, 11.4f, DeckTop + 1.0f, -90f, "Tower Knob");
+        P("Live Light", 1.674f, 11.4f, DeckTop + 1.17f, -90f, "Tower Live Light");
         Piece towerLamp = P("Light 1", -1.3f, 13.0f, DeckTop, 0f, "Tower Lamp");
         P("Confetti", 0f, 12.0f, DeckTop + 0.1f, 0f, "Tower Confetti");
+
+        // ---- a walkie-talkie on the tower's deck and one on the stump by the stand ----
         P("Vanilla Item", -1.0f, 12.8f, DeckTop + 0.21f, 0f, "Tower Walkie").Set("PuzzleVanillaItem", "itemType", 4);      // WalkieTalkie
-        P("Vanilla Item", CentrePost.x - 0.9f, CentrePost.y, 0.21f, 0f, "Wood Walkie").Set("PuzzleVanillaItem", "itemType", 4);
+        P("Vanilla Item", WalkieStump.x, WalkieStump.y, StumpTop + 0.21f, 0f, "Stand Walkie").Set("PuzzleVanillaItem", "itemType", 4);
 
-        // ---- start and stop (both lock events by hand: the build's pairing check covers only doors and lights) ----
+        // ---- the tower's lamp burns while the puzzle runs; nothing else happens on start or stop ----
         Piece root = b.RootPiece;
-        foreach (Piece lamp in new[] { hutLamp, towerLamp })
-        {
-            root.On("PuzzleSDK", "onPuzzleStart", lamp.Component("PuzzleLight"), "TurnOn");
-            root.On("PuzzleSDK", "onPuzzleStop", lamp.Component("PuzzleLight"), "TurnOff");
-        }
-        foreach (Piece gate in new[] { hutIn34, woodIn34 })
-        {
-            root.On("PuzzleSDK", "onPuzzleStart", gate.Component("PuzzleNoItemsGate"), "Lock");
-            root.On("PuzzleSDK", "onPuzzleStop", gate.Component("PuzzleNoItemsGate"), "Unlock");
-        }
-    }
-
-    Piece Gate(string name, float x, float z, float yaw, Piece group)
-        => P("Gate No items", x, z, 0f, yaw, name, group).Set("PuzzleNoItemsGate", "oneWay", true)
-            .Set("PuzzleNoItemsGate", "blindMask", false).Set("PuzzleNoItemsGate", "defaultLocked", false);
-
-    // A peg board on the Hut's west wall (its slots run from the pivot towards the north), following a Display's flaps
-    void Board(string name, int sizeIndex, Piece display, int flaps, Component validator, Piece group)
-    {
-        Piece board = P("Peg Board", -3.75f, -13.85f, 1.3f, 90f, name, group).Set("PuzzlePegBoard", "size", sizeIndex);
-        Component c = board.Component("PuzzlePegBoard"), d = display.Component("PuzzleDisplay");
-        var from = new UnityEngine.Object[flaps];
-        var which = new int[flaps];
-        for (int i = 0; i < flaps; i++) { from[i] = d; which[i] = i + 1; }
-        Sdk.Add(c, "answerFrom", from);
-        Sdk.AddInts(c, "answerFromFlap", which);
-        Sdk.Set(c, "validator", validator);
+        root.On("PuzzleSDK", "onPuzzleStart", towerLamp.Component("PuzzleLight"), "TurnOn");
+        root.On("PuzzleSDK", "onPuzzleStop", towerLamp.Component("PuzzleLight"), "TurnOff");
     }
 
     // ================================================================ lights
 
     void BuildLights()
     {
-        // along the palisade top, from the Hut's west corner round to its east corner (posts every 4 m or less)
+        // all the way round the palisade's top, over both gateways (a hanging point every 4 m or less)
         var ring = new List<Vector3>();
-        Vector2[] corners = { new Vector2(-4f, -10.25f), new Vector2(-12f, -10.25f), new Vector2(-12f, 3.75f), new Vector2(12f, 3.75f), new Vector2(12f, -10.25f), new Vector2(4f, -10.25f) };
+        Vector2[] corners = { new Vector2(-12f, -10.25f), new Vector2(-12f, 3.75f), new Vector2(12f, 3.75f), new Vector2(12f, -10.25f), new Vector2(-12f, -10.25f) };
         for (int i = 0; i + 1 < corners.Length; i++)
         {
             Vector2 a = corners[i], c = corners[i + 1];
@@ -538,12 +434,19 @@ public sealed class BaubleHuntPuzzle : PuzzleDef
             new Vector3(-2.05f, roof, 9.65f), new Vector3(2.05f, roof, 9.65f), new Vector3(2.05f, roof, 13.6f),
             new Vector3(-2.05f, roof, 13.6f), new Vector3(-2.05f, roof, 9.65f),
         }, 0.2f, 0.4f, false, false, 73);
-        // round the start corner (south and east sides, clear of the Hut's way in)
+        // round the start corner (its south and east sides; open towards the stand)
         Kit.LightString(b, "Corner Lights", new List<Vector3>
         {
             new Vector3(2.4f, Floor + 2.4f, -21.3f), new Vector3(6.1f, Floor + 2.4f, -21.3f), new Vector3(9.8f, Floor + 2.4f, -21.3f),
             new Vector3(9.8f, Floor + 2.4f, -19.5f), new Vector3(9.8f, Floor + 2.4f, -17.9f),
         }, 0.4f, 0.5f, false, true, 74);
+        // under the front edge of the stand's little roof (its underside is 0.3 m over the face's top), so that the
+        // Display and the board have a light to be read by at night
+        float eave = Floor + StandHigh + 0.28f, eaveZ = StandZ - 0.33f;
+        Kit.LightString(b, "Stand Lights", new List<Vector3>
+        {
+            new Vector3(-StandWide / 2f - 0.3f, eave, eaveZ), new Vector3(StandWide / 2f + 0.3f, eave, eaveZ),
+        }, 0.12f, 0.3f, false, false, 75);
     }
 
     // ================================================================ checks

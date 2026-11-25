@@ -1,15 +1,37 @@
-// Downhill (puzzle 5): the Called Slalom. A timed giant slalom on the middle run that nobody can win alone. Six rows
-// of three gates (red, green, blue, in a different left-to-right order on every row) cross the piste; the skier must
-// pass the one live gate of each row, and cannot see which it is. Only lamp panels shut inside timing booths show it,
-// and every row is shown only on a panel the skier has left far behind or will reach only after the row:
-//   2-3 players: the finish timing hut shows rows 1-3, the start house by the ski lift's top station rows 4-6;
-//   4 players:   a hut on the cat track shows rows 1-2, the finish rows 3-4, the start house rows 5-6.
-// The callers talk the skier down over the course intercom (speakers along the run) and walkie-talkies. A row is dealt
-// at random only when the one before is cleared; one wrong gate kills the run. The clock runs from the start knob, and
-// the timer ball (from the dispenser at the start gate) must go into the holder in the finish shelter after a clean
-// course, before the clock runs out: the Validator checks and wins. No custom code: the SDK's Press In Order rows with
-// Presence Sensor gates, Timers, a Validator, a Timer Spawner and Goal, Intercoms, and Hider groups by lobby size.
-// Spec: Z:\Temp\claude\BigWalkMods\puzzle-specs\Downhill.md (revision 2); what this file changed from it: Downhill.impl.md.
+// Downhill: the pack run. A ski run down the middle run (run 1) that a group wins by skiing it together. No clock, no
+// callers, nobody shut away, and the same course whatever the size of the lobby.
+//
+// What the players do. Turn the puzzle on at either end (the Start Board on the start pad beside the ski lift's top
+// station, the panel in the finish shelter, or the start corner beside it), and walk through the red start gate on the
+// pad two together: its lamp is lit while the puzzle is on. Below, six rows of three gates (red, green, blue, in a
+// different order on every row) cross the run. Going through the start gate lights the lamp over one gate of row 1;
+// skiing through that gate lights one in row 2, and so on down: each row's gate is picked at random at the moment the
+// row before is passed, and its lamp stands on the gate itself, facing up the run. But a gate counts only while two
+// skiers are inside its lane together, side by side or nose to tail (a lane runs 14 m down from its gate to the frame
+// with the result bar): one skier alone lights nothing. The lit gate of every row, and then the two of them together
+// anywhere between the chequered finish arch and the back of the shelter, win the gourd. Two skiers together in a wrong
+// gate, or together on past a row whose lit gate was not taken, end the run: the lamps go out and the bars over that
+// row's gates show the failure. Walking through the start gate again, two together, always deals a fresh run (and ends
+// any run still on the course). A group of three or four sends any two, or all go: whichever two are in the lit gate
+// together count. Nothing hurries anyone, and the first of a pair may brake in a lit gate and wait there for the other.
+// Two players can finish it; one cannot.
+//
+// How it is made: the SDK's Press In Order chains and no custom code, as on the Slalom (SlalomPuzzle.cs). Each row is a
+// chain of three pairs (a gate's lamp and the Presence Sensor over its lane, which takes two players) with one round,
+// begun when the row before is passed; a wrong lane fails it. Press In Order tells of a right press only by filling its
+// Progress Bars, so a row's three result bars are the chain's bars, and the first one's "full" counts one on the two
+// rows-cleared bars (Start Board, finish shelter) and begins the next row. The start gate and the finish are chains of
+// one pair, each with a small bar out of sight; a second chain at the finish, the finish watch, wins for a pair who were
+// already standing in the finish lane when it was lit. A sensor right across the run below each row ends that row if it
+// is still waiting when two skiers get there together. Everything hangs off the Start Switches: with the puzzle off no
+// chain runs.
+//
+// What it was before: the Called Slalom, a timed run for one skier who could not see the live gates and was talked down
+// by callers shut in three timing booths, with a timer ball to carry to the finish. Kept from it: the site and both
+// far sites, the six rows and their coloured gates, the start pad and its gate, the finish shelter with the chequered
+// board, the start corner, Calm Air over both ends and the light strings. Gone: the three booths with their lamp panels,
+// clocks and walkie-talkies, the intercom and its fourteen speakers down the run, the ball's dispenser, holder and
+// Validator, and the groups by lobby size. Rows 4 and 5 moved (see RowNominal).
 using System.Collections.Generic;
 using Bwm;
 using UnityEngine;
@@ -20,47 +42,74 @@ public sealed class DownhillPuzzle : PuzzleDef
     public override Vector2 Footprint => new Vector2(22f, 16f);
     // In the run-out below the finish arch (the layout's site: PisteFinish + direction * 34 - side * half * 0.2, as before)
     public override Vector2? FixedSite => new Vector2(-949.8f, -1459.3f);
-    // The start house (beside the ski lift's top station) and the cat track hut, both off run 1's right-hand edge at
-    // half + 18 m (layout-final: half + 8 put them on the piste); the island levels and keeps them clear
+    // The start pad (beside the ski lift's top station, off run 1's right-hand edge) and the place by the cat track where
+    // the first design's third booth stood, where nothing stands now; the island levels both and keeps them clear
     public override IEnumerable<Vector3> ExtraSites => new[]
     {
         new Vector3(-1774.6f, -1786.5f, 6.4f),
         new Vector3(-1383.4f, -1625.9f, 3.9f),
     };
-    static readonly Vector2 StartHouseSite = new Vector2(-1774.6f, -1786.5f);
-    static readonly Vector2 CatHutSite = new Vector2(-1383.4f, -1625.9f);
+    static readonly Vector2 StartSite = new Vector2(-1774.6f, -1786.5f);
 
     // ---- the course ----
-    const float T = 140f;                  // course time on every clock and the ball (tune in the game; never above 160)
     const int Run = 1;                     // the middle run
+    const int RowCount = 6;
+    // How many skiers must be inside a lane together for its gate to count (the start gate and the finish too), and how
+    // many together in the box below a row for the row to count as skied past. With CatchPack 1 any one skier below a
+    // waiting row ends the run, as on the Slalom: but then a third of the pack skiing ahead ends it, and so does anyone
+    // coming off the Slalom, whose run has joined this one by about along 950. Build with both at 1 to ski the course
+    // alone as a test.
+    const int Pack = 2, CatchPack = 2;
     const float WideHalf = 16f;            // a row slides within its window to where the run is at least this wide
     const float GateSpread = 10f, GateWidth = 4.5f, NarrowSpread = 8f, NarrowWidth = 4f;
-    const float GateDepth = 7f, GateTall = 5f, GateCentre = 1.5f;      // sensor box: 1 m under the snow to 4 m above
-    static readonly float[] RowNominal = { 560f, 680f, 800f, 1045f, 1135f, 1240f };
-    static readonly float[] RowLo = { 520f, 640f, 760f, 1030f, 1100f, 1200f };
-    static readonly float[] RowHi = { 600f, 720f, 840f, 1070f, 1170f, 1280f };
+    // A lane: the sensor box under a gate and down the run from it, 1 m under the snow to 4 m above. A free run reaches a
+    // gate at 12 to 18 m/s; two skiers 6 m apart are then both inside for half a second, and a sensor looks ten times a
+    // second, so a pair up to some 11 m apart still counts.
+    const float LaneLong = 14f, LaneTall = 5f, LaneCentre = 1.5f;
+    // Where the rows stand, in metres from the peak. Rows 1, 2, 3 and 6 are where the first design had them. Row 4 was at
+    // 1030, where a bank now stands 4 m high in its left lane and the run is narrow: at 970 the run is wide and smooth and
+    // the gates show from row 3 on. Row 5 was at 1137, under a brow that hid its gates until 23 m above them: at 1105 it
+    // is on the shelf above the brow, in sight all the way from row 4 (the run is 14.5 m to a side there, so it is narrow).
+    static readonly float[] RowNominal = { 560f, 680f, 800f, 970f, 1105f, 1240f };
+    static readonly float[] RowLo = { 520f, 640f, 760f, 960f, 1095f, 1200f };
+    static readonly float[] RowHi = { 600f, 720f, 840f, 980f, 1105f, 1280f };
     // each row's colours from left to right looking downhill (0 red, 1 green, 2 blue)
     static readonly int[][] RowOrder = { new[] { 0, 1, 2 }, new[] { 2, 0, 1 }, new[] { 1, 2, 0 }, new[] { 0, 2, 1 }, new[] { 1, 0, 2 }, new[] { 2, 1, 0 } };
     static readonly string[] ColourName = { "Red", "Green", "Blue" };
-    static readonly Color[] LampColour = { new Color(1f, 0.125f, 0.125f), new Color(0.125f, 0.878f, 0.251f), new Color(0.188f, 0.376f, 1f) };      // #FF2020 #20E040 #3060FF
     static readonly Color[] GateColour = { IsleKit.Red, new Color(0.1f, 0.6f, 0.24f), new Color(0.14f, 0.3f, 0.86f) };
     static readonly Color White = new Color(0.95f, 0.95f, 0.92f), Black = new Color(0.1f, 0.1f, 0.12f);
-    const float LampRange = 0.25f;         // the Mod sets the light's range when > 0: the glow cannot leave the booth
+    // Every lamp on the course is this warm white and means the same: through here next, two together. (A lamp's colour
+    // tints its lens whether it is lit or not: near-white is a dull disc when off and a bright one when lit.)
+    static readonly Color GoLight = new Color(1f, 0.92f, 0.75f);
+    // a gate: two poles and a banner over the lane's upper end, high over a skier's head
+    const float BannerLow = 2.6f, BannerTall = 0.8f;
+    // A gate's lamp is the game's flood lamp (Light 6: 0.48 m across, its back 0.142 m behind its pivot, its middle 0.017 m
+    // under it) on a dark board standing on the gate's banner, facing up the run. Range and intensity are the Slalom's.
+    const float LampBoardWide = 1.0f, LampBoardTall = 1.0f, SignDeep = 0.06f;
+    const float LampOut = 0.142f + 0.01f, LampDrop = 0.017f, LampRange = 16f, LampIntensity = 3f;
+    // a lane's lower end: a strip in the gate's colour between two poles, and on it a dark board with the result bar on
+    // its uphill face, in front of a skier from the moment they enter the lane (a Progress Bar's back is 0.101 m behind its pivot)
+    const float ExitLow = 2.0f, ExitTall = 0.3f, BarBoardWide = 2.6f, BarBoardTall = 0.8f, BarOut = 0.101f + 0.01f;
+    // The catch box below a row: right across the run and a metre beyond each edge, from 8 to 32 m below the row's middle
+    // (the lanes end at 7), so that a pair strung out too far for a lane is still seen together here. It lies along the
+    // slope and is made as tall as its ground needs, from 1.5 m under the lowest snow in it to 5 m over the highest: the
+    // run falls away across its width as well (by 9 m from edge to edge below row 3), and row 5's lies over a brow.
+    const float CatchFrom = 8f, CatchLong = 24f, CatchBeyond = 1f, CatchUnder = 1.5f, CatchOver = 5f;
+    // the sight check: a skier's eyes over the snow, and the least distance above its gates at which a row must be in sight
+    const float EyeHeight = 0.6f, MinSight = 35f;
 
-    // ---- the booths: one design for all three (canonical frame: doorway in the front wall at -z, the panel on the
-    // back wall at +z, the caller facing +z, so "left" is -x) ----
+    // ---- the two ends ----
     const float PadTop = 0.15f;            // floors stand this far above the levelled ground
-    const float HW = 2.1f, HD = 1.8f, Wall = 0.3f, WallH = 2.5f, RoofT = 0.3f, Backboard = 0.6f, DoorTop = 2.1f;
-    const float IW = HW - Wall;                         // 1.8: the inside half-width
-    const float Face = HD - Wall - Backboard;           // 0.9: the backboard's face, 0.9 m in from the back wall's outside
-    const float Front = -HD + Wall;                     // -1.5: the front wall's inside
-    const float DoorX0 = 0.3f, DoorX1 = 1.5f;           // the doorway, 1.2 m wide, at the front wall's right
-    const float BaffleX0 = -0.45f;                      // the baffle runs from here to the right wall, 1.0-1.3 m in from the front
-    static readonly float[] SlotHeight = { 2.0f, 1.65f, 1.3f, 0.95f };      // panel rows, top down (0.35 m apart)
-    const float Col0 = -0.9f, ColStep = 0.35f, BarX = 0.55f, SideX = 1.45f;
+    // the start pad (frame: +z down the fall line, +x right looking downhill, so the run lies towards -x): the red gate
+    const float StartGateX = -2f, StartGateZ = 3f, StartGateTop = 2.95f;
+    // the finish (frame: +z down the run-out): the arch, and the lane from it to the back wall inside the shelter
+    const float ArchZ = -10.5f, ArchLeft = -4f, ArchRight = 7.5f, ArchTop = 4.5f, ShelterBack = 1.25f;
+    // the dark faces with a switch on them: the Start Board on its posts, and a panel on the shelter's back wall
+    const float BoardWide = 2.0f, BoardLow = 0.9f, BoardHigh = 1.9f, BoardDeep = 0.12f;
 
     PuzzleBuilder b;
     Vector3 root;
+    Vector2 site;
     Material snowy, bare;
 
     // A placing frame: an origin (root-local x, z), a yaw about the root, and a base height above the root's level
@@ -77,11 +126,6 @@ public sealed class DownhillPuzzle : PuzzleDef
             Vector2 p = Local(x, z);
             return b.Part(prefab, p.x, p.y, Base + h, Yaw + yaw, false);
         }
-        public Piece Empty(string name, float x, float z, float h)
-        {
-            Vector2 p = Local(x, z);
-            return b.Empty(name, p.x, p.y, Base + h, false);
-        }
         // A mesh built in this frame's coordinates (y up from the base)
         public Piece Mesh(string name, MeshBuilder mb, Material material, bool collider = true)
         {
@@ -94,89 +138,89 @@ public sealed class DownhillPuzzle : PuzzleDef
         public Vector3 Post(float x, float z, float h) { Vector2 p = Local(x, z); return new Vector3(p.x, Base + h, p.y); }
     }
 
-    // One row's panel: its Press In Order, bar and lamps (R, G, B)
-    sealed class PanelRow { public Component order, bar; }
-    // What every booth has
-    sealed class BoothParts { public Component timer, fail, mic, speaker; }
+    // One row as built: where it stands; from left to right as a skier sees them, its lanes' sensors, the lamps on its
+    // gates (and where those are, root-local) and the result bars over its exits; and the box that catches a pair skiing past
+    sealed class Row
+    {
+        public float along;
+        public readonly Component[] lanes = new Component[3], lamps = new Component[3], bars = new Component[3];
+        public readonly Vector3[] lampAt = new Vector3[3];
+        public Component catcher;
+    }
 
     public override void Build(PuzzleBuilder builder)
     {
         b = builder;
         root = b.Root.transform.position;
+        site = new Vector2(root.x, root.z);
         snowy = IsleKit.Snowy(b);
         bare = IsleKit.Bare(b);
-        var site = new Vector2(root.x, root.z);
-        Sdk.Set(b.Puzzle, "gourdColor", IsleKit.Gold);      // a harder puzzle
+        Sdk.Set(b.Puzzle, "gourdColor", IsleKit.Gold);      // the mountain's long run keeps its gold gourd
 
-        // ---- frames: the finish (+z downhill along the run-out, +x right looking downhill), the start house, the cat hut ----
+        // ---- frames: the finish (+z downhill along the run-out, +x right looking downhill) and the start pad ----
         WinterIslePuzzle.PisteFinish(out Vector2 direction, out _);
         float runYaw = Mathf.Atan2(direction.x, direction.y) * Mathf.Rad2Deg;
         var finish = new Frame(b, Vector2.zero, runYaw, GroundAt(Vector2.zero) + PadTop);
-        Vector2 startLocal = StartHouseSite - site, catLocal = CatHutSite - site;
-        float startYaw = FallYaw((StartHouseSite - WinterIslePuzzle.Peak).magnitude);
-        float catYaw = FallYaw((CatHutSite - WinterIslePuzzle.Peak).magnitude);
+        Vector2 startLocal = StartSite - site;
+        float startAlong = (StartSite - WinterIslePuzzle.Peak).magnitude, startYaw = FallYaw(startAlong);
         var start = new Frame(b, startLocal, startYaw, GroundAt(startLocal) + PadTop);
-        var cat = new Frame(b, catLocal, catYaw, GroundAt(catLocal) + PadTop);
 
         Vector2 debug = finish.Local(0f, -4.5f);
         b.DebugTeleport(debug.x, debug.y);
         Vector2 clearAt = finish.Local(0.5f, 1.5f);
         b.ClearGround(22f, 16f, clearAt.x, clearAt.y).Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, runYaw, 0f);
         b.ClearGround(10f, 8f, startLocal.x, startLocal.y).Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, startYaw, 0f);
-        b.ClearGround(6f, 5f, catLocal.x, catLocal.y).Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, catYaw, 0f);
 
-        // ---- the course: 18 gate sensors, their poles and banners, the speakers along the run ----
-        var along = new float[7];
-        var gateSpots = new List<Vector2>();
-        Component[][] gates = Course(site, along, gateSpots);
-        List<Component> course = CourseSpeakers(site, gateSpots);
-
-        // ---- the lobby groups ----
-        Piece rows12Finish = IsleKit.Lobby(b, "Rows 1-2 at Finish", true, true, false);
-        Piece row4Start = IsleKit.Lobby(b, "Row 4 at Start", true, true, false);
-        Piece row4Finish = IsleKit.Lobby(b, "Row 4 at Finish", false, false, true);
-        Piece mid = IsleKit.Lobby(b, "Mid Caller", false, false, true);
-
-        // ---- the start house: a level stone pad, the start gate and the ball's dispenser, the booth (rows 4A, 5, 6) ----
+        // ---- the start pad: a level stone pad, the red start gate with its lamp, the Start Board ----
         var pad = new MeshBuilder();
         Block(pad, -5f, 5f, -1.15f, 0f, -4f, 4f, IsleKit.Stone);
-        Block(pad, -3.45f, -2.55f, 0f, 0.35f, 2.15f, 3.05f, IsleKit.Stone);       // under the dispenser
-        start.Mesh("Start House Pad", pad, snowy);
+        start.Mesh("Start Pad", pad, snowy);
         var gate = new MeshBuilder();
         Block(gate, -3.68f, -3.52f, 0f, 3.0f, 2.92f, 3.08f, IsleKit.Red);
         Block(gate, -0.48f, -0.32f, 0f, 3.0f, 2.92f, 3.08f, IsleKit.Red);
-        Block(gate, -3.52f, -0.48f, 2.45f, 2.95f, 2.97f, 3.03f, IsleKit.Red);
+        Block(gate, -3.52f, -0.48f, 2.45f, StartGateTop, 2.97f, 3.03f, IsleKit.Red);
         for (int i = 0; i < 12; i++)
             Block(gate, -3.5f + i * 0.25f, -3.5f + (i + 1) * 0.25f, 2.6f, 2.8f, 2.95f, 2.97f, i % 2 == 0 ? White : Black);
+        Block(gate, StartGateX - LampBoardWide / 2f, StartGateX + LampBoardWide / 2f, StartGateTop, StartGateTop + LampBoardTall,
+            StartGateZ - SignDeep / 2f, StartGateZ + SignDeep / 2f, IsleKit.Board);      // the lamp's board, on the beam
         start.Mesh("Start Gate", gate, bare);
-        Piece spawner = start.Part("Timer Spawner", -3.0f, 2.6f, 0.35f + 0.3f, 0f).Named("Timer Ball Dispenser");
-        spawner.Set("PuzzleTimerSpawner", "style", 0).Set("PuzzleTimerSpawner", "time", T);
+        // (the lamp faces the pad, up the hill: whoever stands on the pad sees whether the gate is live)
+        Component startLamp = GoLamp(start.Part("Light 6", StartGateX, StartGateZ - SignDeep / 2f - LampOut, StartGateTop + LampBoardTall / 2f + LampDrop, 180f).Named("Start Lamp"));
         Kit.LightString(b, "Start Gate Lights", new List<Vector3> { start.Post(-3.6f, 3.0f, 2.95f), start.Post(-0.4f, 3.0f, 2.95f) }, 0.3f, 0.4f, false, false, 51);
-        Frame startBooth = Booth(start, "Start Booth", 1.4f, -1.3f, 0f, false, 52);
-        BoothParts startKit = BoothKit(startBooth, "Start", null, 2);
-        PanelRow r4A = Row(startBooth, "4A", 4, 0, gates[3], row4Start);
-        PanelRow r5 = Row(startBooth, "5", 5, 1, gates[4], null);
-        PanelRow r6 = Row(startBooth, "6", 6, 2, gates[5], null);
+        // the start lane: the gateway itself, 1.5 m either side of the beam; the two walk through it together
+        Component startLane = Zone(start.Part("Presence Sensor", StartGateX, StartGateZ, 1.0f, 0f).Named("Start Lane"), new Vector3(3.0f, 3.0f, 3.0f), Pack);
+        // the Start Board, beside the gate and facing the pad as the gate's lamp does: the switch on the half nearer the gate
+        Frame startBoard = start.Sub(2.0f, 2.6f, 180f);
+        var board = new MeshBuilder();
+        foreach (int e in new[] { -1, 1 })
+            Block(board, e * (BoardWide / 2f + 0.12f) - 0.1f, e * (BoardWide / 2f + 0.12f) + 0.1f, -0.4f, BoardHigh + 0.3f, -0.1f, 0.1f, IsleKit.Wood);
+        Block(board, -BoardWide / 2f, BoardWide / 2f, BoardLow, BoardHigh, -BoardDeep / 2f, BoardDeep / 2f, IsleKit.Board);
+        Block(board, -BoardWide / 2f - 0.35f, BoardWide / 2f + 0.35f, BoardHigh + 0.3f, BoardHigh + 0.42f, -0.25f, 0.35f, IsleKit.DarkWood);      // a little roof against the snow
+        startBoard.Mesh("Start Board", board, snowy);
+        Component startRows = BoardParts(startBoard, "start", BoardDeep / 2f, 1f, out Component startRelay);
+        CourseCard(startBoard, BoardDeep / 2f, -1f);
 
-        // ---- the cat track hut (rows 1B, 2B in 4-player lobbies; an empty shelter otherwise) ----
-        var catPad = new MeshBuilder();
-        Block(catPad, -3f, 3f, -1.15f, 0f, -2.5f, 2.5f, IsleKit.Stone);
-        cat.Mesh("Cat Hut Pad", catPad, snowy);
-        Frame catBooth = Booth(cat, "Cat Hut", 0f, 0f, 180f, false, 53);      // doorway downhill, onto the cat track
-        BoothParts catKit = BoothKit(catBooth, "Mid", mid, 1);
-        PanelRow r1B = Row(catBooth, "1B", 1, 0, gates[0], mid);
-        PanelRow r2B = Row(catBooth, "2B", 2, 1, gates[1], mid);
+        // ---- the course: six rows of three lanes, each row's catch box below it ----
+        var rows = new Row[RowCount];
+        for (int r = 0; r < RowCount; r++) rows[r] = BuildRow(r);
+        for (int r = 0; r < RowCount; r++)
+        {
+            float entry = rows[r].along - LaneLong / 2f, from = r == 0 ? startAlong + 8f : rows[r - 1].along;
+            float sight = SightAbove(from, entry, rows[r].lampAt);
+            string line = "[BWM] Downhill: row " + (r + 1) + "'s lamps are all in sight from " + Sdk.F(sight) + " m above its gates (it is dealt " + Sdk.F(entry - from) + " m above them)";
+            if (sight < MinSight) Debug.LogWarning(line + ": too late to steer for, move the row");
+            else Debug.Log(line);
+        }
 
-        // ---- the finish: the shelter with the ball's holder and the Validator, the start corner, the timing hut ----
+        // ---- the finish: the shelter with its panel, the chequered board behind it, the arch, the start corner ----
         var shelter = new MeshBuilder();
         Block(shelter, -2f, 2f, -1.15f, 0f, -1.5f, 1.5f, IsleKit.Stone);         // floor, sunk about a metre
-        Block(shelter, -2f, 2f, 0f, 2.6f, 1.25f, 1.5f, IsleKit.Wood);            // back wall (downhill)
-        Block(shelter, -2f, -1.75f, 0f, 2.6f, -1.5f, 1.25f, IsleKit.Wood);
-        Block(shelter, 1.75f, 2f, 0f, 2.6f, -1.5f, 1.25f, IsleKit.Wood);
+        Block(shelter, -2f, 2f, 0f, 2.6f, ShelterBack, 1.5f, IsleKit.Wood);      // back wall (downhill)
+        Block(shelter, -2f, -1.75f, 0f, 2.6f, -1.5f, ShelterBack, IsleKit.Wood);
+        Block(shelter, 1.75f, 2f, 0f, 2.6f, -1.5f, ShelterBack, IsleKit.Wood);
         Block(shelter, -2.3f, 2.3f, 2.6f, 2.8f, -1.8f, 1.8f, IsleKit.DarkWood);   // roof
         Block(shelter, -1.75f, 1.75f, 2.25f, 2.6f, -1.5f, -1.3f, IsleKit.Wood);  // beam over the open uphill side
-        Block(shelter, -1.25f, -0.55f, 0f, 0.5f, 0.25f, 0.95f, IsleKit.Stone);   // the holder's plinth
-        Block(shelter, 0.65f, 1.15f, 0f, 1.75f, 0.6f, 0.9f, IsleKit.Stone);      // the Validator's post
+        Block(shelter, -BoardWide / 2f, BoardWide / 2f, BoardLow, BoardHigh, ShelterBack - 0.04f, ShelterBack, IsleKit.Board);      // the panel on the back wall
         // the chequered board behind the shelter, high enough to read over its roof from up the run
         Block(shelter, -1.6f, -1.4f, -0.6f, 4.2f, 2.3f, 2.5f, IsleKit.Red);
         Block(shelter, 1.4f, 1.6f, -0.6f, 4.2f, 2.3f, 2.5f, IsleKit.Red);
@@ -189,132 +233,259 @@ public sealed class DownhillPuzzle : PuzzleDef
             for (int j = 0; j < 2; j++)
                 Block(banner, -1.75f + i * 0.25f, -1.5f + i * 0.25f, 2.25f + j * 0.175f, 2.425f + j * 0.175f, -1.52f, -1.5f, (i + j) % 2 == 0 ? Black : White);
         finish.Mesh("Finish Banner", banner, bare, false);
-        Piece goal = finish.Part("Timer Goal", -0.9f, 0.6f, 0.5f + 0.12f, 180f).Named("Ball Holder");
-        Piece validator = finish.Part("Validator", 0.9f, 0.6f, 1.4f, 180f).Named("Finish Check");      // its back on the post, screen to the opening
+        // the panel faces up the run-out, out of the shelter's open side: the switch on its right as the run goes
+        Component finishRows = BoardParts(finish.Sub(0f, ShelterBack - 0.04f, 180f), "finish", 0f, -1f, out Component finishRelay);
+
+        // The finish arch, across the run-out 9 m above the shelter: two red posts, a chequered beam, the finish lamp on a
+        // board over it. Nothing of it stops a skier. Red pennants run from its feet down both edges of the finish lane.
+        float archMid = (ArchLeft + ArchRight) / 2f;
+        var arch = new MeshBuilder();
+        foreach (float x in new[] { ArchLeft - 0.2f, ArchRight + 0.2f })
+            Block(arch, x - 0.1f, x + 0.1f, -0.4f, ArchTop + 0.1f, ArchZ - 0.1f, ArchZ + 0.1f, IsleKit.Red);
+        Block(arch, ArchLeft - 0.1f, ArchRight + 0.1f, ArchTop - 0.6f, ArchTop, ArchZ - 0.04f, ArchZ + 0.04f, IsleKit.Red);
+        int squares = Mathf.RoundToInt((ArchRight - ArchLeft) / 0.3f);
+        float square = (ArchRight - ArchLeft) / squares;
+        for (int i = 0; i < squares; i++)
+            for (int j = 0; j < 2; j++)
+                Block(arch, ArchLeft + i * square, ArchLeft + (i + 1) * square, ArchTop - 0.6f + j * 0.3f, ArchTop - 0.3f + j * 0.3f, ArchZ - 0.06f, ArchZ - 0.04f, (i + j) % 2 == 0 ? Black : White);
+        Block(arch, archMid - LampBoardWide / 2f, archMid + LampBoardWide / 2f, ArchTop, ArchTop + LampBoardTall, ArchZ - SignDeep / 2f, ArchZ + SignDeep / 2f, IsleKit.Board);
+        for (float z = ArchZ + 2.5f; z < ShelterBack - 1f; z += 2.5f)
+            foreach (float x in new[] { ArchLeft, ArchRight })
+            {
+                Block(arch, x - 0.015f, x + 0.015f, -0.25f, 0.9f, z - 0.015f, z + 0.015f, IsleKit.DarkWood);
+                Block(arch, x - 0.01f, x + 0.01f, 0.66f, 0.88f, z + 0.01f, z + 0.31f, IsleKit.Red);
+            }
+        finish.Mesh("Finish Arch", arch, bare, false);
+        Component finishLamp = GoLamp(finish.Part("Light 6", archMid, ArchZ - SignDeep / 2f - LampOut, ArchTop + LampBoardTall / 2f + LampDrop, 180f).Named("Finish Lamp"));
+        Kit.LightString(b, "Finish Arch Lights", new List<Vector3> { finish.Post(ArchLeft - 0.2f, ArchZ, ArchTop - 0.6f), finish.Post(ArchRight + 0.2f, ArchZ, ArchTop - 0.6f) },
+            0.4f, 0.5f, false, false, 52);
+        // The finish lane: from the arch to the shelter's back wall, level ground all of it. Skiers pass through it or, better,
+        // brake and stop in it: the first to arrive waits there for the second.
+        Component finishLane = Zone(finish.Part("Presence Sensor", archMid, (ArchZ + ShelterBack) / 2f, 1.6f, 0f).Named("Finish Lane"),
+            new Vector3(ArchRight - ArchLeft, 5f, ShelterBack - ArchZ), Pack);
+        // The finish watch's lamp and bar (see the chains): neither is for seeing, so both are sunk in the shelter's stone
+        // floor, the lamp's light held within a hand's breadth
+        Component watchLamp = finish.Part("Light 8", 0f, 0f, -0.5f, 0f).Named("Finish Watch Lamp").Set("PuzzleLight", "range", 0.05f).Component("PuzzleLight");
+        Component watchRelay = finish.Part("Progress Bar", 0.6f, 0f, -0.5f, 0f).Named("Relay Bar (finish watch)").Scaled(0.05f, 0.05f, 0.05f)
+            .Set("PuzzleProgressBar", "total", 1).Component("PuzzleProgressBar");
+
         Vector2 corner = finish.Local(-7.5f, -1.5f);
         IsleKit.StartCorner(b, corner.x, corner.y, runYaw + 180f);
-        Frame hut = Booth(finish, "Timing Hut", 8f, 3f, 180f, true, 54);       // doorway downhill, panel on the uphill wall
-        BoothParts finishKit = BoothKit(hut, "Finish", null, 1);
-        PanelRow r1A = Row(hut, "1A", 1, 0, gates[0], rows12Finish);
-        PanelRow r2A = Row(hut, "2A", 2, 1, gates[1], rows12Finish);
-        PanelRow r3 = Row(hut, "3", 3, 2, gates[2], null);
-        PanelRow r4B = Row(hut, "4B", 4, 3, gates[3], row4Finish);
         Kit.LightString(b, "Finish Lights", new List<Vector3>
         {
             RingPost(finish, -10.5f, -5f), RingPost(finish, -10.5f, 1f), RingPost(finish, -10.5f, 7f), RingPost(finish, 0.25f, 7f),
             RingPost(finish, 11f, 7f), RingPost(finish, 11f, 1f), RingPost(finish, 11f, -5f),
-        }, 0.4f, 0.5f, true, true, 17);      // three sides, open uphill where the skier comes in
+        }, 0.4f, 0.5f, true, true, 17);      // three sides, open uphill where the skiers come in
 
-        // ---- Calm Air over each structure (the course itself stays open: see Downhill.impl.md) ----
+        // ---- Calm Air over each end (the course itself stays open, as it always was) ----
         Vector2 calm = finish.Local(0.5f, 1.5f);
         IsleKit.CalmAir(b, "Downhill Finish", calm.x, calm.y, new Vector3(30f, 120f, 24f), runYaw, -10f);
         IsleKit.CalmAir(b, "Downhill Start", startLocal.x, startLocal.y, new Vector3(18f, 120f, 16f), startYaw, -10f);
-        IsleKit.CalmAir(b, "Downhill Cat Hut", catLocal.x, catLocal.y, new Vector3(12f, 120f, 11f), catYaw, -10f);
 
-        // ---- voice: every mic plays to every course speaker and the other booths' speakers ----
-        Sdk.Add(startKit.mic, "speakers", Speakers(course, finishKit.speaker, catKit.speaker));
-        Sdk.Add(finishKit.mic, "speakers", Speakers(course, startKit.speaker, catKit.speaker));
-        Sdk.Add(catKit.mic, "speakers", Speakers(course, startKit.speaker, finishKit.speaker));
-
-        // ---- the build assert: no row on a panel the skier can read on the way down ----
-        along[0] = (World(start.Local(-2f, 3f)) - WinterIslePuzzle.Peak).magnitude;      // the start gate
-        AssertPanels(along, World(startBooth.Origin), World(catBooth.Origin), World(hut.Origin));
+        // ---- the Press In Order chains ----
+        Component startChain = Chain("Start Chain", new[] { startLamp }, new[] { startLane }, new[] { startRelay });
+        var rowChain = new Component[RowCount];
+        for (int r = 0; r < RowCount; r++)
+        {
+            rowChain[r] = Chain("Row Chain " + (r + 1), rows[r].lamps, rows[r].lanes, rows[r].bars);
+            // past the row without its lit gate: a pair reaching this box while the row still waits ends it (End does nothing
+            // to a row already passed or failed, or with the puzzle off)
+            Sdk.Wire(rows[r].catcher, "onPressed", rowChain[r], "End");
+        }
+        Component finishChain = Chain("Finish Chain", new[] { finishLamp }, new[] { finishLane }, new[] { finishRelay });
+        // The finish watch. A Presence Sensor presses only when it fills, so a pair already standing in the finish lane when
+        // the last row is passed (two of four waiting in the shelter for the two who ski) would never press it, and the
+        // skiers' arrival would change nothing. So a second chain on the same sensor, in Press In Order's timed mode,
+        // asks once, half a second after the finish is lit, whether the lane is full at that moment, and wins if it is. If
+        // it is not, the lane can only fill later by somebody coming in, and that press is the finish chain's.
+        Component finishWatch = Chain("Finish Watch", new[] { watchLamp }, new[] { finishLane }, new[] { watchRelay });
+        Sdk.Set(finishWatch, "holdAtEnd", true);
+        Sdk.Set(finishWatch, "phaseSeconds", 0.5f);
 
         // ---- wiring ----
-        PanelRow[] rows = { r1A, r1B, r2A, r2B, r3, r4A, r4B, r5, r6 };
-        Component[] timers = { startKit.timer, finishKit.timer, catKit.timer };
-        Component[] fails = { startKit.fail, finishKit.fail, catKit.fail };
-        Component check = validator.Component("PuzzleValidator");
-        Piece sdk = b.RootPiece;
-
-        sdk.On("PuzzleSDK", "onPuzzleStart", r1A.order, "Begin");
-        sdk.On("PuzzleSDK", "onPuzzleStart", r1B.order, "Begin");
-        foreach (Component t in timers) sdk.On("PuzzleSDK", "onPuzzleStart", t, "StartTimer");
-        sdk.On("PuzzleSDK", "onPuzzleStart", check, "TurnOn");
-        sdk.On("PuzzleSDK", "onPuzzleStart", check, "SetCorrect", false);
-        foreach (PanelRow r in rows) sdk.On("PuzzleSDK", "onPuzzleStart", r.bar, "Reset");
-        foreach (PanelRow r in rows) sdk.On("PuzzleSDK", "onPuzzleStop", r.order, "End");
-        foreach (Component t in timers) sdk.On("PuzzleSDK", "onPuzzleStop", t, "ResetTimer");
-        foreach (Component t in timers) sdk.On("PuzzleSDK", "onWin", t, "PauseTimer");
-
-        foreach (PanelRow r in new[] { r1A, r1B })
-            foreach (Component f in fails) Sdk.Wire(r.order, "onBegin", f, "TurnOff");
-        Chain(new[] { r1A, r1B }, r2A, r2B);
-        Chain(new[] { r2A, r2B }, r3);
-        Chain(new[] { r3 }, r4A, r4B);
-        Chain(new[] { r4A, r4B }, r5);
-        Chain(new[] { r5 }, r6);
-        Sdk.Wire(r6.bar, "onFull", check, "SetCorrect", true);
-        foreach (PanelRow r in rows)
-            foreach (Component f in fails) Sdk.Wire(r.order, "onFail", f, "TurnOn");
-
-        Component clock = finishKit.timer;      // the finish clock's run-out is the one wired
-        Sdk.Wire(clock, "onFinished", check, "SetCorrect", false);
-        foreach (PanelRow r in rows) Sdk.Wire(clock, "onFinished", r.order, "End");
-        foreach (Component f in fails) Sdk.Wire(clock, "onFinished", f, "TurnOn");
-
-        goal.On("PuzzleTimerGoal", "onTimerPlaced", check, "Check");      // never Win directly: the Validator wins
+        Component sdk = b.Puzzle;
+        // every bar a run fills (the rows' result bars, the finish's two bars and the two rows-cleared bars), and every
+        // chain below the start gate
+        var runBars = new List<Component> { finishRelay, watchRelay, startRows, finishRows };
+        foreach (Row row in rows) runBars.AddRange(row.bars);
+        var chains = new List<Component>(rowChain) { finishChain, finishWatch };
+        // the switch: on arms the start gate; off ends every chain (their lamps go out) and empties every bar
+        Sdk.Wire(sdk, "onPuzzleStart", startChain, "Begin");
+        foreach (Component chain in chains) Sdk.Wire(sdk, "onPuzzleStop", chain, "End");
+        Sdk.Wire(sdk, "onPuzzleStop", startChain, "End");
+        Sdk.Wire(sdk, "onPuzzleStop", startRelay, "Reset");
+        foreach (Component bar in runBars) Sdk.Wire(sdk, "onPuzzleStop", bar, "Reset");
+        // Through the start gate: whatever run was on the course ends, the bars empty, row 1 is dealt, and the start arms
+        // itself again. That last Begin runs inside the start chain's own press (its bar filling is what fires this event):
+        // it empties the bar again, so Press In Order finds its round unfinished and lights the start lamp once more half a
+        // second later. The start chain must keep this bar as its only one for that.
+        foreach (Component chain in chains) Sdk.Wire(startRelay, "onFull", chain, "End");
+        foreach (Component bar in runBars) Sdk.Wire(startRelay, "onFull", bar, "Reset");
+        Sdk.Wire(startRelay, "onFull", rowChain[0], "Begin");
+        Sdk.Wire(startRelay, "onFull", startChain, "Begin");
+        // each row passed counts one on both rows-cleared bars and deals the next; the last one lights the finish arch
+        for (int r = 0; r < RowCount; r++)
+        {
+            Component passed = rows[r].bars[0];
+            Sdk.Wire(passed, "onFull", startRows, "Increment");
+            Sdk.Wire(passed, "onFull", finishRows, "Increment");
+            Sdk.Wire(passed, "onFull", r + 1 < RowCount ? rowChain[r + 1] : finishChain, "Begin");
+        }
+        Sdk.Wire(rows[RowCount - 1].bars[0], "onFull", finishWatch, "Begin");
+        // two together in the finish lane after every row, by either chain: the rows-cleared bars fill, the gourd is won,
+        // and the other chain is put out (the puzzle stays on after a win, until somebody turns it off)
+        foreach (Component relay in new[] { finishRelay, watchRelay })
+        {
+            Sdk.Wire(relay, "onFull", startRows, "Increment");
+            Sdk.Wire(relay, "onFull", finishRows, "Increment");
+            Sdk.Wire(relay, "onFull", sdk, "Win");
+        }
+        Sdk.Wire(finishRelay, "onFull", finishWatch, "End");
+        Sdk.Wire(watchRelay, "onFull", finishChain, "End");
     }
 
-    // Each of 'from' rows' bars, when full, begins every row in 'to'
-    static void Chain(PanelRow[] from, params PanelRow[] to)
+    Component Chain(string name, Component[] lights, Component[] buttons, Component[] bars)
     {
-        foreach (PanelRow f in from)
-            foreach (PanelRow t in to) Sdk.Wire(f.bar, "onFull", t.order, "Begin");
+        Piece holder = b.Empty(name, 0f, 0f, 0.5f);
+        Component c = b.AddScript(holder, "PuzzlePressInOrder");
+        Sdk.Add(c, "lights", lights);
+        Sdk.Add(c, "buttons", buttons);
+        Sdk.Add(c, "progressBars", bars);
+        Sdk.Set(c, "rounds", 1);
+        return c;
     }
 
-    static Object[] Speakers(List<Component> course, params Component[] booths)
+    // One of the course's lamps: warm white, lighting the snow in front of it
+    static Component GoLamp(Piece lamp)
+        => lamp.Set("PuzzleLight", "color", GoLight).Set("PuzzleLight", "range", LampRange).Set("PuzzleLight", "intensity", LampIntensity).Component("PuzzleLight");
+
+    // Makes a Presence Sensor one box of this size (across, up, along) that takes this many players
+    static Component Zone(Piece sensor, Vector3 size, int players)
     {
-        var all = new List<Object>(course);
-        all.AddRange(booths);
-        return all.ToArray();
+        BoxCollider box = sensor.Go.GetComponent<BoxCollider>();
+        if (box == null) box = sensor.Go.AddComponent<BoxCollider>();
+        box.size = size;
+        box.center = Vector3.zero;
+        sensor.Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", players);
+        return sensor.Component("PuzzlePresenceSensor");
+    }
+
+    // ---- the two ends ----
+
+    // What each end of the course has on a dark face that looks along a frame's +z from z = 'face': a start switch and
+    // its live lamp to one side ('side' is +1 or -1 along the frame's x) and the rows-cleared bar across the top, which
+    // is returned. 'relay' is the one bar of the chain at this end (the start gate's or the finish's): Press In Order
+    // needs it to report a press, nobody needs to see it, so it is 18 cm long and behind the face.
+    Component BoardParts(Frame f, string tag, float face, float side, out Component relay)
+    {
+        f.Part("Switch Start", side * 0.6f, face + 0.073f, 1.3f, 0f).Named("Start Switch (" + tag + ")");
+        f.Part("Live Light", side * 0.6f, face, 1.52f, 0f).Named("Live Light (" + tag + ")");
+        relay = f.Part("Progress Bar", 0f, face - 0.08f, 1.2f, 0f).Named("Relay Bar (" + tag + ")").Scaled(0.05f, 0.05f, 0.05f)
+            .Set("PuzzleProgressBar", "total", 1).Component("PuzzleProgressBar");
+        return f.Part("Progress Bar", 0f, face + 0.07f, 1.75f, 0f).Named("Rows Bar (" + tag + ")").Scaled(0.5f, 0.5f, 1f)
+            .Set("PuzzleProgressBar", "total", RowCount + 1).Component("PuzzleProgressBar");
+    }
+
+    // The course card on the Start Board's other half: three gates as the pack comes down on them, the lamp over the
+    // middle one lit, and two ski tracks through that gate side by side
+    void CourseCard(Frame f, float face, float side)
+    {
+        var card = new MeshBuilder();
+        void Mark(float x0, float x1, float y0, float y1, float proud, Color c)
+            => Block(card, Mathf.Min(side * x0, side * x1), Mathf.Max(side * x0, side * x1), y0, y1, face, face + proud, c);
+        Mark(0.05f, 0.9f, 0.95f, 1.55f, 0.015f, IsleKit.Cream * 0.35f + IsleKit.Board * 0.65f);
+        for (int k = 0; k < 3; k++)
+        {
+            float u = 0.22f + 0.255f * k;
+            bool lit = k == 1;
+            Mark(u - 0.095f, u + 0.095f, 1.12f, 1.19f, 0.025f, GateColour[k]);                          // the gate's banner
+            Mark(u - 0.045f, u + 0.045f, 1.23f, 1.32f, 0.025f, lit ? GoLight : IsleKit.DarkWood);      // its lamp
+            if (!lit) continue;
+            foreach (float t in new[] { -0.04f, 0.04f })
+            {
+                Mark(u + t - 0.012f, u + t + 0.012f, 1.34f, 1.52f, 0.025f, White);      // the two tracks down to the gate
+                Mark(u + t - 0.012f, u + t + 0.012f, 1.0f, 1.11f, 0.025f, White);       // and on below it
+            }
+        }
+        f.Mesh("Course Card", card, bare, false);
     }
 
     // ---- the course ----
 
-    // The 18 gate sensors, by row and colour; fills along[1..6] and the gates' world spots
-    Component[][] Course(Vector2 site, float[] along, List<Vector2> gateSpots)
+    // Row r: its three lanes (a gate with its lamp at the upper end, pennants down both edges, the result bar at the
+    // lower end, the sensor box between) and the catch box below it
+    Row BuildRow(int r)
     {
-        var sensors = new Component[6][];
-        var poles = new MeshBuilder();
-        for (int r = 0; r < 6; r++)
+        var row = new Row();
+        row.along = ChooseAlong(r, out float half, out bool narrow);
+        Vector2 centre = WinterIslePuzzle.RunCentre(Run, row.along, out _) - site;
+        Vector2 down = RunDown(row.along);
+        var side = new Vector2(down.y, -down.x);
+        float yaw = Mathf.Atan2(down.x, down.y) * Mathf.Rad2Deg;
+        float spread = narrow ? NarrowSpread : GateSpread, width = narrow ? NarrowWidth : GateWidth;
+        Debug.Log("[BWM] Downhill: row " + (r + 1) + " at along " + Sdk.F(row.along) + " (window " + Sdk.F(RowLo[r]) + "-" + Sdk.F(RowHi[r])
+            + "), half-width " + Sdk.F(half) + (narrow ? " NARROW: gates at +-8 m, 4 m wide (no pitch of 16 m half-width in its window)" : ""));
+        var mb = new MeshBuilder();
+        for (int p = 0; p < 3; p++)
         {
-            float a = ChooseAlong(r, out float half, out bool narrow);
-            along[r + 1] = a;
-            Vector2 centre = WinterIslePuzzle.RunCentre(Run, a, out _);
-            Vector2 down = (WinterIslePuzzle.RunCentre(Run, a + 6f, out _) - centre).normalized;
-            var side = new Vector2(down.y, -down.x);
-            float yaw = Mathf.Atan2(down.x, down.y) * Mathf.Rad2Deg;
-            float spread = narrow ? NarrowSpread : GateSpread, width = narrow ? NarrowWidth : GateWidth;
-            Debug.Log("[BWM] Downhill: row " + (r + 1) + " at along " + Sdk.F(a) + " (window " + Sdk.F(RowLo[r]) + "-" + Sdk.F(RowHi[r])
-                + "), half-width " + Sdk.F(half) + (narrow ? " NARROW: gates at +-8 m, 4 m wide (no pitch of 16 m half-width in its window)" : ""));
-            sensors[r] = new Component[3];
-            for (int p = 0; p < 3; p++)
-            {
-                int colour = RowOrder[r][p];
-                Vector2 world = centre + side * ((p - 1) * spread);
-                gateSpots.Add(world);
-                Vector2 l = world - site;
-                float g = GroundAt(l);
-                // tilt the box with the slope, so it holds a skier over its whole depth
-                float drop = GroundAt(l - down * (GateDepth / 2f)) - GroundAt(l + down * (GateDepth / 2f));
-                float pitch = Mathf.Atan2(drop, GateDepth) * Mathf.Rad2Deg;
-                Piece sensor = b.Part("Presence Sensor", l.x, l.y, GateCentre, yaw).Named("Gate " + (r + 1) + " " + ColourName[colour]);
-                sensor.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(pitch, yaw, 0f);
-                BoxCollider box = sensor.Go.GetComponent<BoxCollider>();
-                if (box == null) box = sensor.Go.AddComponent<BoxCollider>();
-                box.size = new Vector3(width, GateTall, GateDepth);
-                box.center = Vector3.zero;
-                sensor.Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
-                sensors[r][colour] = sensor.Component("PuzzlePresenceSensor");
-                AddGate(poles, new Vector3(l.x, g, l.y), down, width, colour);
-            }
+            int colour = RowOrder[r][p];
+            string tag = (r + 1) + " " + ColourName[colour];
+            Vector2 mid = centre + side * ((p - 1) * spread), entry = mid - down * (LaneLong / 2f), exit = mid + down * (LaneLong / 2f);
+            // the lane's box, tilted with the slope so that it holds a skier over its whole length
+            float pitch = Mathf.Atan2(GroundAt(entry) - GroundAt(exit), LaneLong) * Mathf.Rad2Deg;
+            Piece sensor = b.Part("Presence Sensor", mid.x, mid.y, LaneCentre, yaw).Named("Lane " + tag);
+            sensor.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(pitch, yaw, 0f);
+            row.lanes[p] = Zone(sensor, new Vector3(width, LaneTall, LaneLong), Pack);
+            // the gate, and the lamp on its board's uphill face
+            AddGate(mb, entry, down, width, colour);
+            float lampHigh = BannerLow + BannerTall + LampBoardTall / 2f + LampDrop;
+            Vector2 lampOn = entry - down * (SignDeep / 2f + LampOut);
+            row.lamps[p] = GoLamp(b.Part("Light 6", lampOn.x, lampOn.y, lampHigh + GroundAt(entry) - GroundAt(lampOn), yaw + 180f).Named("Lamp " + tag));
+            row.lampAt[p] = new Vector3(entry.x, GroundAt(entry) + lampHigh, entry.y);
+            // pennants in the gate's colour down both edges (nothing on the run has a collider: skiers pass through it all)
+            for (int e = -1; e <= 1; e += 2)
+                for (int t = -1; t <= 1; t++)
+                {
+                    Vector2 at = mid + side * (e * width / 2f) + down * (t * LaneLong / 4f);
+                    Kit.AddBox(mb, Foot(at) + Vector3.down * 0.1f, new Vector3(0.03f, 1.0f, 0.03f), IsleKit.DarkWood, yaw);
+                    Kit.AddBox(mb, Foot(at + down * 0.16f) + Vector3.up * 0.66f, new Vector3(0.02f, 0.22f, 0.3f), GateColour[colour], yaw);
+                }
+            // the lower end: a strip between two poles, the board on it and the result bar on the board's uphill face
+            Vector3 foot = Foot(exit);
+            for (int e = -1; e <= 1; e += 2) Pole(mb, exit + side * (e * width / 2f), foot.y + ExitLow + ExitTall, 0.07f, GateColour[colour], yaw);
+            Kit.AddBox(mb, foot + Vector3.up * ExitLow, new Vector3(width, ExitTall, 0.04f), GateColour[colour], yaw);
+            Kit.AddBox(mb, foot + Vector3.up * (ExitLow + ExitTall), new Vector3(BarBoardWide, BarBoardTall, SignDeep), IsleKit.Board, yaw);
+            Vector2 barOn = exit - down * (SignDeep / 2f + BarOut);
+            row.bars[p] = b.Part("Progress Bar", barOn.x, barOn.y, ExitLow + ExitTall + BarBoardTall / 2f + foot.y - GroundAt(barOn), yaw + 180f).Named("Result " + tag)
+                .Scaled(0.6f, 0.8f, 1f).Set("PuzzleProgressBar", "total", 1).Component("PuzzleProgressBar");
         }
-        b.MeshPiece("Slalom Gates", poles.ToMesh(), bare, false);      // no colliders: skiers pass through banners and poles
-        return sensors;
+        b.MeshPiece("Row " + (r + 1) + " Gates", mb.ToMesh(), bare, false);
+
+        // the catch box
+        float top = row.along + CatchFrom, middle = top + CatchLong / 2f;
+        Vector2 cMid = WinterIslePuzzle.RunCentre(Run, middle, out _) - site, cDown = RunDown(middle);
+        var cSide = new Vector2(cDown.y, -cDown.x);
+        float cYaw = Mathf.Atan2(cDown.x, cDown.y) * Mathf.Rad2Deg, ground = GroundAt(cMid);
+        float fall = (GroundAt(cMid - cDown * (CatchLong / 2f)) - GroundAt(cMid + cDown * (CatchLong / 2f))) / CatchLong, cPitch = Mathf.Atan(fall);
+        float reach = Mathf.Max(HalfAt(top), Mathf.Max(HalfAt(middle), HalfAt(top + CatchLong))) + CatchBeyond;
+        // how far the snow lies under and over the plane through the box's middle, measured along the box's own up
+        float low = 0f, high = 0f;
+        for (int i = -8; i <= 8; i++)
+            for (int j = -6; j <= 6; j++)
+            {
+                float x = reach * i / 8f, z = CatchLong / 2f * j / 6f, plane = ground - z * fall;
+                float over = (GroundOr(cMid + cSide * x + cDown * z, plane) - plane) * Mathf.Cos(cPitch);
+                low = Mathf.Min(low, over);
+                high = Mathf.Max(high, over);
+            }
+        Piece catcher = b.Part("Presence Sensor", cMid.x, cMid.y, 0f, cYaw).Named("Row " + (r + 1) + " Catch");
+        catcher.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(cPitch * Mathf.Rad2Deg, cYaw, 0f);
+        row.catcher = Zone(catcher, new Vector3(2f * reach, high + CatchOver - (low - CatchUnder), CatchLong), CatchPack);
+        catcher.Go.GetComponent<BoxCollider>().center = new Vector3(0f, (high + CatchOver + low - CatchUnder) / 2f, 0f);
+        return row;
     }
 
-    // Slides a row within its window to the nearest along where the run is wide enough over the sensor's depth
+    // Slides a row within its window to the nearest along where the run is wide enough over the lane's length
     static float ChooseAlong(int r, out float half, out bool narrow)
     {
         float best = RowNominal[r], bestHalf = -1f;
@@ -324,7 +495,7 @@ public sealed class DownhillPuzzle : PuzzleDef
                 if (d == 0 && sign < 0) continue;
                 float a = RowNominal[r] + sign * d;
                 if (a < RowLo[r] || a > RowHi[r]) continue;
-                float h = Mathf.Min(HalfAt(a), Mathf.Min(HalfAt(a - GateDepth / 2f), HalfAt(a + GateDepth / 2f)));
+                float h = Mathf.Min(HalfAt(a), Mathf.Min(HalfAt(a - LaneLong / 2f), HalfAt(a + LaneLong / 2f)));
                 if (h >= WideHalf) { half = h; narrow = false; return a; }
                 if (h > bestHalf) { bestHalf = h; best = a; }
             }
@@ -335,26 +506,61 @@ public sealed class DownhillPuzzle : PuzzleDef
 
     static float HalfAt(float along) { WinterIslePuzzle.RunCentre(Run, along, out float half); return half; }
 
+    // the way the run goes at a distance from the peak
+    static Vector2 RunDown(float along)
+        => (WinterIslePuzzle.RunCentre(Run, along + 6f, out _) - WinterIslePuzzle.RunCentre(Run, along, out _)).normalized;
+
     static float FallYaw(float along)
     {
-        Vector2 c = WinterIslePuzzle.RunCentre(Run, along, out _);
-        Vector2 down = WinterIslePuzzle.RunCentre(Run, along + 6f, out _) - c;
+        Vector2 down = RunDown(along);
         return Mathf.Atan2(down.x, down.y) * Mathf.Rad2Deg;
     }
 
-    // A slalom gate in root-local coordinates: two poles, a banner in the gate's colour and its shape in white on both
-    // faces (triangle red, square green, disc blue), for colour-blind players
-    static void AddGate(MeshBuilder mb, Vector3 foot, Vector2 down, float width, int colour)
+    // How far above a row's gates (whose upper end is at 'entry' metres from the peak) all three of its lamps are in sight
+    // of a skier coming down the middle of the run from 'from': only the ground between can hide them, as a brow does
+    float SightAbove(float from, float entry, Vector3[] lamps)
     {
+        float hiddenTo = from;
+        for (float a = from; a < entry - 4f; a += 2f)
+        {
+            Vector2 at = WinterIslePuzzle.RunCentre(Run, a, out _) - site;
+            var eye = new Vector3(at.x, GroundAt(at) + EyeHeight, at.y);
+            bool hidden = false;
+            foreach (Vector3 lamp in lamps)
+                for (int k = 1; k < 60 && !hidden; k++)
+                {
+                    Vector3 q = Vector3.Lerp(eye, lamp, k / 60f);
+                    hidden = GroundOr(new Vector2(q.x, q.z), float.MinValue) > q.y + 0.05f;
+                }
+            if (hidden) hiddenTo = a;
+        }
+        return entry - hiddenTo;
+    }
+
+    // A slalom gate across a lane's upper end at a root-local point: two poles, a banner in the gate's colour with its
+    // shape in white on both faces (triangle red, square green, disc blue: for colour-blind players), and standing on
+    // the banner the dark board that carries the gate's lamp
+    void AddGate(MeshBuilder mb, Vector2 at, Vector2 down, float width, int colour)
+    {
+        var side = new Vector2(down.y, -down.x);
         var fwd = new Vector3(down.x, 0f, down.y);
-        var right = new Vector3(down.y, 0f, -down.x);
+        var right = new Vector3(side.x, 0f, side.y);
         float yaw = Mathf.Atan2(down.x, down.y) * Mathf.Rad2Deg;
+        Vector3 foot = Foot(at);
         Color c = GateColour[colour];
-        Kit.AddBox(mb, foot + right * (width / 2f), new Vector3(0.08f, 3.4f, 0.08f), c, yaw);
-        Kit.AddBox(mb, foot - right * (width / 2f), new Vector3(0.08f, 3.4f, 0.08f), c, yaw);
-        Kit.AddBox(mb, foot + Vector3.up * 2.6f, new Vector3(width, 0.8f, 0.05f), c, yaw);
-        AddShape(mb, foot + Vector3.up * 3.0f - fwd * 0.035f, right, Vector3.up, colour, 0.3f, White);
-        AddShape(mb, foot + Vector3.up * 3.0f + fwd * 0.035f, right, Vector3.up, colour, 0.3f, White);
+        for (int e = -1; e <= 1; e += 2) Pole(mb, at + side * (e * width / 2f), foot.y + BannerLow + BannerTall, 0.08f, c, yaw);
+        Kit.AddBox(mb, foot + Vector3.up * BannerLow, new Vector3(width, BannerTall, 0.05f), c, yaw);
+        AddShape(mb, foot + Vector3.up * (BannerLow + BannerTall / 2f) - fwd * 0.035f, right, Vector3.up, colour, 0.3f, White);
+        AddShape(mb, foot + Vector3.up * (BannerLow + BannerTall / 2f) + fwd * 0.035f, right, Vector3.up, colour, 0.3f, White);
+        Kit.AddBox(mb, foot + Vector3.up * (BannerLow + BannerTall), new Vector3(LampBoardWide, LampBoardTall, SignDeep), IsleKit.Board, yaw);
+    }
+
+    // A pole standing on its own ground at a root-local point, its top at 'top' above the root's level: a gate's two
+    // poles end level with each other however the run falls away across it
+    void Pole(MeshBuilder mb, Vector2 at, float top, float thick, Color color, float yaw)
+    {
+        float from = GroundAt(at) - 0.3f;
+        Kit.AddBox(mb, new Vector3(at.x, from, at.y), new Vector3(thick, top - from, thick), color, yaw);
     }
 
     // A flat shape, seen from both sides: 0 a triangle point up, 1 a square, 2 a disc
@@ -372,174 +578,20 @@ public sealed class DownhillPuzzle : PuzzleDef
         }
     }
 
-    // The course speakers: fourteen, every 60 m from along 515, alternating sides just off the piste, facing the run,
-    // none within 8 m of a gate
-    List<Component> CourseSpeakers(Vector2 site, List<Vector2> gateSpots)
-    {
-        var speakers = new List<Component>();
-        var posts = new MeshBuilder();
-        for (int i = 0; i < 14; i++)
-        {
-            float s = i % 2 == 0 ? -1f : 1f;
-            Vector2 spot = default, inward = default;
-            bool clear = false;
-            for (int t = 0; t < 9 && !clear; t++)
-            {
-                float a = 515f + 60f * i + ((t + 1) / 2) * 6f * (t % 2 == 1 ? 1f : -1f);
-                Vector2 c = WinterIslePuzzle.RunCentre(Run, a, out float half);
-                Vector2 d = (WinterIslePuzzle.RunCentre(Run, a + 6f, out _) - c).normalized;
-                Vector2 side = new Vector2(d.y, -d.x) * s;
-                spot = c + side * (half + 3f);
-                inward = -side;
-                clear = true;
-                foreach (Vector2 g in gateSpots) if ((g - spot).magnitude < 8f) clear = false;
-            }
-            if (!clear) Debug.LogWarning("[BWM] Downhill: course speaker " + (i + 1) + " is within 8 m of a gate");
-            Vector2 l = spot - site;
-            float yaw = Mathf.Atan2(inward.x, inward.y) * Mathf.Rad2Deg;
-            var foot = new Vector3(l.x, GroundAt(l), l.y);
-            var face = new Vector3(inward.x, 0f, inward.y);
-            Kit.AddBox(posts, foot, new Vector3(0.14f, 1.95f, 0.14f), IsleKit.Wood, yaw);
-            Kit.AddBox(posts, foot + Vector3.up * 1.95f, new Vector3(0.36f, 0.06f, 0.36f), IsleKit.DarkWood, yaw);
-            Kit.AddBox(posts, foot + Vector3.up * 1.38f + face * 0.09f, new Vector3(0.38f, 0.44f, 0.04f), IsleKit.Board, yaw);
-            Vector2 at = l + inward * 0.21f;      // the speaker's back (0.1 m behind its pivot) on the plate
-            Piece speaker = b.Part("Intercom Speaker", at.x, at.y, 1.43f, yaw).Named("Course Speaker " + (i + 1));
-            speakers.Add(speaker.Component("PuzzleIntercomSpeaker"));
-        }
-        b.MeshPiece("Course Speaker Posts", posts.ToMesh(), snowy);
-        return speakers;
-    }
-
-    // ---- the booths ----
-
-    // A booth at (cx, cz) in 'parent', turned by 'yaw': 0.3 m walls and roof with no gaps, a solid backboard 0.6 m
-    // thick on the back wall (its face 0.9 m in from the outside), the doorway in the front wall and a baffle inside
-    // it that hides the panel from every line through the doorway. Returns the booth's own frame.
-    Frame Booth(Frame parent, string name, float cx, float cz, float yaw, bool floor, int seed)
-    {
-        Frame f = parent.Sub(cx, cz, yaw);
-        var mb = new MeshBuilder();
-        if (floor) Block(mb, -HW, HW, -1.15f, 0f, -HD, HD, IsleKit.Stone);
-        Block(mb, -HW, -IW, 0f, WallH, -HD, HD, IsleKit.Wood);                       // left wall
-        Block(mb, IW, HW, 0f, WallH, -HD, HD, IsleKit.Wood);                         // right wall
-        Block(mb, -IW, IW, 0f, WallH, HD - Wall, HD, IsleKit.Wood);                  // back wall
-        Block(mb, -IW, IW, 0f, WallH, Face, HD - Wall, IsleKit.Board);              // the backboard
-        Block(mb, -IW, DoorX0, 0f, WallH, -HD, Front, IsleKit.Wood);                 // front wall, left of the doorway
-        Block(mb, DoorX1, IW, 0f, WallH, -HD, Front, IsleKit.Wood);                  // and right of it
-        Block(mb, DoorX0, DoorX1, DoorTop, WallH, -HD, Front, IsleKit.Wood);         // lintel
-        Block(mb, BaffleX0, IW, 0f, WallH, Front + 1.0f, Front + 1.3f, IsleKit.Wood);   // baffle
-        Block(mb, -HW - 0.3f, HW + 0.3f, WallH, WallH + RoofT, -HD - 0.3f, HD + 0.3f, IsleKit.DarkWood);   // roof, overhanging 0.3 m
-        f.Mesh(name, mb, snowy);
-        // the colour and shape over each panel column, which the panel always shows red, green, blue from the left
-        var marks = new MeshBuilder();
-        for (int c = 0; c < 3; c++)
-            AddShape(marks, new Vector3(Col0 + c * ColStep, 2.3f, Face - 0.012f), Vector3.right, Vector3.up, c, 0.09f, GateColour[c]);
-        f.Mesh(name + " Marks", marks, bare, false);
-        Kit.LightString(b, name + " Lights", new List<Vector3> { f.Post(-HW - 0.2f, -HD - 0.32f, WallH - 0.02f), f.Post(0f, -HD - 0.32f, WallH - 0.02f), f.Post(HW + 0.2f, -HD - 0.32f, WallH - 0.02f) },
-            0.15f, 0.4f, false, false, seed);
-        return f;
-    }
-
-    // What every booth has: a start knob and live lamp in the doorway passage, the clock, the fail lamp and the
-    // intercom mic beside the panel, a booth speaker on the right wall, walkie-talkies on hooks on the left wall
-    BoothParts BoothKit(Frame f, string tag, Piece group, int walkies)
-    {
-        var made = new List<Piece>();
-        made.Add(f.Part("Switch Start", -1.2f, Front + 0.073f, 1.25f, 0f).Named(tag + " Start Switch"));
-        made.Add(f.Part("Live Light", -1.2f, Front + 0.006f, 1.42f, 0f).Named(tag + " Live Light"));
-        Piece clock = f.Part("Timer", SideX, Face - 0.02f, 1.55f, 180f).Named(tag + " Clock").Scaled(0.6f * PuzzleBuilder.TimerScale, 0.6f * PuzzleBuilder.TimerScale, 0.6f * PuzzleBuilder.TimerScale);
-        clock.Set("PuzzleTimer", "duration", T);
-        Piece fail = f.Part("Light 8", SideX, Face - 0.03f, 2.05f, 180f).Named(tag + " Fail Lamp")
-            .Set("PuzzleLight", "color", new Color(1f, 0f, 0f)).Set("PuzzleLight", "range", LampRange);
-        Piece mic = f.Part("Intercom Mic", SideX, Face - 0.02f, 1.0f, 180f).Named(tag + " Intercom");
-        Piece speaker = f.Part("Intercom Speaker", IW - 0.1f, 0.35f, 1.85f, -90f).Named(tag + " Booth Speaker");
-        made.Add(clock); made.Add(fail); made.Add(mic); made.Add(speaker);
-        for (int i = 0; i < walkies; i++)
-        {
-            float z = i == 0 ? 0.35f : -1.0f;
-            Piece walkie = f.Part("Vanilla Item", -IW + 0.3f, z, 1.3f, 90f).Named(tag + " Walkie-Talkie " + (i + 1))
-                .Set("PuzzleVanillaItem", "itemType", 4).Set("PuzzleVanillaItem", "savesOnReload", false);
-            Piece hook = f.Part("Hook", -IW + 0.03f, z, 1.55f, 90f).Named(tag + " Walkie Hook " + (i + 1));
-            hook.Set("PuzzleHook", "defaultItem", walkie.Component("PuzzleVanillaItem"));
-            Sdk.SetFlags(hook.Component("PuzzleHook"), "acceptedVanilla", 16);      // WalkieTalkie
-            made.Add(walkie); made.Add(hook);
-        }
-        if (group != null) foreach (Piece p in made) p.Under(group);
-        return new BoothParts
-        {
-            timer = clock.Component("PuzzleTimer"), fail = fail.Component("PuzzleLight"),
-            mic = mic.Component("PuzzleIntercom"), speaker = speaker.Component("PuzzleIntercomSpeaker"),
-        };
-    }
-
-    // One row on a booth's panel, in slot 'slot': three lamps (R, G, B from the caller's left), its bar, the row's
-    // number in white pips at its left, and its Press In Order over the row's three gate sensors
-    PanelRow Row(Frame f, string tag, int row, int slot, Component[] sensors, Piece group)
-    {
-        float h = SlotHeight[slot];
-        var made = new List<Piece>();
-        var lamps = new Object[3];
-        for (int c = 0; c < 3; c++)
-        {
-            Piece lamp = f.Part("Light 8", Col0 + c * ColStep, Face - 0.03f, h, 180f).Named("Row " + tag + " Lamp " + ColourName[c])
-                .Set("PuzzleLight", "color", LampColour[c]).Set("PuzzleLight", "range", LampRange);
-            lamps[c] = lamp.Component("PuzzleLight");
-            made.Add(lamp);
-        }
-        Piece bar = f.Part("Progress Bar", BarX, Face - 0.03f, h, 180f).Named("Row " + tag + " Bar").Scaled(0.3f, 0.7f, 1f);
-        bar.Set("PuzzleProgressBar", "total", 1);
-        made.Add(bar);
-        var pips = new MeshBuilder();
-        for (int i = 0; i < row; i++)
-            Kit.AddBox(pips, new Vector3(Col0 - 0.22f - i * 0.07f, h - 0.0225f, Face - 0.01f), new Vector3(0.045f, 0.045f, 0.02f), White);
-        made.Add(f.Mesh("Row " + tag + " Pips", pips, bare, false));
-        Piece order = f.Empty("Row " + tag, 0f, 0.3f, 0.5f);
-        Component pio = b.AddScript(order, "PuzzlePressInOrder");
-        Sdk.Add(pio, "lights", lamps);
-        Sdk.Add(pio, "buttons", sensors[0], sensors[1], sensors[2]);
-        Sdk.Add(pio, "progressBars", bar.Component("PuzzleProgressBar"));
-        Sdk.Set(pio, "rounds", 1);
-        Sdk.Set(pio, "holdAtEnd", false);
-        made.Add(order);
-        if (group != null) foreach (Piece p in made) p.Under(group);
-        return new PanelRow { order = pio, bar = bar.Component("PuzzleProgressBar") };
-    }
-
-    // Every row r shown on panel P (in both lobby layouts) must have P at least 200 m uphill of where the skier stands
-    // when r lights (row r-1, or the start gate) or at least 150 m below row r. Fails the build otherwise.
-    static void AssertPanels(float[] along, Vector2 startPanel, Vector2 catPanel, Vector2 finishPanel)
-    {
-        float aStart = (startPanel - WinterIslePuzzle.Peak).magnitude, aCat = (catPanel - WinterIslePuzzle.Peak).magnitude, aFinish = (finishPanel - WinterIslePuzzle.Peak).magnitude;
-        string[] names = { "start house", "cat track hut", "finish timing hut" };
-        float[] at = { aStart, aCat, aFinish };
-        int[][] shown = { new[] { 2, 2, 2, 0, 0, 0 }, new[] { 1, 1, 2, 2, 0, 0 } };      // 2-3 players, then 4
-        string[] lobby = { "2-3 players", "4 players" };
-        var bad = new List<string>();
-        for (int v = 0; v < 2; v++)
-            for (int r = 1; r <= 6; r++)
-            {
-                int p = shown[v][r - 1];
-                float lo = along[r - 1] - 200f, hi = along[r] + 150f;
-                bool inside = at[p] >= lo && at[p] <= hi;
-                float margin = at[p] < lo ? lo - at[p] : at[p] - hi;
-                string line = "row " + r + " on the " + names[p] + " (" + lobby[v] + "): panel at along " + Sdk.F(at[p]) + ", kept out of " + Sdk.F(lo) + "-" + Sdk.F(hi)
-                    + (inside ? " INSIDE" : ", margin " + Sdk.F(margin) + " m");
-                Debug.Log("[BWM] Downhill: " + line);
-                if (inside) bad.Add(line);
-            }
-        if (bad.Count > 0) throw new System.Exception("Downhill: a panel can be read on the way down: " + string.Join("; ", bad));
-    }
-
     // ---- helpers ----
 
     // The ground's height at a root-local point, above the root's level
     float GroundAt(Vector2 local) => b.WorldPoint(local.x, local.y, 0f, true).y - root.y;
 
-    Vector2 World(Vector2 local)
+    // ...and where there may be no ground to ask about, 'otherwise'
+    float GroundOr(Vector2 local, float otherwise)
     {
-        Vector3 w = b.Root.transform.TransformPoint(new Vector3(local.x, 0f, local.y));
-        return new Vector2(w.x, w.z);
+        Vector3 world = b.Root.transform.TransformPoint(new Vector3(local.x, 0f, local.y));
+        return b.Ground.At(world.x, world.z, out float y) ? y - root.y : otherwise;
     }
+
+    // a root-local point on the ground, as a mesh's vertex (y above the root's level)
+    Vector3 Foot(Vector2 local) => new Vector3(local.x, GroundAt(local), local.y);
 
     // A light string post 2.6 m above the ground at a point of a frame
     static Vector3 RingPost(Frame f, float x, float z) { Vector2 p = f.Local(x, z); return new Vector3(p.x, 2.6f, p.y); }

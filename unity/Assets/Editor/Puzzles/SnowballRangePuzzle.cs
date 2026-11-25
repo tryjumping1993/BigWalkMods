@@ -102,7 +102,7 @@ public sealed class SnowballRangePuzzle : PuzzleDef
         for (int i = 0; i < Balls; i++)
         {
             float x = BinX - 0.28f + (i % 3) * 0.28f, z = BinZ - 0.42f + (i / 3) * 0.28f;
-            Piece ball = b.Item("Snowball " + (i + 1), Kit.Ball(0.13f, 8, 12, 0.1f, 2200 + i), snow, x, z, Floor + 0.20f, 0.6f, false);
+            Piece ball = b.Item("Snowball " + (i + 1), Kit.AsLooseSnow(Kit.Ball(0.13f, 8, 12, 0.1f, 2200 + i)), snow, x, z, Floor + 0.20f, 0.6f, false);
             Component item = ball.Component("PuzzleItem");
             Sdk.Set(item, "savesOnReload", false);
             Sdk.Set(item, "canBelt", true);

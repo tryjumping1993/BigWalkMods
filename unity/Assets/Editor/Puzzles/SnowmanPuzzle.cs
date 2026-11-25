@@ -1,21 +1,26 @@
-// The Snowman Contest (spec: puzzle-specs/Snowman.md, revision 2, 2026-11-22).
+// Build Three Snowmen. A round snow fort with one gateway holds three snowman plots: low snow bowls, each with a board
+// on a post behind it that shows a snowman's outline as three white discs, a lamp in the middle of each, under a hat
+// and a scarf of the plot's own colour. Nine snowballs, three large, three medium and three small, lie about the
+// place: four inside the fort and five on the snow round it, among the drifts. Most are in plain sight; one is tucked
+// between a drift and the wall, and two sit up on low snow ledges of the wall, one inside and one round the back.
 //
-// A round snow fort holds six empty snowman plots, low snow bowls in a ring, each with a faceless snowman head on a pole
-// behind it whose face is a split-flap picture (an Emote). Outside the fort stands the Judges' Box, a closed,
-// windowless hut. Inside it six small lamps sit beside copies of the six faces, in a scrambled grid on a free-standing
-// partition, hidden from the doorway by an entry baffle. On start the Box's door shuts on the Judge, the faces are dealt
-// from eight Emote stamps sealed in a chest outside, and every 21 s one lamp lights. By the end of those 21 s the
-// builders in the fort must have all three snowballs set down in the plot whose head wears that face, and in no other
-// plot. Eight clean judgings win (ten in a four-player lobby); a miss stops the contest and opens the door.
+// Find the balls and carry them in. A plot wants a whole snowman: one large, one medium and one small ball set down in
+// its bowl, side by side or stacked. The three lamps on its board show which sizes it has, big at the bottom to small
+// at the top, and a ball taken out again puts its lamp out. Nine lamps lit win the gourd. There is no clock and
+// nothing to get wrong: a ball in the wrong plot is only a ball to move. One player can finish it; a group splits up
+// to search and carry. The same in every lobby size.
+// (Before the user's rules of 2026-11-24 this was the Snowman Contest: six plots under split-flap faces, a Judge shut
+// in a windowless box who saw which face was lit, and 21 seconds to move all three balls there, eight times running.)
 //
-// Under the hood: the SDK's timed Press In Order (holdAtEnd) with six item-counting Presence Sensors as its buttons,
-// each needing all three snowballs. One Press In Order per lobby size (Hider groups); only the shown one ever runs.
-// No custom code.
+// Under the hood: three item-counting Presence Sensors over each bowl, one a size, each taking only that size's three
+// balls, wired to Tally (PuzzleScripts), which lights "Plot Lamp 1..9", fills the fort board's bar and wins at nine.
+// ItemReturn (PuzzleScripts) lays a ball that comes to rest on top of the wall, out of anyone's reach, back in the
+// middle of the fort.
 //
 // Coordinates: local metres from the root, which is the fort's centre: x east, z north (+z forward). Heights are above
-// the ground. Each structure is built on the ground under its own anchor (the fort's centre, the Box's centre, each
-// plot, each head post), and the SDK parts on a structure are placed from that same level (onGround: false), so a few
-// centimetres of unevenness in the levelled site never put a part off its wall. Yaw: 0 faces +z, 90 +x, -90 -x, 180 -z.
+// the ground. Each structure is built on the ground under its own anchor (the fort's centre, each plot, each post),
+// and the SDK parts on a structure are placed from that same level (onGround: false), so a few centimetres of
+// unevenness in the levelled site never put a part off its board. Yaw: 0 faces +z, 90 +x, -90 -x, 180 -z.
 using System;
 using System.Collections.Generic;
 using Bwm;
@@ -25,198 +30,255 @@ public sealed class SnowmanPuzzle : PuzzleDef
 {
     public override string Name => "Snowman";
     public override Vector2 Footprint => new Vector2(26f, 44f);
-    // layout-final: a village green on the High Shelf, 64 m north of the summit spur's High Shelf station (the Box's
-    // door faces south, towards it)
+    // layout-final: a village green on the High Shelf, 64 m north of the summit spur's High Shelf station (the fort's
+    // gateway faces south, towards it)
     public override Vector2? FixedSite => new Vector2(-2553f, -1530f);
     public override float Yaw => 0f;
 
-    const int Rounds3 = 8;
-    const int Rounds4 = 10;
-    const float PhaseSeconds = 21f;     // the floor: two builders, opposite plot (about 18 s) plus 3 s. Never lower.
-
     // ---- the fort ----
-    const float PlotRadius = 7.0f;
-    const float PostRadius = 8.95f;
-    const float FaceRadius = 8.62f;
     const float FortIn = 11.0f, FortOut = 11.8f, FortHigh = 3.0f;
-    static readonly string[] PlotNames = { "E", "NE", "NW", "W", "SW", "SE" };      // math angles 0, 60, ... 300
+    const float LedgeHigh = 0.8f, LedgeTop = 0.85f;     // the wall's two ledges and the snow on them: a jump (1 m) reaches a ball there
 
-    // Card i (top row left to right, then the bottom row, as the Judge faces north) belongs to this plot
-    static readonly int[] CardPlot = { 5, 3, 1, 0, 2, 4 };      // SE, W, NE, E, NW, SW
-    static readonly float[] CardX = { -0.75f, 0f, 0.75f };
-    static readonly float[] CardH = { 1.95f, 1.20f };
-    const float LampAbove = 0.36f;
-    const float CardZ = -16.87f, LampZ = -16.80f;
+    // ---- the plots ----
+    const float PlotRadius = 7.0f;                      // their middles, from the fort's
+    const float PostRadius = 8.95f;                     // their posts, behind them
+    static readonly float[] PlotAngle = { 180f, 60f, 300f };      // plots 1 to 3: west, north-east, south-east (math angles, from +x towards +z)
+    static readonly Color[] PlotColour = { IsleKit.Red, IsleKit.Green, IsleKit.Gold };      // each plot's hat band and scarf
+    // A plot's sensors reach from the bowl's floor to over the head of a stacked snowman (2.08 m), so its top ball counts
+    const float SensorHigh = 2.4f;
+    // A plot's board, on the fort's side of its post: 8 cm thick, with the outline's lowest point OutlineFoot up
+    const float BoardThick = 0.08f, BoardWide = 1.08f, BoardFoot = 0.22f, BoardTop = 2.36f, OutlineFoot = 0.32f;
+    // Part depths from part-metrics.tsv: how far a lamp's pivot stands in front of its back; a Light 6's middle is
+    // 1.7 cm under its pivot
+    const float DepthLight6 = 0.142f, DropLight6 = 0.017f, DepthLight8 = 0.1f;
+    static readonly float[] LampRange = { 0.9f, 0.65f, 0.5f };      // a lit lamp lights its own disc, not its neighbours'
 
-    // ---- the Judges' Box ----
-    const float BoxX = 2.9f, BoxIn = 2.5f;                  // outer / inner half-width
-    const float BoxS = -21.0f, BoxSIn = -20.6f;             // south wall's outer and inner faces
-    const float BoxN = -14.9f, BoxNIn = -15.3f;
-    const float BoxHigh = 2.7f;                             // underside of the roof
-    const float DoorHalf = 0.62f, DoorHigh = 2.04f;         // the Door part's exact size
+    // ---- the snowballs ----
+    static readonly float[] Radius = { 0.46f, 0.34f, 0.24f };
+    static readonly string[] SizeName = { "Large", "Medium", "Small" };
+    // Where the nine start, a row for each size: local x and z, and in y how high what they lie on stands above the
+    // fort's ground (0: the snow itself). None is within 5 m of a plot's middle (CheckStarts).
+    static readonly Vector3[][] BallStart =
+    {
+        new[]
+        {
+            new Vector3(1.0f, 0f, -0.8f),               // by the lantern in the middle of the fort
+            new Vector3(-9.0f, 0f, -15.0f),             // outside, south-west of the gateway, in the open
+            new Vector3(11.5f, 0f, 14.5f),              // outside, north-east, between two drifts
+        },
+        new[]
+        {
+            new Vector3(-5.2f, 0f, 9.0f),               // inside, north-west, in the gap between a tall drift and the wall
+            new Vector3(-4.6f, 0f, -8.0f),              // inside, south-west, by the wall
+            new Vector3(-16.0f, 0f, 5.0f),              // outside, west, beside a drift
+        },
+        new[]
+        {
+            new Vector3(10.55f, LedgeTop, 0.6f),        // on the ledge inside the east wall
+            new Vector3(0.7f, LedgeTop, 12.25f),        // on the ledge outside the north wall, round the back
+            new Vector3(13.5f, 0f, -11.0f),             // outside, south-east, beside a drift
+        },
+    };
+    // Drifts: local x, z, radius, height. The first hides a medium ball from the middle of the fort; the next two are
+    // inside too, the rest outside.
+    static readonly Vector4[] Drifts =
+    {
+        new Vector4(-4.05f, 7.0f, 1.4f, 1.0f), new Vector4(-6.3f, -7.0f, 1.0f, 0.5f), new Vector4(8.3f, 3.6f, 1.1f, 0.6f),
+        new Vector4(-11.2f, -16.3f, 1.3f, 0.7f), new Vector4(9.0f, 15.2f, 1.4f, 0.9f), new Vector4(13.6f, 16.0f, 1.2f, 0.7f),
+        new Vector4(-14.2f, 6.3f, 1.2f, 0.8f), new Vector4(15.2f, -12.2f, 1.0f, 0.55f), new Vector4(-5.5f, 15.5f, 1.5f, 0.9f),
+    };
+    // Lanterns, lit at night, so the balls can be found in the dark: one in the middle of the fort and one by each of
+    // the four balls on the snow outside (the ledge round the back is under the fort's own lights)
+    static readonly Vector2[] Lanterns =
+    {
+        new Vector2(0f, 0f), new Vector2(-7.0f, -17.0f), new Vector2(10.0f, 17.0f), new Vector2(-17.5f, 3.0f), new Vector2(15.5f, -9.0f),
+    };
 
     static readonly Color SnowWhite = new Color(0.93f, 0.95f, 0.98f);
     static readonly Color Coal = new Color(0.08f, 0.08f, 0.09f);
     static readonly Color Carrot = new Color(0.95f, 0.45f, 0.1f);
-    static readonly Color Gold = new Color(1.0f, 0.8f, 0.3f);
-    static readonly Color Warm = new Color(1f, 0.85f, 0.6f);
+    static readonly Color LampWhite = new Color(1f, 0.92f, 0.75f);      // near white: a lit lamp is a bright disc, an unlit one a dull one
 
     PuzzleBuilder b;
 
     public override void Build(PuzzleBuilder builder)
     {
         b = builder;
+        CheckStarts();
         b.ClearGround(26f, 44f);
         b.DebugTeleport(-5f, -16f);
-        // No jetpacks over the contest: nobody flies balls about, over the fort's walls or onto the Box
+        // No jetpacks over the fort: nobody flies a ball in over its wall
         IsleKit.CalmAir(b, "Snowman", 0f, -4.5f, new Vector3(40f, 120f, 52f), 0f, -10f);
 
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
         Material ballSnow = b.ShaderMaterial("BWM/Snow", "Snow");
         float fortBase = GroundAt(0f, 0f);
-        float boxBase = GroundAt(0f, -17.95f);
+        var paint = new MeshBuilder();      // painted, so no snow lies on it: the outlines, hats and scarves, the fort board's picture
 
-        // ================= the fort, its plots and heads =================
-        BuildFort(snowy, fortBase);
+        // ================= the fort =================
+        BuildFort(snowy, paint, fortBase);
 
-        var plotSensors = new Component[6];
-        var heads = new Piece[6];
-        var headsLow = new Piece[6];
-        var bowls = new MeshBuilder();
-        var headMesh = new MeshBuilder();
-        var headTrim = new MeshBuilder();
-        for (int k = 0; k < 6; k++)
+        // ================= the nine snowballs =================
+        var balls = new UnityEngine.Object[3][];
+        for (int size = 0; size < 3; size++)
         {
-            float theta = k * 60f * Mathf.Deg2Rad;
-            float c = Mathf.Cos(theta), s = Mathf.Sin(theta);
+            balls[size] = new UnityEngine.Object[3];
+            for (int n = 0; n < 3; n++)
+            {
+                Vector3 at = BallStart[size][n];
+                bool ledge = at.y > 0f;
+                // its middle a radius (and 2 cm) above what it lies on: the ground under it, or a ledge's snow
+                float height = Radius[size] + 0.02f + (ledge ? fortBase + at.y : 0f);
+                Piece ball = b.Item("Snowball " + SizeName[size] + " " + (n + 1), Kit.AsLooseSnow(Kit.Ball(Radius[size], 10, 14, 0.12f, size + 1 + 3 * n)), ballSnow,
+                    at.x, at.z, height, 3f - size, !ledge);
+                Component item = ball.Component("PuzzleItem");
+                Sdk.Set(item, "savesOnReload", false);      // a held ball is never carried off to the spawn area by a save
+                Sdk.Set(item, "sounds", 3);                 // Football: rolls with a sound
+                balls[size][n] = item;
+            }
+        }
+
+        // ================= the tally: nine targets, a plot's large, medium and small; all nine marked wins =================
+        // Tally finds "Plot Lamp 1..9" and every "Tally Bar..." by name. A stop clears it (a stop also runs when the
+        // puzzle spawns; the start is not wired, since the SDK's checks reject a start and a stop that do the same thing)
+        Component tally = b.AddCustomScript(b.Empty("Snowman Tally", 0f, 0f, 0.5f), "Tally");
+        Sdk.Set(tally, "count", 9);
+        Sdk.Set(tally, "lampPrefix", "Plot Lamp ");
+        Sdk.Set(tally, "barPrefix", "Tally Bar");
+
+        // ================= the three plots =================
+        var bowls = new MeshBuilder();
+        var posts = new MeshBuilder();
+        for (int p = 0; p < PlotAngle.Length; p++)
+        {
+            float theta = PlotAngle[p] * Mathf.Deg2Rad, c = Mathf.Cos(theta), s = Mathf.Sin(theta);
             Vector2 plot = new Vector2(PlotRadius * c, PlotRadius * s);
-            float headYaw = Mathf.Atan2(-c, -s) * Mathf.Rad2Deg;     // faces the centre
+            Vector3 inward = new Vector3(-c, 0f, -s);               // from the post to the fort's middle: the way the board faces
+            float yaw = Mathf.Atan2(-c, -s) * Mathf.Rad2Deg;
 
             // the bowl: a floor disc 2.2 m across, 3 cm proud, inside a 12-sided rim (inner 2.0 m, 0.25 m thick, 0.20 m high)
             float pb = GroundAt(plot.x, plot.y);
             Kit.AddDisc(bowls, new Vector3(plot.x, pb - 0.1f, plot.y), 1.1f, 0.13f, new Color(0.84f, 0.88f, 0.95f));
             Ring(bowls, new Vector3(plot.x, 0f, plot.y), pb - 0.1f, pb + 0.20f, 1.0f, 1.25f, 12, 15f, null, SnowWhite);
 
-            // the plot's sensor: a shallow slab level with the rim, counting only the three snowballs ("set it down")
-            plotSensors[k] = IsleKit.Sensor(b, "Plot " + PlotNames[k], plot.x, plot.y, new Vector3(2.0f, 0.22f, 2.0f))
-                .Set("PuzzlePresenceSensor", "type", 2)                      // SpecificItem
-                .Set("PuzzlePresenceSensor", "requiredPlayers", 3)
-                .Component("PuzzlePresenceSensor");
+            // the post behind it and the dark board on the post's front, at 'radius' from the fort's middle
+            float hb = GroundAt(PostRadius * c, PostRadius * s);
+            Vector3 At(float radius, float height) => new Vector3(radius * c, hb + height, radius * s);
+            float boardFace = PostRadius - 0.1f - BoardThick;
+            Kit.AddBox(posts, At(PostRadius, -0.5f), new Vector3(0.2f, BoardTop + 0.5f, 0.2f), IsleKit.Wood, yaw);
+            Kit.AddBox(posts, At(boardFace + BoardThick / 2f, BoardFoot), new Vector3(BoardWide, BoardTop - BoardFoot, BoardThick), IsleKit.Board, yaw);
 
-            // the head on its post: a snow head with its face (the Display) in front, a hat above, a carrot below
-            Vector2 post = new Vector2(PostRadius * c, PostRadius * s);
-            float hb = GroundAt(post.x, post.y);
-            Kit.AddBox(headMesh, new Vector3(post.x, hb - 0.5f, post.y), new Vector3(0.2f, 2.4f, 0.2f), IsleKit.Wood, headYaw);
-            Vector3 headCentre = new Vector3(9.28f * c, hb + 1.70f, 9.28f * s);
-            Kit.AddBall(headMesh, headCentre, 0.475f, SnowWhite);
-            // a dark backing behind the low copy, so it does not float in front of the post
-            Vector2 back = new Vector2(8.82f * c, 8.82f * s);
-            Kit.AddBox(headMesh, new Vector3(back.x, hb + 0.87f, back.y), new Vector3(0.46f, 0.46f, 0.06f), IsleKit.Board, headYaw);
-            Vector3 hatFoot = new Vector3(9.15f * c, hb + 2.13f, 9.15f * s);
-            Kit.AddDisc(headTrim, hatFoot, 0.40f, 0.04f, Coal, 12);
-            Kit.AddDisc(headTrim, hatFoot + Vector3.up * 0.04f, 0.24f, 0.34f, Coal, 12);
-            Kit.AddDisc(headTrim, hatFoot + Vector3.up * 0.06f, 0.25f, 0.07f, IsleKit.Red, 12);
-            // the carrot runs from inside the head (at this height its front is at about 8.9 m) out past the face's foot
-            Vector2 nose = new Vector2(8.62f * c, 8.62f * s);
-            Kit.AddBox(headTrim, new Vector3(nose.x, hb + 1.40f, nose.y), new Vector3(0.06f, 0.06f, 0.5f), Carrot, headYaw);
+            for (int size = 0; size < 3; size++)
+            {
+                int k = p * 3 + size + 1;      // Tally's target: plot 1 has 1 (large), 2 (medium), 3 (small); plot 2 has 4 to 6; plot 3 has 7 to 9
 
-            Vector2 face = new Vector2(FaceRadius * c, FaceRadius * s);
-            heads[k] = b.Part("Display", face.x, face.y, hb + 1.70f, headYaw, false).Named("Head " + PlotNames[k]).Set("PuzzleDisplay", "size", 0);
-            headsLow[k] = b.Part("Display", face.x, face.y, hb + 1.10f, headYaw, false).Named("Head Low " + PlotNames[k]).Set("PuzzleDisplay", "size", 0);
+                // the outline's disc of this ball's own size, and the lamp in its middle
+                float y = DiscHeight(size), proud = 0.02f + 0.005f * size;
+                Roundel(paint, At(boardFace, y), inward, Radius[size], proud, SnowWhite, 20);
+                float lampBack = boardFace - proud - 0.004f;
+                Piece lamp = size == 0
+                    ? FP("Light 6", (lampBack - DepthLight6) * c, (lampBack - DepthLight6) * s, hb + y + DropLight6, yaw)
+                    : FP("Light 8", (lampBack - DepthLight8) * c, (lampBack - DepthLight8) * s, hb + y, yaw);
+                lamp.Named("Plot Lamp " + k).Set("PuzzleLight", "color", LampWhite).Set("PuzzleLight", "range", LampRange[size]);
+
+                // the sensor for this size: the bowl's own width, pressed while one or more of that size's balls is in it
+                IsleKit.Sensor(b, "Plot " + (p + 1) + " " + SizeName[size], plot.x, plot.y, new Vector3(2.0f, SensorHigh, 2.0f))
+                    .Set("PuzzlePresenceSensor", "type", 2)                      // SpecificItem
+                    .Set("PuzzlePresenceSensor", "requiredPlayers", 1)
+                    .Add("PuzzlePresenceSensor", "acceptedCustom", balls[size])
+                    .On("PuzzlePresenceSensor", "onPressed", tally, "Hit", k)
+                    .On("PuzzlePresenceSensor", "onReleased", tally, "Unhit", k);
+            }
+
+            // a hat on the board's top, and a scarf across the outline's neck with its tail down one side
+            Vector3 hatFoot = At(PostRadius - 0.09f, BoardTop);
+            Kit.AddDisc(paint, hatFoot, 0.30f, 0.04f, Coal, 12);
+            Kit.AddDisc(paint, hatFoot + Vector3.up * 0.04f, 0.19f, 0.28f, Coal, 12);
+            Kit.AddDisc(paint, hatFoot + Vector3.up * 0.06f, 0.20f, 0.07f, PlotColour[p], 12);
+            float neck = DiscHeight(2) - Radius[2] * 0.95f;
+            Vector3 across = Vector3.Cross(Vector3.up, inward);
+            Kit.AddBox(paint, At(boardFace - 0.02f, neck - 0.045f), new Vector3(0.5f, 0.09f, 0.06f), PlotColour[p], yaw);
+            Kit.AddBox(paint, At(boardFace - 0.02f, neck - 0.33f) + across * 0.23f, new Vector3(0.1f, 0.3f, 0.06f), PlotColour[p], yaw);
         }
-        Place("Plot Bowls", bowls, snowy, 0f);
-        Place("Snowman Heads", headMesh, snowy, 0f);
-        Place("Snowman Hats", headTrim, bare, 0f);
+        Place("Snowman Plots", bowls, snowy, 0f);
+        Place("Snowman Posts", posts, snowy, 0f);
 
-        // ---- the snowballs, in the fort's centre ----
-        float[] radius = { 0.46f, 0.34f, 0.24f };
-        string[] ballNames = { "Snowball Large", "Snowball Medium", "Snowball Small" };
-        Vector2[] rest = { new Vector2(-0.6f, 0.35f), new Vector2(0.6f, 0.35f), new Vector2(0f, -0.6f) };
-        var balls = new UnityEngine.Object[3];
-        for (int i = 0; i < 3; i++)
-        {
-            Piece ball = b.Item(ballNames[i], Kit.Ball(radius[i], 10, 14, 0.12f, i + 1), ballSnow, rest[i].x, rest[i].y, radius[i] * 0.8f, 3f - i);
-            Component item = ball.Go.GetComponent(Sdk.T("PuzzleItem"));
-            Sdk.Set(item, "savesOnReload", false);      // a held ball is never carried off to the spawn area by a save
-            Sdk.Set(item, "sounds", 3);                 // Football: rolls with a sound
-            balls[i] = item;
-        }
-        foreach (Component sensor in plotSensors) Sdk.Add(sensor, "acceptedCustom", balls);
+        // ---- the fort board on the north wall: the tally's bar over the picture, a start knob and its live lamp ----
+        FP("Progress Bar", 0f, 10.80f, fortBase + 2.4f, 180f).Named("Tally Bar Fort").Scaled(0.6f, 1f, 1f)
+            .Set("PuzzleProgressBar", "style", 0).Set("PuzzleProgressBar", "total", 9);
+        FP("Switch Start", 1.15f, 10.83f, fortBase + 1.25f, 180f).Named("Fort Knob");
+        FP("Live Light", 1.15f, 10.895f, fortBase + 1.42f, 180f).Named("Fort Live");
 
-        // ---- the fort board on the north wall: two bars, the knob, its live lamp, the north speaker ----
-        FP("Switch Start", 1.60f, 10.83f, fortBase + 1.25f, 180f).Named("Fort Knob");
-        FP("Live Light", 1.60f, 10.85f, fortBase + 1.42f, 180f).Named("Fort Live");
-        Piece roundsFort = FP("Progress Bar", 0f, 10.80f, fortBase + 2.30f, 180f).Named("Rounds Fort").Scaled(0.6f, 1f, 1f)
-            .Set("PuzzleProgressBar", "style", 0).Set("PuzzleProgressBar", "total", Rounds3);
-        Piece phaseFort = FP("Progress Bar", 0f, 10.80f, fortBase + 1.75f, 180f).Named("Phase Fort").Scaled(0.6f, 1f, 1f)
-            .Set("PuzzleProgressBar", "style", 0).Set("PuzzleProgressBar", "total", 1);
-        Piece speakerN = FP("Intercom Speaker", 0f, 10.80f, fortBase + 2.62f, 180f).Named("Fort Speaker N");
-        Piece speakerS = FP("Intercom Speaker", 0f, -10.90f, fortBase + 2.55f, 0f).Named("Fort Speaker S");       // on the gateway arch
-
-        // ================= the Judges' Box =================
-        BuildBox(snowy, boxBase);
-        Piece door = FP("Door", 0f, (BoxS + BoxSIn) / 2f, boxBase, 0f).Named("Judges' Door")
-            .Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", false);      // CloseWhenPuzzleActive
-        FP("Switch Start", 1.00f, -19.53f, boxBase + 1.25f, 0f).Named("Box Knob");       // on the baffle's inner face
-        FP("Live Light", 1.00f, -19.59f, boxBase + 1.42f, 0f).Named("Box Live");
-        Piece roundsBox = FP("Progress Bar", -2.40f, -18.15f, boxBase + 2.15f, 90f).Named("Rounds Box").Scaled(0.5f, 1f, 1f)
-            .Set("PuzzleProgressBar", "style", 0).Set("PuzzleProgressBar", "total", Rounds3);
-        Piece phaseBox = FP("Progress Bar", -2.40f, -18.15f, boxBase + 1.60f, 90f).Named("Phase Box").Scaled(0.5f, 1f, 1f)
-            .Set("PuzzleProgressBar", "style", 0).Set("PuzzleProgressBar", "total", 1);
-        Piece mic = FP("Intercom Mic", 1.15f, -16.72f, boxBase + 1.35f, 180f).Named("Judges' Mic");
-        mic.Add("PuzzleIntercom", "speakers", speakerN.Component("PuzzleIntercomSpeaker"), speakerS.Component("PuzzleIntercomSpeaker"));
-        // Winter Walk's room light, so the cards read at night (constant: it tells nothing)
-        b.Empty("Room Light 1 FFD9A0 6.0 1.2", 0f, -18.2f, boxBase + 2.3f, false);
-
-        // the cards and their lamps on the partition's south face; each head (both heights) copies its plot's card
-        var lamps = new UnityEngine.Object[6];
-        var buttons = new UnityEngine.Object[6];
-        for (int i = 0; i < 6; i++)
-        {
-            float x = CardX[i % 3], h = CardH[i / 3];
-            Piece card = FP("Display", x, CardZ, boxBase + h, 180f).Named("Card " + (i + 1)).Set("PuzzleDisplay", "size", 0);
-            Piece lamp = FP("Light 8", x, LampZ, boxBase + h + LampAbove, 180f).Named("Lamp " + (i + 1))
-                .Set("PuzzleLight", "color", Gold).Set("PuzzleLight", "range", 0.3f);
-            lamps[i] = lamp.Component("PuzzleLight");
-            int plot = CardPlot[i];
-            buttons[i] = plotSensors[plot];
-            Component cardC = card.Component("PuzzleDisplay");
-            heads[plot].Set("PuzzleDisplay", "copyDisplay", cardC);
-            headsLow[plot].Set("PuzzleDisplay", "copyDisplay", cardC);
-        }
-
-        // ---- the face stamps: eight Emote tiles sealed in the Stamp Chest, only there to be the deal pile ----
-        for (int i = 0; i < 8; i++)
-            FP("Peg Tile", -3.275f, -20.05f + 0.35f * i, boxBase + 0.335f, 0f).Named("Face Stamp " + (i + 1))
-                .Set("PuzzlePegTile", "imageSet", 2)       // enum index 2 = Emotes (Shapes, Peg, Emotes, Scribbles, Custom)
-                .Set("PuzzlePegTile", "image", i + 1);
-
-        // ================= start corner and the Champion Snowman =================
+        // ================= start corner and the Champion Snowman, outside the gateway =================
         IsleKit.StartCorner(b, 6.5f, -18.0f, 180f);
         Piece trimmings = BuildChampion(snowy, bare, 10.5f, -17.0f);
 
-        // ================= the judging: one Press In Order per lobby size =================
-        Component roundsBoxC = roundsBox.Component("PuzzleProgressBar"), roundsFortC = roundsFort.Component("PuzzleProgressBar");
-        Component phaseBoxC = phaseBox.Component("PuzzleProgressBar"), phaseFortC = phaseFort.Component("PuzzleProgressBar");
-        Piece three = IsleKit.Lobby(b, "Three Players", true, true, false);
-        Piece four = IsleKit.Lobby(b, "Four Players", false, false, true);
-        Component judging3 = Judging("Judging 3", three, lamps, buttons, roundsBoxC, roundsFortC, phaseBoxC, phaseFortC, Rounds3);
-        Component judging4 = Judging("Judging 4", four, lamps, buttons, roundsBoxC, roundsFortC, phaseBoxC, phaseFortC, Rounds4);
+        // ================= drifts and lanterns =================
+        for (int i = 0; i < Drifts.Length; i++)
+        {
+            Vector4 d = Drifts[i];
+            b.MeshPiece("Fort Drift " + (i + 1), Kit.Mound(d.z, d.w, 460 + i), snowy).Transform.position = b.WorldPoint(d.x, d.y, -0.05f);
+        }
+        var lanterns = new MeshBuilder();
+        var glow = new MeshBuilder();
+        for (int i = 0; i < Lanterns.Length; i++)
+        {
+            Vector2 at = Lanterns[i];
+            Kit.AddLantern(lanterns, glow, new Vector3(at.x, GroundAt(at.x, at.y), at.y), 30 + i);
+            b.Empty("Room Light Night " + (i + 1) + " FFCB8C 8.0 1.3", at.x, at.y, 2.18f);      // Winter Walk's lamp in its glass
+        }
+        Place("Fort Lanterns", lanterns, snowy, 0f);
+        Place("Fort Lantern Glow", glow, b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), 0f, false);
+        Place("Snowman Paint", paint, bare, 0f, false);
+
+        // ================= a ball thrown onto the wall's top comes back =================
+        // The top is 3 m up and nobody can climb it, and the game pins a ball where it comes to rest. ItemReturn lays
+        // any ball that has lain 2 s in one of these boxes (one over each of the wall's sixteen sides, the gateway's
+        // arch among them: 5.2 m along the wall, 2 m through it, from just under its top to 1.6 m over it) back on the
+        // snow in the middle of the fort.
+        for (int k = 0; k < 16; k++)
+        {
+            float a = (90f + 22.5f * k) * Mathf.Deg2Rad, mid = (FortIn + FortOut) / 2f;
+            Piece box = b.Empty("Wall Top " + (k + 1), mid * Mathf.Cos(a), mid * Mathf.Sin(a), fortBase + FortHigh, false);
+            box.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(Mathf.Cos(a), Mathf.Sin(a)) * Mathf.Rad2Deg, 0f);      // its z through the wall
+        }
+        Piece ballHome = b.Empty("Ball Home", -1.4f, 0.6f, 0.7f);
+        Component back = b.AddCustomScript(b.Empty("Ball Return", 0f, 0f, 1.5f), "ItemReturn");
+        Sdk.Set(back, "itemPrefix", "Snowball ");
+        Sdk.Set(back, "boxPrefix", "Wall Top ");
+        Sdk.Set(back, "boxMin", new Vector3(-2.6f, -0.2f, -1.0f));
+        Sdk.Set(back, "boxMax", new Vector3(2.6f, 1.6f, 1.0f));
+        Sdk.Set(back, "home", ballHome.Transform);
+        Sdk.Set(back, "spread", 0.6f);
+        Sdk.Set(back, "delay", 2f);
+
+        // ...and so does a ball that ends up off the site (thrown over the cliff, carried off and dropped): all nine are
+        // needed. Five big boxes, each a unit cube scaled: everything more than 8 m under the fort, and everything
+        // further than 45 m from its middle. A ball in a player's hands is never taken (ItemReturn asks).
+        void Lost(string side, Vector3 centre, Vector3 size)
+            => b.Empty("Lost Box " + side, centre.x, centre.z, centre.y, false).Transform.localScale = size;
+        Lost("Below", new Vector3(0f, -208f, 0f), new Vector3(900f, 400f, 900f));
+        Lost("West", new Vector3(-245f, 92f, 0f), new Vector3(400f, 200f, 900f));
+        Lost("East", new Vector3(245f, 92f, 0f), new Vector3(400f, 200f, 900f));
+        Lost("South", new Vector3(0f, 92f, -245f), new Vector3(900f, 200f, 400f));
+        Lost("North", new Vector3(0f, 92f, 245f), new Vector3(900f, 200f, 400f));
+        Component lost = b.AddCustomScript(b.Empty("Lost Return", 0f, 0f, 2.5f), "ItemReturn");
+        Sdk.Set(lost, "itemPrefix", "Snowball ");
+        Sdk.Set(lost, "boxPrefix", "Lost Box ");
+        Sdk.Set(lost, "boxMin", new Vector3(-0.5f, -0.5f, -0.5f));
+        Sdk.Set(lost, "boxMax", new Vector3(0.5f, 0.5f, 0.5f));
+        Sdk.Set(lost, "home", ballHome.Transform);
+        Sdk.Set(lost, "spread", 0.6f);
+        Sdk.Set(lost, "delay", 5f);
 
         // ================= events =================
-        Component sdk = b.Puzzle;
         Piece root = b.RootPiece;
-        foreach (Component judging in new[] { judging3, judging4 })
-        {
-            root.On("PuzzleSDK", "onPuzzleStart", judging, "Begin");
-            root.On("PuzzleSDK", "onPuzzleStop", judging, "End");
-            Sdk.Wire(judging, "onFail", sdk, "StopPuzzle");      // a miss visibly ends the attempt: knobs off, door open, faces blank
-        }
-        roundsFort.On("PuzzleProgressBar", "onFull", sdk, "Win");     // eight (ten) clean rounds; only a running contest fills it
-        root.On("PuzzleSDK", "onWin", door.Component("PuzzleDoor"), "Open");
+        root.On("PuzzleSDK", "onPuzzleStop", tally, "Clear");
+        // balls already lying in a bowl when the puzzle starts count at once (every plot has Hit and Unhit)
+        root.On("PuzzleSDK", "onPuzzleStart", tally, "Begin");
         root.On("PuzzleSDK", "onWin", trimmings.Go, "SetActive", true);
 
-        // ================= Christmas lights: round the fort's top and along the Box's eaves =================
+        // ================= Christmas lights: round the fort's top, and behind the start corner =================
         var fortPosts = new List<Vector3>();
         for (int k = 0; k <= 15; k++)
         {
@@ -225,36 +287,36 @@ public sealed class SnowmanPuzzle : PuzzleDef
             fortPosts.Add(new Vector3(r * Mathf.Cos(a), fortBase + FortHigh + 0.35f, r * Mathf.Sin(a)));
         }
         Kit.LightString(b, "Fort Lights", fortPosts, 0.15f, 0.5f, false, false, 181);
-        float eave = boxBase + BoxHigh - 0.05f;
-        Kit.LightString(b, "Box Lights", new List<Vector3>
+        Kit.LightString(b, "Corner Lights", new List<Vector3>
         {
-            new Vector3(-3.1f, eave, -21.2f), new Vector3(3.1f, eave, -21.2f), new Vector3(3.1f, eave, -14.7f),
-            new Vector3(-3.1f, eave, -14.7f), new Vector3(-3.1f, eave, -21.2f),
-        }, 0.2f, 0.5f, false, false, 182);
+            new Vector3(3.4f, 2.4f, -16.4f), new Vector3(7.8f, 2.4f, -15.8f), new Vector3(12.3f, 2.4f, -16.4f),
+        }, 0.3f, 0.5f, true, true, 182);
     }
 
-    // ---- the judging ----
+    // ---- checks ----
 
-    Component Judging(string name, Piece group, UnityEngine.Object[] lamps, UnityEngine.Object[] buttons,
-        Component roundsBox, Component roundsFort, Component phaseBox, Component phaseFort, int rounds)
+    // No ball may start within 5 m of a plot's middle
+    static void CheckStarts()
     {
-        Piece holder = b.Empty(name, 0f, 0f, 0.5f).Under(group);
-        Component pio = b.AddScript(holder, "PuzzlePressInOrder");
-        Sdk.Add(pio, "lights", lamps);
-        Sdk.Add(pio, "buttons", buttons);
-        Sdk.Add(pio, "progressBars", roundsBox, roundsFort);
-        Sdk.Add(pio, "phaseBars", phaseBox, phaseFort);
-        Sdk.Set(pio, "rounds", rounds);
-        Sdk.Set(pio, "holdAtEnd", true);
-        Sdk.Set(pio, "phaseSeconds", PhaseSeconds);
-        return pio;
+        for (int size = 0; size < 3; size++)
+            for (int n = 0; n < 3; n++)
+                for (int p = 0; p < PlotAngle.Length; p++)
+                {
+                    float a = PlotAngle[p] * Mathf.Deg2Rad;
+                    Vector3 at = BallStart[size][n];
+                    float d = Vector2.Distance(new Vector2(at.x, at.z), new Vector2(PlotRadius * Mathf.Cos(a), PlotRadius * Mathf.Sin(a)));
+                    if (d < 5f)
+                        throw new Exception("Snowman: Snowball " + SizeName[size] + " " + (n + 1) + " starts " + d.ToString("0.0") + " m from plot " + (p + 1) + "; it must be 5 m or more");
+                }
     }
 
     // ---- structures ----
 
     // The fort: a 16-sided ring wall (0.8 m thick, 3 m high, sheer both sides) with its south segment left out as an
-    // open gateway, a snow cap, the arch over the gateway, and the dark board on the north wall's inner face
-    void BuildFort(Material snowy, float fortBase)
+    // open gateway, a snow cap, the arch over the gateway, two low snow ledges (inside against the east side, outside
+    // against the north side), and the dark board on the north wall's inner face with its picture: three snowmen,
+    // each in its plot's scarf
+    void BuildFort(Material snowy, MeshBuilder paint, float fortBase)
     {
         var mb = new MeshBuilder();
         Func<int, bool> gateway = k => k == 8;          // segment centres from 90 deg: k = 8 is 270, the south
@@ -263,47 +325,27 @@ public sealed class SnowmanPuzzle : PuzzleDef
         // the arch over the gateway: from 2.35 m to the wall's top, through the wall's depth
         Block(mb, -2.5f, 2.5f, fortBase + 2.35f, fortBase + FortHigh, -FortOut, -FortIn, IsleKit.Cream);
         Block(mb, -2.56f, 2.56f, fortBase + FortHigh, fortBase + FortHigh + 0.13f, -FortOut - 0.06f, -FortIn + 0.06f, SnowWhite);      // 1 cm over the ring's cap: no coplanar tops
-        // the fort board: 2.6 x 1.9 m, from 1.0 to 2.9 m, on the north segment's inner face (z 11.0)
-        Block(mb, -1.3f, 1.3f, fortBase + 1.0f, fortBase + 2.9f, 10.9f, FortIn, IsleKit.Board);
+        // the ledges: 3.4 m long and 0.9 m deep, built 0.2 m into the wall, with 5 cm of snow on top
+        Block(mb, FortIn - 0.9f, FortIn + 0.2f, fortBase - 0.8f, fortBase + LedgeHigh, -1.7f, 1.7f, IsleKit.Cream);
+        Block(mb, FortIn - 0.93f, FortIn + 0.2f, fortBase + LedgeHigh, fortBase + LedgeTop, -1.73f, 1.73f, SnowWhite);
+        Block(mb, -1.7f, 1.7f, fortBase - 0.8f, fortBase + LedgeHigh, FortOut - 0.2f, FortOut + 0.9f, IsleKit.Cream);
+        Block(mb, -1.73f, 1.73f, fortBase + LedgeHigh, fortBase + LedgeTop, FortOut - 0.2f, FortOut + 0.93f, SnowWhite);
+        // the fort board: 3.0 x 1.9 m, from 1.0 to 2.9 m, on the north segment's inner face (z 11.0)
+        Block(mb, -1.5f, 1.5f, fortBase + 1.0f, fortBase + 2.9f, 10.9f, FortIn, IsleKit.Board);
         Place("Fort Wall", mb, snowy, 0f);
-    }
 
-    // The Judges' Box: 0.4 m walls, no windows, a door opening exactly the Door part's size with a lintel to the roof,
-    // a roof slab with eaves, the card partition and the entry baffle (both floor to roof), a floor, and the sealed
-    // Stamp Chest against the west wall outside
-    void BuildBox(Material snowy, float bb)
-    {
-        var mb = new MeshBuilder();
-        Color wall = IsleKit.Wood, trim = IsleKit.DarkWood;
-        float y0 = bb - 0.6f, top = bb + BoxHigh;
-        // south wall with the doorway
-        Block(mb, -BoxX, -DoorHalf, y0, top, BoxS, BoxSIn, wall);
-        Block(mb, DoorHalf, BoxX, y0, top, BoxS, BoxSIn, wall);
-        Block(mb, -DoorHalf, DoorHalf, bb + DoorHigh, top, BoxS, BoxSIn, wall);
-        Block(mb, -DoorHalf, DoorHalf, y0, bb - 0.02f, BoxS, BoxSIn, wall);            // the sill under the door, below the snow
-        // north, west, east
-        Block(mb, -BoxX, BoxX, y0, top, BoxNIn, BoxN, wall);
-        Block(mb, -BoxX, -BoxIn, y0, top, BoxSIn, BoxNIn, wall);
-        Block(mb, BoxIn, BoxX, y0, top, BoxSIn, BoxNIn, wall);
-        // corner posts, a little proud
-        foreach (float cx in new[] { -BoxX, BoxX })
-            foreach (float cz in new[] { BoxS, BoxN })
-                Block(mb, cx - 0.12f, cx + 0.12f, y0, top, cz - 0.12f, cz + 0.12f, trim);
-        // roof with eaves, sitting on the walls (no gap: a slit under the roof would show the board)
-        Block(mb, -BoxX - 0.25f, BoxX + 0.25f, top, top + 0.25f, BoxS - 0.25f, BoxN + 0.25f, trim);
-        // floor (2 cm proud of the snow), partition (cards side south), baffle
-        Block(mb, -BoxIn, BoxIn, bb - 0.3f, bb + 0.02f, BoxSIn, BoxNIn, IsleKit.Wood);
-        Block(mb, -1.3f, 1.3f, bb + 0.02f, top, -16.7f, -16.5f, IsleKit.Board);
-        Block(mb, -1.5f, 1.5f, bb + 0.02f, top, -19.8f, -19.6f, wall);
-        // the Stamp Chest: outer x -3.65..-2.92, z -20.4..-17.3, h 0..0.8; walls, floor and lid 10 cm; sealed
-        Color stone = IsleKit.Stone;
-        Block(mb, -3.65f, -2.92f, bb - 0.3f, bb + 0.1f, -20.4f, -17.3f, stone);        // floor
-        Block(mb, -3.65f, -2.92f, bb + 0.7f, bb + 0.8f, -20.4f, -17.3f, stone);        // lid
-        Block(mb, -3.65f, -3.55f, bb + 0.1f, bb + 0.7f, -20.4f, -17.3f, stone);        // west side
-        Block(mb, -3.0f, -2.92f, bb + 0.1f, bb + 0.7f, -20.4f, -17.3f, stone);         // east side, against the Box
-        Block(mb, -3.55f, -3.0f, bb + 0.1f, bb + 0.7f, -20.4f, -20.3f, stone);         // south end
-        Block(mb, -3.55f, -3.0f, bb + 0.1f, bb + 0.7f, -17.4f, -17.3f, stone);         // north end
-        Place("Judges Box", mb, snowy, 0f);
+        float[] r = { 0.15f, 0.11f, 0.08f };
+        for (int p = 0; p < PlotColour.Length; p++)
+        {
+            float x = -0.8f + 0.6f * p, y = fortBase + 1.12f;
+            for (int i = 0; i < 3; i++)
+            {
+                y += i == 0 ? r[0] : (r[i - 1] + r[i]) * 0.9f;
+                Roundel(paint, new Vector3(x, y, 10.9f), Vector3.back, r[i], 0.012f + 0.004f * i, SnowWhite, 14);
+            }
+            float neck = y - r[2] * 0.95f;
+            Block(paint, x - 0.1f, x + 0.1f, neck - 0.02f, neck + 0.02f, 10.87f, 10.91f, PlotColour[p]);
+        }
     }
 
     // The Champion Snowman by the start corner: three stacked snow spheres on a plinth (always there), and its
@@ -342,6 +384,15 @@ public sealed class SnowmanPuzzle : PuzzleDef
 
     // ---- helpers ----
 
+    // How high the middle of an outline's disc stands above the ground: the large one's foot at OutlineFoot, each of
+    // the others overlapping the one below by a tenth, as a snowman's balls sit into one another
+    static float DiscHeight(int size)
+    {
+        float y = OutlineFoot + Radius[0];
+        for (int i = 1; i <= size; i++) y += (Radius[i - 1] + Radius[i]) * 0.9f;
+        return y;
+    }
+
     // The ground's height at a local point, above the root's level
     float GroundAt(float x, float z) => b.WorldPoint(x, z).y - b.Root.transform.position.y;
 
@@ -372,6 +423,20 @@ public sealed class SnowmanPuzzle : PuzzleDef
     {
         Face(mb, a, b2, c, outward, color);
         Face(mb, a, c, d, outward, color);
+    }
+
+    // A painted disc standing upright on a board: 'centre' is its middle on the board's face, 'facing' (level) the way
+    // the board looks; it stands 'proud' of the face
+    static void Roundel(MeshBuilder mb, Vector3 centre, Vector3 facing, float radius, float proud, Color color, int segments)
+    {
+        Vector3 side = Vector3.Cross(Vector3.up, facing).normalized, front = centre + facing * proud;
+        for (int s = 0; s < segments; s++)
+        {
+            float a0 = 2f * Mathf.PI * s / segments, a1 = 2f * Mathf.PI * (s + 1) / segments;
+            Vector3 d0 = (side * Mathf.Cos(a0) + Vector3.up * Mathf.Sin(a0)) * radius, d1 = (side * Mathf.Cos(a1) + Vector3.up * Mathf.Sin(a1)) * radius;
+            Face(mb, front, front + d0, front + d1, facing, color);
+            Face4(mb, centre + d0, centre + d1, front + d1, front + d0, d0 + d1, color);
+        }
     }
 
     // A ring wall of 'sides' straight segments about 'centre' (only its x and z are used), between apothems 'inner' and

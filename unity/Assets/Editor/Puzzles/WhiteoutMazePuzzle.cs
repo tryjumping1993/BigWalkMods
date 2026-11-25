@@ -1,18 +1,49 @@
-// Whiteout Maze (puzzle 18, blind mask): a maze of snow walls seven cells by seven, too tall to see over, with a cairn in
-// eight of its dead ends and, over each cairn, a picture lying face up on a mast where only someone high above can read
-// it. A lamp board hidden in a closet behind the signal hut, 13 m beyond the maze, lights one lamp at a time with a
-// picture beside it. The Reader in the hut names the lit lamp's picture; the Spotter on a fenced gantry 9.5 m up finds
-// the cairn showing it and talks the blindfolded Walker there through the maze. Stepping into the wrong dead end stops
-// the puzzle; six cairns (five, in pairs, in a 4-player lobby) before the clock runs out win it. The board's shutter is
-// open only while someone stands on the gantry, so one player can never be reader and spotter.
+// Whiteout Maze (puzzle 18), the maze of gates: a maze of snow walls seven cells by seven, too tall to see over, with
+// three gates shut across the one way from its entrance to the star. A gate stands open only while somebody stands on
+// one of its snow plates, somewhere else in the maze, and shuts when they step off:
+//   the red plate (A), in a dead end before gate 1, holds gate 1;
+//   the green plate (B), in a dead end between gates 1 and 2, holds gates 1 and 2;
+//   the gold plate (C), in a dead end between gates 2 and 3, holds gates 2 and 3.
+// A plate is a square kerb of its colour under a string of that colour's bulbs; a gate wears its plates' colours on
+// its lintel, its cap and its lights. Beyond gate 3 is the star: walk into its ring of baubles and the gourd is won.
 //
-// On every start the custom script WhiteoutDeal (Assets/PuzzleScripts) deals the pad sensors out afresh among the eight
-// alcoves (which lamp means which cairn) and gives every cairn a new picture, then Begins the Press In Order 0.6 s later.
-// The maze itself is generated here, deterministically: a depth-first carve from a searched seed (growing tree if no
-// seed qualifies), cairns in the dead ends farthest apart, gantry posts only where maze walls meet.
+//        +---+---+---+-x-+---+---+---+
+//        |           2   |           |      1 2 3   the gates
+//        +   +---+   +   +---+   +---+      A B C   the plates (red, green, gold)
+//        |     B |   |       |       |      *       the star
+//        +   +---+   +---+   +---+   +      x       ways out (steps up to a drop: out only)
+//        |   |       | C |   |       |
+//        +---+   +---+   +   +   +   +      north at the top; the gantry runs east-west over
+//        x       |           |   |   |      the wall line north of the middle row, to the stair
+//        + 1 +---+   +---+---+   +---+      tower east of the maze
+//        |   |           |           |
+//        +   +---+---+ 3 +---+---+   +
+//        |       | *                 |
+//        +   +   +---+---+---+---+   +
+//        | A |           |           |
+//        +---+   +---+   +---+-x-+---+
+//           west      the
+//          gateway  entrance
 //
-// Coordinates: design metres, maze centred at (0, 0), x east, z north (towards the hut); the build adds (OffX, OffZ) so
-// the 34 x 46 footprint is centred on the root. Heights above the (levelled) ground. Spec: puzzle-specs\WhiteoutMaze.md.
+// So a group leapfrogs. Two players: one stands on A while the other walks through gate 1 and on to B; B holds gate 1
+// as well, so the first leaves A and follows through gates 1 and 2 to C; C holds gate 2 as well, so the second leaves
+// B and walks through gates 2 and 3 to the star. Three or more: the same, and everybody but the one left on C reaches
+// the star. One player alone cannot pass gate 1 (plate A is 6.5 m of walking from it). There is no clock and nothing
+// to get wrong, and nobody is shut away: the walls do not block voices, and the gantry 9.5 m over the maze is a
+// lookout anyone may climb, from which the whole maze, its plates and its gates show.
+//
+// A gate is open while ANY of its plates is stood on: the custom script HeldOpen (Assets/PuzzleScripts), one per
+// gate, reads its plates and works the door. Nothing is wired to the doors, and they work whether the start switch is
+// on or not. Nobody is left behind a shut gate: each stretch beyond a gate has a way out of its own through the
+// outer wall (west beyond gate 1, north beyond gate 2, south beyond gate 3), where steps climb to a platform 1.6 m up
+// with an open end. Off it and you are outside; no jump gets back up, so the ways out let nobody in.
+//
+// (Before the rework: a blindfolded walker was talked from cairn to cairn by a spotter on the gantry, from pictures a
+// reader in a signal hut called out, against a clock, and a wrong dead end stopped the puzzle.)
+//
+// The maze is the one the old puzzle carved (depth-first, seed 2608), written out below as a map; its walls stand
+// where they stood. Coordinates: design metres, maze centred at (0, 0), x east, z north; the build adds (OffX, OffZ)
+// so the 34 x 46 footprint is centred on the root. Heights above the (levelled) ground.
 using System.Collections.Generic;
 using Bwm;
 using UnityEngine;
@@ -23,23 +54,92 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
     public override Vector2 Footprint => new Vector2(34f, 46f);
     public override Vector2? FixedSite => new Vector2(-753f, -1251f);      // East Lowland flats (layout-final)
 
-    // design -> build: the layout runs x -11..18 and z -16..27 about the maze's centre
+    // design -> build: the footprint runs x -14.5..19.5 and z -17.5..28.5 about the maze's centre (the ground north of
+    // z 12 held the old signal hut and is empty now)
     const float OffX = -2.5f, OffZ = -5.5f;
 
-    const int N = 7, Cairns = 8;
+    const int N = 7;
     const float CellSize = 2.6f, X0 = -N * CellSize / 2f;      // wall lines at X0 + 2.6 k (-9.1 .. 9.1)
-    const float WallT = 0.45f, WallBody = 2.0f, Ridge = 0.35f;  // WallH 2.35 (E + J + 0.3 with E = J = 1.0)
+    const float WallT = 0.45f, WallBody = 2.0f, Ridge = 0.35f;  // 2.35 m to the ridge: over a standing eye and a jump
     const float Sink = 0.3f, Eps = 0.001f;
     const float DeckH = 9.5f, DeckZ0 = 0.6f, DeckZ1 = 2.0f, DeckX0 = -9.4f, DeckX1 = 13.8f;
     const float FenceH = 2.6f;
-    const float PicH = 3.0f, RimUp = 0.12f;                     // cairn pictures face up at PicH, in a tray whose rim stands RimUp above
-    const float SensorH = 2.6f;
-    const float HookUp = 1.55f, ItemUp = 1.3f;                  // as IsleKit.BlindfoldHook: hook 0.03 m, item 0.31 m in front of the face
-    const float DoorHalf = 0.62f;                               // the game's Door is 1.24 m wide, 2.02 high
-    const float GateL = 1.11f, GateR = 1.01f;                   // "Gate No items" runs -1.11 .. +1.01 m across at yaw 0
+    const float DoorHalf = 0.62f, DoorTop = 2.02f, LintelTop = 2.4f;      // the game's Door is 1.24 m wide, 2.02 high
+    const float GatewayHalf = 1.06f;                            // the plain gateways are 2.12 m wide
+    const float GatePost = 3.0f;                                // a gate's two posts, which carry its lights
+    const float PlateSize = 2.0f, SensorH = 2.6f, StringH = 2.36f;
+    const float DropH = 1.6f;                                   // the ways out: a jump is about 1 m
+    const float StarH = 4.2f;
 
     static readonly Color SnowBlock = new Color(0.92f, 0.94f, 0.98f);
-    static readonly Color LampGold = new Color(0.95f, 0.72f, 0.22f);
+
+    // The maze, north at the top. Every cell is reached one way only (the maze is a tree). Cell (i, j) is column i
+    // from the west, row j from the south.
+    static readonly string[] Map =
+    {
+        "+---+---+---+---+---+---+---+",
+        "|               |           |",      // row 6
+        "+   +---+   +   +---+   +---+",
+        "|       |   |       |       |",      // row 5
+        "+   +---+   +---+   +---+   +",
+        "|   |       |   |   |       |",      // row 4
+        "+---+   +---+   +   +   +   +",
+        "|       |           |   |   |",      // row 3
+        "+   +---+   +---+---+   +---+",
+        "|   |           |           |",      // row 2
+        "+   +---+---+   +---+---+   +",
+        "|       |                   |",      // row 1
+        "+   +   +---+---+---+---+   +",
+        "|   |           |           |",      // row 0
+        "+---+---+---+---+---+---+---+",
+    };
+
+    // An opening in a wall line. 'across': the line runs east-west (z = Line(k)) and the opening is in column i;
+    // otherwise the line runs north-south (x = Line(k)) and the opening is in row i. 'outward' (+1 or -1) is the way
+    // out of the maze along z (or x), for the outer wall's openings.
+    sealed class Opening
+    {
+        public readonly bool across;
+        public readonly int k, i, outward;
+        public readonly float half;
+
+        public Opening(bool across, int k, int i, float half, int outward = 1)
+        {
+            this.across = across; this.k = k; this.i = i; this.half = half; this.outward = outward;
+        }
+
+        public float U => Mid(i);            // its middle, along the wall line
+        public float Yaw => across ? 0f : 90f;
+        // the design point u along the wall line and w out from it, y up
+        public Vector3 At(float u, float y, float w) => across ? new Vector3(u, y, Line(k) + outward * w) : new Vector3(Line(k) + outward * w, y, u);
+        // the cells on its two sides, and the one inside an outer wall's opening
+        public Vector2Int Low => across ? new Vector2Int(i, k - 1) : new Vector2Int(k - 1, i);
+        public Vector2Int High => across ? new Vector2Int(i, k) : new Vector2Int(k, i);
+        public Vector2Int Inside => k == 0 ? High : Low;
+        public bool Between(Vector2Int a, Vector2Int c) => (a == Low && c == High) || (a == High && c == Low);
+    }
+
+    // The two plain gateways in the south wall: the entrance, and the west gateway two cells along (the old west exit)
+    static readonly Opening Entrance = new Opening(true, 0, 3, GatewayHalf, -1), WestGateway = new Opening(true, 0, 1, GatewayHalf, -1);
+    static readonly Opening[] Gates =
+    {
+        new Opening(true, 3, 0, DoorHalf),       // gate 1, between (0, 2) and (0, 3)
+        new Opening(false, 3, 6, DoorHalf),      // gate 2, between (2, 6) and (3, 6)
+        new Opening(true, 2, 3, DoorHalf),       // gate 3, between (3, 2) and (3, 1)
+    };
+    // The way out of the stretch beyond each gate, in the gates' order
+    static readonly Opening[] WaysOut =
+    {
+        new Opening(false, 0, 3, DoorHalf, -1),  // west, from (0, 3)
+        new Opening(true, N, 3, DoorHalf, 1),    // north, from (3, 6)
+        new Opening(true, 0, 5, DoorHalf, -1),   // south, from (5, 0)
+    };
+    static readonly string[] GateName = { "Gate 1", "Gate 2", "Gate 3" };         // HeldOpen finds the doors and
+    static readonly string[] PlateName = { "Plate A", "Plate B", "Plate C" };     // the plates by these names
+    static readonly Vector2Int[] Plates = { new Vector2Int(0, 0), new Vector2Int(1, 5), new Vector2Int(3, 4) };
+    static readonly Color[] PlateColour = { IsleKit.Red, IsleKit.Green, IsleKit.Gold };
+    static readonly int[][] HeldBy = { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2 } };      // the plates that hold each gate
+    static readonly Vector2Int Star = new Vector2Int(2, 1);      // the dead end just beyond gate 3
 
     PuzzleBuilder b;
 
@@ -49,7 +149,8 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
     static float Z(float z) => z + OffZ;
     Piece P(string prefab, float x, float z, float h = 0f, float yaw = 0f) => b.Part(prefab, X(x), Z(z), h, yaw);
     Piece E(string name, float x, float z, float h = 0f) => b.Empty(name, X(x), Z(z), h);
-    Quaternion Turned(float yaw) => b.Root.transform.rotation * Quaternion.Euler(0f, yaw, 0f);
+    // a design point as Kit.LightString takes a post: local x, height, local z
+    static Vector3 Post(Vector3 design) => new Vector3(X(design.x), design.y, Z(design.z));
 
     // A mesh in design coordinates, placed at the maze's centre
     Piece AddMesh(string name, MeshBuilder mb, Material material, bool collider = true)
@@ -61,202 +162,99 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
 
     // ---- directions: 0 south (-z), 1 north (+z), 2 west (-x), 3 east (+x) ----
     static readonly int[] DX = { 0, 0, -1, 1 }, DZ = { -1, 1, 0, 0 };
-    static readonly float[] DirYaw = { 180f, 0f, -90f, 90f };
     static int Opposite(int d) => d ^ 1;
-
-    sealed class Cairn { public int i, j, open, back, index; }
 
     public override void Build(PuzzleBuilder builder)
     {
         b = builder;
         b.DebugTeleport(X(0f), Z(-15f));
         b.ClearGround(34f, 46f);
-        // no jetpack thrust over the maze, the gantry, the tower or the hut (Winter Walk's JetpackDriver)
+        // no jetpack thrust over the maze, the gantry or the tower (Winter Walk's JetpackDriver)
         IsleKit.CalmAir(b, "Whiteout Maze", 0f, 0f, new Vector3(64f, 150f, 76f), 0f, -10f);
         Material snowy = IsleKit.Snowy(b), bare = IsleKit.Bare(b);
 
         // ================= the maze =================
-        FindMaze(out bool[,] east, out bool[,] north, out int seed, out bool tree);
-        List<Cairn> cairns = PickCairns(east, north);
+        ReadMap(out bool[,] east, out bool[,] north);
+        CheckLayout(east, north);
         var h = new List<Vector2>[N + 1];
         var v = new List<Vector2>[N + 1];
         for (int k = 0; k <= N; k++) { h[k] = Solids(true, k, east, north); v[k] = Solids(false, k, east, north); }
         BuildWalls(snowy, h, v);
-        List<int> posts = PostLattice(h, v);
-        LogMaze(east, north, seed, tree, cairns, posts, out float meanL);
+        BuildGateways(snowy);
+        BuildWaysOut(snowy);
 
-        // ================= groups by lobby size =================
-        Piece rigA = IsleKit.Lobby(b, "Rig A", true, true, false);
-        Piece rigB = IsleKit.Lobby(b, "Rig B", false, false, true);
-        Piece lobby2 = IsleKit.Lobby(b, "Lobby 2", true, false, false);
-        Piece lobby3 = IsleKit.Lobby(b, "Lobby 3", false, true, false);
-
-        // ================= cairns: rocks, masts, face-up pictures, alcove anchors, pads =================
-        var cairnMesh = new MeshBuilder();
-        var padsA = new Component[Cairns + 1];
-        var padsB = new Component[Cairns + 1];
-        foreach (Cairn c in cairns)
+        // ================= the gates: a Door, the script that holds it open, and its plates' colours =================
+        var gateMarks = new MeshBuilder();
+        for (int g = 0; g < Gates.Length; g++)
         {
-            float cx = Mid(c.i), cz = Mid(c.j);
-            float bx = DX[c.back], bz = DZ[c.back];
-            float yawBack = DirYaw[c.back];
-            // three stacked stones against the back wall and a sprig of holly
-            Vector3 stack = new Vector3(cx + bx * 0.78f, 0f, cz + bz * 0.78f);
-            Kit.AddRock(cairnMesh, stack, new Vector3(0.5f, 0.3f, 0.5f), 500 + c.index * 3);
-            Kit.AddRock(cairnMesh, stack + Vector3.up * 0.2f, new Vector3(0.4f, 0.25f, 0.4f), 501 + c.index * 3);
-            Kit.AddRock(cairnMesh, stack + Vector3.up * 0.37f, new Vector3(0.28f, 0.22f, 0.28f), 502 + c.index * 3);
-            Kit.AddBall(cairnMesh, stack + new Vector3(0.05f, 0.6f, 0f), 0.06f, IsleKit.Green);
-            Kit.AddBall(cairnMesh, stack + new Vector3(-0.05f, 0.62f, 0.03f), 0.05f, IsleKit.Green);
-            Kit.AddBall(cairnMesh, stack + new Vector3(0f, 0.64f, -0.04f), 0.035f, IsleKit.Red);
-            Kit.AddBall(cairnMesh, stack + new Vector3(0.04f, 0.63f, -0.06f), 0.035f, IsleKit.Red);
-            // the mast on the back wall's centre and the tray the picture lies in: its rim stands RimUp above the face,
-            // so no eye lower than PicH + RimUp sees the picture
-            float mx = cx + bx * CellSize / 2f, mz = cz + bz * CellSize / 2f;
-            Blk(cairnMesh, mx - 0.075f, mx + 0.075f, WallBody - 0.1f, 2.8f, mz - 0.075f, mz + 0.075f, IsleKit.Wood);
-            Blk(cairnMesh, mx - 0.28f, mx + 0.28f, 2.77f, 2.8f, mz - 0.28f, mz + 0.28f, IsleKit.DarkWood);
-            float rimTop = PicH + RimUp;
-            Blk(cairnMesh, mx - 0.28f, mx + 0.28f, 2.8f, rimTop, mz - 0.28f, mz - 0.25f, IsleKit.DarkWood);
-            Blk(cairnMesh, mx - 0.28f, mx + 0.28f, 2.8f, rimTop, mz + 0.25f, mz + 0.28f, IsleKit.DarkWood);
-            Blk(cairnMesh, mx - 0.28f, mx - 0.25f, 2.8f, rimTop, mz - 0.25f, mz + 0.25f, IsleKit.DarkWood);
-            Blk(cairnMesh, mx + 0.25f, mx + 0.28f, 2.8f, rimTop, mz - 0.25f, mz + 0.25f, IsleKit.DarkWood);
-            // the picture, face up; its top towards the far side from the gantry, so it reads upright from the deck
-            float yawPic = c.j <= 2 ? 0f : 180f;
-            Piece pic = P("Display", mx, mz, PicH, yawPic).Named("Cairn Picture " + c.index)
-                .Set("PuzzleDisplay", "size", 0).Set("PuzzleDisplay", "randomOnStart", false);
-            pic.Transform.rotation = Turned(yawPic) * Quaternion.Euler(-90f, 0f, 0f);
-            // the alcove's anchor at a pad's centre height, turned so +z runs from the opening to the back wall
-            float ax = cx + bx * 0.3f, az = cz + bz * 0.3f;
-            E("Alcove " + c.index, ax, az, SensorH / 2f).Transform.rotation = Turned(yawBack);
-            // pad k starts in alcove k; WhiteoutDeal moves the pads on every start
-            Piece a = IsleKit.Sensor(b, "Pad " + c.index, X(ax), Z(az), new Vector3(1.9f, SensorH, 1.5f))
-                .Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1).Under(rigA);
-            a.Transform.rotation = Turned(yawBack);
-            padsA[c.index] = a.Component("PuzzlePresenceSensor");
-            Piece pair = IsleKit.Sensor(b, "Pad " + c.index + " Pair", X(ax), Z(az), new Vector3(1.9f, SensorH, 1.5f))
-                .Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 2).Under(rigB);
-            pair.Transform.rotation = Turned(yawBack);
-            padsB[c.index] = pair.Component("PuzzlePresenceSensor");
+            Opening o = Gates[g];
+            Vector3 at = o.At(o.U, 0f, 0f);
+            P("Door", at.x, at.z, 0f, o.Yaw).Named(GateName[g])
+                .Set("PuzzleDoor", "mode", 2).Set("PuzzleDoor", "soundproof", false);      // Control With Functions Only: shut until told
+            var holders = new List<string>();
+            foreach (int p in HeldBy[g]) holders.Add(PlateName[p]);
+            Component hold = b.AddCustomScript(E(GateName[g] + " Hold", at.x, at.z, GatePost), "HeldOpen");
+            Sdk.Set(hold, "door", GateName[g]);
+            Sdk.Set(hold, "plates", string.Join(";", holders));
+
+            // half the lintel for each plate (all of it, with one): a band on both faces and a peaked cap, so nobody
+            // stands on it and the colours show from the gantry
+            int first = HeldBy[g][0], second = HeldBy[g][HeldBy[g].Length - 1];
+            float u0 = o.U - DoorHalf + 0.01f, u1 = o.U + DoorHalf - 0.01f;
+            foreach (float face in new[] { -1f, 1f })
+            {
+                Slab(gateMarks, o, u0, o.U, DoorTop + 0.06f, LintelTop - 0.06f, face * 0.24f, face * 0.285f, PlateColour[first]);
+                Slab(gateMarks, o, o.U, u1, DoorTop + 0.06f, LintelTop - 0.06f, face * 0.24f, face * 0.285f, PlateColour[second]);
+            }
+            Prism(gateMarks, o.At(u0, LintelTop, 0f), o.At(o.U, LintelTop, 0f), 0.5f, 0.3f, PlateColour[first]);
+            Prism(gateMarks, o.At(o.U, LintelTop, 0f), o.At(u1, LintelTop, 0f), 0.5f, 0.3f, PlateColour[second]);
+            // six bulbs between the posts' tops, three of each plate's colour (Kit's bulb colours begin red, green, gold)
+            float span = DoorHalf + 0.06f;
+            Color bulb1 = Kit.BulbColors[first], bulb2 = Kit.BulbColors[second];
+            Kit.LightString(b, GateName[g] + " Lights", new List<Vector3> { Post(o.At(o.U - span, GatePost, 0f)), Post(o.At(o.U + span, GatePost, 0f)) },
+                0.1f, 2f * span / 6f, true, false, 201 + g, new[] { bulb1, bulb1, bulb1, bulb2, bulb2, bulb2 });
         }
-        AddMesh("Cairns", cairnMesh, snowy);
+        AddMesh("Gate Marks", gateMarks, bare);
 
-        // ================= ways in and out =================
-        float south = Line(0);
-        IsleKit.BlindGate(b, X(Mid(3)), Z(south), 0f);      // "Blind Turnstile": in only, blindfolded
-        P("Gate No items", Mid(1), south, 0f, 180f).Named("Exit West")
-            .Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "blindMask", false);
-        P("Gate No items", Mid(5), south, 0f, 180f).Named("Exit East")
-            .Set("PuzzleNoItemsGate", "oneWay", true).Set("PuzzleNoItemsGate", "blindMask", false);
-        P("Door", Line(0), Mid(3), 0f, 90f).Named("Maze Door W").Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", false);
-        P("Door", Line(N), Mid(3), 0f, 90f).Named("Maze Door E").Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", false);
-        P("Door", Mid(3), Line(N), 0f, 0f).Named("Maze Door N").Set("PuzzleDoor", "mode", 1).Set("PuzzleDoor", "soundproof", false);
-        BuildGates(snowy);
-
-        // blindfolds (the second only in a 4-player lobby) and the empty hooks inside the exits
-        var posts2 = new MeshBuilder();
-        var hookPosts = new MeshBuilder();
-        HookPost(hookPosts, 2.5f, -12.5f);
-        Hang("Blindfold", "Blindfold Hook", 2.5f, -12.5f + 0.09f, 0f, 0f, 1, 0);
-        HookPost(posts2, 3.4f, -12.5f);
-        Piece[] blind2 = Hang("Blindfold 2", "Blindfold Hook 2", 3.4f, -12.5f + 0.09f, 0f, 0f, 1, 0);
-        foreach (Piece p in blind2) p.Under(rigB);
-        HookPost(hookPosts, -6.15f, -8.15f);
-        Hang(null, "Exit Hook W", -6.15f, -8.15f + 0.09f, 0f, 0f, 1, -1);
-        HookPost(hookPosts, 6.15f, -8.15f);
-        Hang(null, "Exit Hook E", 6.15f, -8.15f + 0.09f, 0f, 0f, 1, -1);
-        AddMesh("Hook Posts", hookPosts, snowy);
-        AddMesh("Blindfold Post 2", posts2, snowy).Under(rigB);
-
-        // ================= the gantry, the stair tower, the signal hut =================
-        BuildGantry(snowy, posts);
-        BuildTower(snowy);
-        BuildHut(snowy, bare);
-
-        // ================= the board: two rows of four, a gold lamp over each picture =================
-        var lamps = new Component[Cairns + 1];
-        for (int k = 1; k <= Cairns; k++)
+        // ================= the plates: a sensor filling a dead end, a kerb of its colour, bulbs of its colour overhead =================
+        var marks = new MeshBuilder();
+        for (int p = 0; p < Plates.Length; p++)
         {
-            int col = (k - 1) % 4, row = (k - 1) / 4;
-            float x = 0.75f - 0.5f * col;      // board-left is east (the reader faces south)
-            Piece lamp = P("Light 8", x, 20.42f, 2.25f - row, 0f).Named("Board Lamp " + k)
-                .Set("PuzzleLight", "color", LampGold).Set("PuzzleLight", "range", 0.8f).Set("PuzzleLight", "intensity", 0f);
-            lamps[k] = lamp.Component("PuzzleLight");
-            P("Display", x, 20.52f, 1.85f - row, 0f).Named("Board Picture " + k)
-                .Set("PuzzleDisplay", "size", 0).Set("PuzzleDisplay", "randomOnStart", false);
+            float cx = Mid(Plates[p].x), cz = Mid(Plates[p].y);
+            IsleKit.Sensor(b, PlateName[p], X(cx), Z(cz), new Vector3(PlateSize, SensorH, PlateSize))
+                .Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
+            Kerb(marks, cx, cz, PlateColour[p]);
+            // from side wall to side wall, on their ridges
+            bool opensNorthSouth = OpenSides(east, north, Plates[p].x, Plates[p].y)[0] <= 1;
+            Vector3 reach = opensNorthSouth ? new Vector3(CellSize / 2f, 0f, 0f) : new Vector3(0f, 0f, CellSize / 2f);
+            var middle = new Vector3(cx, StringH, cz);
+            Kit.LightString(b, PlateName[p] + " Lights", new List<Vector3> { Post(middle - reach), Post(middle + reach) },
+                0.15f, 0.3f, true, false, 211 + p, new[] { Kit.BulbColors[p] });
         }
-        Piece shutter = P("Door", 0f, 22.2f, 0f, 0f).Named("Board Shutter")
-            .Set("PuzzleDoor", "mode", 2).Set("PuzzleDoor", "soundproof", false);      // ControlWithFunctionsOnly: starts closed
 
-        // the shutter is open only while someone stands on the deck (in every lobby)
-        Piece watch = IsleKit.Sensor(b, "Gantry Watch", X((DeckX0 + DeckX1) / 2f), Z((DeckZ0 + DeckZ1) / 2f),
-                new Vector3(DeckX1 - DeckX0, 1.3f, DeckZ1 - DeckZ0), DeckH)
+        // ================= the star: the goal, in the dead end beyond gate 3 =================
+        float sx = Mid(Star.x), sz = Mid(Star.y);
+        Piece goal = IsleKit.Sensor(b, "Star", X(sx), Z(sz), new Vector3(PlateSize, SensorH, PlateSize))
             .Set("PuzzlePresenceSensor", "type", 0).Set("PuzzlePresenceSensor", "requiredPlayers", 1);
-        Component door = shutter.Component("PuzzleDoor");
-        watch.On("PuzzlePresenceSensor", "onPressed", door, "Open");
-        watch.On("PuzzlePresenceSensor", "onReleased", door, "Close");
-
-        // ================= bars, clocks, walkies, binoculars, dead zone =================
-        Piece barGantry = P("Progress Bar", 13.75f, 1.3f, DeckH + 2.9f, -90f).Named("Bar Gantry").Scaled(0.75f, 1f, 1f)
-            .Set("PuzzleProgressBar", "total", 6);
-        Piece barHut = P("Progress Bar", 0f, 22.4f, 2.55f, 0f).Named("Bar Hut").Set("PuzzleProgressBar", "total", 6);
-        // 3: six blind walks at 0.8 m/s plus 20 s of relay and search each, 30 % spare; 4: five rounds, a quarter more to
-        // keep two walkers together; 2: B's 90 m loop to the hut at a sprint, gates, a guided sighted walk and the relay
-        float t3 = Round10(6f * (meanL / 0.8f + 20f) * 1.3f);
-        float t4 = Round10(5f * (meanL / 0.8f + 20f) * 1.3f * 1.25f);
-        float t2 = Round10(6f * (90f / 3.5f + 10f + meanL / 2f + 15f) * 1.3f);
-        Piece timer2 = P("Timer", 13.75f, 1.3f, DeckH + 3.6f, -90f).Named("Timer 2").Set("PuzzleTimer", "duration", t2).Under(lobby2);
-        Piece timer3 = P("Timer", 13.75f, 1.3f, DeckH + 3.6f, -90f).Named("Timer 3").Set("PuzzleTimer", "duration", t3).Under(lobby3);
-        Piece timer4 = P("Timer", 13.75f, 1.3f, DeckH + 3.6f, -90f).Named("Timer 4").Set("PuzzleTimer", "duration", t4).Under(rigB);
-        Debug.Log("[BWM] WhiteoutMaze: timers 2/3/4 players " + Sdk.F(t2) + " / " + Sdk.F(t3) + " / " + Sdk.F(t4) + " s (L " + Sdk.F(meanL) + " m)");
-
-        Hang("Walkie Hut", "Walkie Hut Hook", 2.38f, 24.0f, -90f, 0f, 16, 4);                // inside the hut's east wall
-        Hang("Walkie Tower", "Walkie Tower Hook", 15.3f, -0.2f, 180f, 0f, 16, 4);            // the tower's south face
-        Hang("Deck Binoculars", "Deck Binoculars Hook", 14.45f, 0f, 0f, DeckH, 32, 5);      // inside the tower's top, on its south wall
-
-        Piece dead = P("Radio Dead Zone", 0f, 0f, 1.6f, 0f).Named("Maze Dead Zone");      // theme only: it ignores held radios
-        BoxCollider zone = dead.Go.GetComponent<BoxCollider>();
-        if (zone == null) zone = dead.Go.AddComponent<BoxCollider>();
-        zone.isTrigger = true;
-        zone.size = new Vector3(18.8f, 3.2f, 18.8f);
-        zone.center = Vector3.zero;
-
-        // ================= the rules: one Press In Order per lobby size, sharing the board's lamps =================
-        Piece orderA = E("Press In Order A", 0f, 0f, 0.5f).Under(rigA);
-        Component pioA = b.AddScript(orderA, "PuzzlePressInOrder");
-        Piece orderB = E("Press In Order B", 0f, 0f, 0.6f).Under(rigB);
-        Component pioB = b.AddScript(orderB, "PuzzlePressInOrder");
-        for (int k = 1; k <= Cairns; k++)
+        goal.On("PuzzlePresenceSensor", "onPressed", b.Puzzle, "Win");
+        // a ring of baubles in the three plates' colours on the snow, and a gold star on a pole on the back wall, high
+        // enough to show over the walls from outside the maze
+        for (int n = 0; n < 12; n++)
         {
-            Sdk.Add(pioA, "lights", lamps[k]); Sdk.Add(pioA, "buttons", padsA[k]);
-            Sdk.Add(pioB, "lights", lamps[k]); Sdk.Add(pioB, "buttons", padsB[k]);
+            float a = n * Mathf.PI / 6f;
+            Kit.AddBall(marks, new Vector3(sx + Mathf.Cos(a) * 0.85f, 0.05f, sz + Mathf.Sin(a) * 0.85f), 0.1f, PlateColour[n % 3]);
         }
-        Component barG = barGantry.Component("PuzzleProgressBar"), barH = barHut.Component("PuzzleProgressBar");
-        Sdk.Add(pioA, "progressBars", barG, barH);
-        Sdk.Add(pioB, "progressBars", barG, barH);
-        Sdk.Set(pioA, "rounds", 6); Sdk.Set(pioA, "holdAtEnd", false);
-        Sdk.Set(pioB, "rounds", 5); Sdk.Set(pioB, "holdAtEnd", false);
+        int back = Opposite(OpenSides(east, north, Star.x, Star.y)[0]);
+        float px = sx + DX[back] * CellSize / 2f, pz = sz + DZ[back] * CellSize / 2f;
+        Blk(marks, px - 0.05f, px + 0.05f, WallBody - 0.1f, StarH - 0.3f, pz - 0.05f, pz + 0.05f, IsleKit.Cream);
+        AddStar(marks, new Vector3(px, StarH, pz), 0.4f, 0.07f, 0f, IsleKit.Gold);
+        AddStar(marks, new Vector3(px, StarH, pz), 0.4f, 0.07f, 90f, IsleKit.Gold);
+        E("Room Light Night 1 FFD98A 4.0 1.2", sx, sz, 2.8f);      // a warm lamp over the star after dark (Winter Walk's RoomLights)
+        AddMesh("Plate Marks", marks, bare, false);      // drawn only: nothing to trip on
 
-        // the deal (host only), at the root so it is in every lobby
-        Component deal = b.AddCustomScript(E("Whiteout Deal", 0f, 0f, 0.5f), "WhiteoutDeal");
-        Sdk.Set(deal, "imageSet", 0);       // PuzzleImageSet.A
-        Sdk.Set(deal, "beginDelay", 0.6f);
-
-        // ================= events =================
-        Component t2c = timer2.Component("PuzzleTimer"), t3c = timer3.Component("PuzzleTimer"), t4c = timer4.Component("PuzzleTimer");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStart", deal, "Deal");      // which Begins both rigs 0.6 s later
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pioA, "End");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", pioB, "End");
-        b.RootPiece.On("PuzzleSDK", "onPuzzleStop", deal, "Clear");
-        foreach (Component t in new[] { t2c, t3c, t4c })
-        {
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStart", t, "StartTimer");
-            b.RootPiece.On("PuzzleSDK", "onPuzzleStop", t, "ResetTimer");
-            b.RootPiece.On("PuzzleSDK", "onWin", t, "PauseTimer");
-            Sdk.Wire(t, "onFinished", b.Puzzle, "StopPuzzle");
-        }
-        orderA.On("PuzzlePressInOrder", "onFail", b.Puzzle, "StopPuzzle");
-        orderB.On("PuzzlePressInOrder", "onFail", b.Puzzle, "StopPuzzle");
-        barGantry.On("PuzzleProgressBar", "onFull", b.Puzzle, "Win");
-        // (nothing on start or stop touches the shutter: it follows the deck alone)
+        // ================= the gantry and its stair tower: a lookout =================
+        BuildGantry(snowy, PostLattice(h, v));
+        BuildTower(snowy);
 
         // ================= start corner and lights =================
         IsleKit.StartCorner(b, X(-5f), Z(-13.5f), 0f);
@@ -269,61 +267,34 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         }
         Kit.LightString(b, "Deck Lights West", new List<Vector3> { new Vector3(X(DeckX0), DeckH + FenceH + 0.2f, Z(DeckZ0)), new Vector3(X(DeckX0), DeckH + FenceH + 0.2f, Z(DeckZ1)) },
             0.1f, 0.4f, true, false, 193);
-        Kit.LightString(b, "Hut Eaves", new List<Vector3> { new Vector3(X(-2.9f), 2.95f, Z(26.15f)), new Vector3(X(0f), 2.95f, Z(26.15f)), new Vector3(X(2.9f), 2.95f, Z(26.15f)) },
-            0.15f, 0.4f, true, false, 194);
-        Kit.LightString(b, "Arch Lights", new List<Vector3> { new Vector3(X(-1.45f), 2.75f, Z(-9.75f)), new Vector3(X(1.35f), 2.75f, Z(-9.75f)) }, 0.2f, 0.3f, true, false, 195);
+        float arch = GatewayHalf + 0.34f;
+        Kit.LightString(b, "Arch Lights", new List<Vector3> { Post(Entrance.At(Entrance.U - arch, 2.75f, 0.65f)), Post(Entrance.At(Entrance.U + arch, 2.75f, 0.65f)) },
+            0.2f, 0.3f, true, false, 195);
     }
 
-    static float Round10(float s) => Mathf.Max(60f, Mathf.Round(s / 10f) * 10f);
+    // ================= the map =================
 
-    // ================= maze generation =================
-
-    // Seeds upward from 1812, depth-first carve first, then a growing-tree carve, until the maze has 8 eligible dead
-    // ends with at least one in each quadrant
-    void FindMaze(out bool[,] east, out bool[,] north, out int seed, out bool tree)
+    // The map's passages: east[i, j] between cells (i, j) and (i + 1, j), north[i, j] between (i, j) and (i, j + 1)
+    static void ReadMap(out bool[,] east, out bool[,] north)
     {
-        for (int pass = 0; pass < 2; pass++)
-        {
-            tree = pass == 1;
-            for (seed = 1812; seed < 1812 + 2000; seed++)
-            {
-                Carve(seed, tree, out east, out north);
-                List<Vector2Int> eligible = Eligible(east, north);
-                if (eligible.Count >= Cairns && QuadrantsCovered(eligible)) return;
-            }
-        }
-        throw new System.Exception("WhiteoutMaze: no seed from 1812 to 3811 gives " + Cairns + " eligible dead ends (depth-first or growing tree)");
-    }
-
-    static void Carve(int seed, bool tree, out bool[,] east, out bool[,] north)
-    {
-        var random = new System.Random(seed);
+        if (Map.Length != 2 * N + 1) throw new System.Exception("WhiteoutMaze: the map needs " + (2 * N + 1) + " lines");
+        foreach (string line in Map)
+            if (line.Length != 4 * N + 1) throw new System.Exception("WhiteoutMaze: every line of the map needs " + (4 * N + 1) + " characters");
         east = new bool[N, N];
         north = new bool[N, N];
-        var seen = new bool[N, N];
-        var active = new List<Vector2Int> { new Vector2Int(N / 2, 0) };
-        seen[N / 2, 0] = true;
-        var options = new List<Vector2Int>();
-        while (active.Count > 0)
+        for (int j = 0; j < N; j++)
         {
-            int index = active.Count - 1;
-            if (tree) index = random.NextDouble() < 0.5 ? active.Count - 1 : random.Next(active.Count);
-            Vector2Int c = active[index];
-            options.Clear();
-            if (c.x > 0 && !seen[c.x - 1, c.y]) options.Add(new Vector2Int(c.x - 1, c.y));
-            if (c.x < N - 1 && !seen[c.x + 1, c.y]) options.Add(new Vector2Int(c.x + 1, c.y));
-            if (c.y > 0 && !seen[c.x, c.y - 1]) options.Add(new Vector2Int(c.x, c.y - 1));
-            if (c.y < N - 1 && !seen[c.x, c.y + 1]) options.Add(new Vector2Int(c.x, c.y + 1));
-            if (options.Count == 0) { active.RemoveAt(index); continue; }
-            Vector2Int n = options[random.Next(options.Count)];
-            if (n.x != c.x) east[Mathf.Min(c.x, n.x), c.y] = true; else north[c.x, Mathf.Min(c.y, n.y)] = true;
-            seen[n.x, n.y] = true;
-            active.Add(n);
+            int row = 2 * (N - 1 - j) + 1;
+            for (int i = 0; i < N; i++)
+            {
+                if (i < N - 1) east[i, j] = Map[row][4 * (i + 1)] == ' ';
+                if (j < N - 1) north[i, j] = Map[row - 1][4 * i + 2] == ' ';
+            }
         }
     }
 
     // The open sides of a cell inside the maze (outer openings are not counted)
-    static List<int> Openings(bool[,] east, bool[,] north, int i, int j)
+    static List<int> OpenSides(bool[,] east, bool[,] north, int i, int j)
     {
         var open = new List<int>();
         if (j > 0 && north[i, j - 1]) open.Add(0);
@@ -333,34 +304,7 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         return open;
     }
 
-    // Dead ends that may hold a cairn: not the entrance, exit or door cells, and not rows 3-4 beside the gantry
-    static List<Vector2Int> Eligible(bool[,] east, bool[,] north)
-    {
-        var list = new List<Vector2Int>();
-        for (int j = 0; j < N; j++)
-            for (int i = 0; i < N; i++)
-            {
-                if (j == 3 || j == 4) continue;
-                if (j == 0 && (i == 1 || i == 3 || i == 5)) continue;
-                if (j == 6 && i == 3) continue;
-                if (Openings(east, north, i, j).Count == 1) list.Add(new Vector2Int(i, j));
-            }
-        return list;
-    }
-
-    static bool QuadrantsCovered(List<Vector2Int> cells)
-    {
-        bool sw = false, se = false, nw = false, ne = false;
-        foreach (Vector2Int c in cells)
-        {
-            if (c.x == N / 2) continue;
-            bool west = c.x < N / 2, low = c.y <= 2;
-            if (west && low) sw = true; else if (!west && low) se = true; else if (west) nw = true; else ne = true;
-        }
-        return sw && se && nw && ne;
-    }
-
-    // Path lengths in cells from one cell to every other (the maze is a tree)
+    // Path lengths in cells from one cell to every other
     static int[,] Distances(bool[,] east, bool[,] north, Vector2Int from)
     {
         var d = new int[N, N];
@@ -371,7 +315,7 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         while (queue.Count > 0)
         {
             Vector2Int c = queue.Dequeue();
-            foreach (int dir in Openings(east, north, c.x, c.y))
+            foreach (int dir in OpenSides(east, north, c.x, c.y))
             {
                 var n = new Vector2Int(c.x + DX[dir], c.y + DZ[dir]);
                 if (d[n.x, n.y] >= 0) continue;
@@ -382,77 +326,85 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         return d;
     }
 
-    // Farthest-point greedy from the eligible dead end farthest from the entrance
-    List<Cairn> PickCairns(bool[,] east, bool[,] north)
+    // The stretch each cell is in: how many gates lie on the way to it from the entrance
+    static int[,] Stretches(bool[,] east, bool[,] north)
     {
-        List<Vector2Int> eligible = Eligible(east, north);
-        int[,] fromEntrance = Distances(east, north, new Vector2Int(N / 2, 0));
-        var chosen = new List<Vector2Int>();
-        Vector2Int first = eligible[0];
-        foreach (Vector2Int c in eligible) if (fromEntrance[c.x, c.y] > fromEntrance[first.x, first.y]) first = c;
-        chosen.Add(first);
-        var dist = new Dictionary<Vector2Int, int[,]>();
-        foreach (Vector2Int c in eligible) dist[c] = Distances(east, north, c);
-        while (chosen.Count < Cairns)
+        var s = new int[N, N];
+        for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) s[i, j] = -1;
+        var queue = new Queue<Vector2Int>();
+        Vector2Int start = Entrance.Inside;
+        s[start.x, start.y] = 0;
+        queue.Enqueue(start);
+        while (queue.Count > 0)
         {
-            Vector2Int best = default;
-            int bestScore = -1;
-            foreach (Vector2Int c in eligible)
+            Vector2Int c = queue.Dequeue();
+            foreach (int dir in OpenSides(east, north, c.x, c.y))
             {
-                if (chosen.Contains(c)) continue;
-                int score = int.MaxValue;
-                foreach (Vector2Int k in chosen) score = Mathf.Min(score, dist[c][k.x, k.y]);
-                if (score > bestScore) { bestScore = score; best = c; }
+                var n = new Vector2Int(c.x + DX[dir], c.y + DZ[dir]);
+                if (s[n.x, n.y] >= 0) continue;
+                int gate = 0;
+                foreach (Opening g in Gates) if (g.Between(c, n)) gate = 1;
+                s[n.x, n.y] = s[c.x, c.y] + gate;
+                queue.Enqueue(n);
             }
-            chosen.Add(best);
         }
-        var cairns = new List<Cairn>();
-        for (int n = 0; n < chosen.Count; n++)
-        {
-            int open = Openings(east, north, chosen[n].x, chosen[n].y)[0];
-            cairns.Add(new Cairn { i = chosen[n].x, j = chosen[n].y, open = open, back = Opposite(open), index = n + 1 });
-        }
-        return cairns;
+        return s;
     }
 
-    void LogMaze(bool[,] east, bool[,] north, int seed, bool tree, List<Cairn> cairns, List<int> posts, out float meanL)
+    // The layout's rules, checked against the map on every build: every gate stands in a passage, plate A, B, C is a
+    // dead end before gate 1, 2, 3 and at least 6 m of walking from each gate it holds, the star lies beyond gate 3,
+    // and each way out leaves the stretch beyond its gate
+    static void CheckLayout(bool[,] east, bool[,] north)
     {
-        string[] dirName = { "S", "N", "W", "E" };
-        string cells = "";
-        foreach (Cairn c in cairns) cells += (cells.Length > 0 ? ", " : "") + c.index + ":(" + c.i + "," + c.j + ") open " + dirName[c.open];
-        int sum = 0, count = 0, max = 0, sumE = 0, maxE = 0;
-        int[,] fromEntrance = Distances(east, north, new Vector2Int(N / 2, 0));
-        for (int a = 0; a < cairns.Count; a++)
+        int[,] stretch = Stretches(east, north);
+        string problem = null, walks = "";
+        for (int g = 0; g < Gates.Length; g++)
         {
-            int[,] d = Distances(east, north, new Vector2Int(cairns[a].i, cairns[a].j));
-            for (int c = a + 1; c < cairns.Count; c++) { int x = d[cairns[c].i, cairns[c].j]; sum += x; count++; max = Mathf.Max(max, x); }
-            int e = fromEntrance[cairns[a].i, cairns[a].j];
-            sumE += e; maxE = Mathf.Max(maxE, e);
+            Opening o = Gates[g];
+            if (!(o.across ? north[o.i, o.k - 1] : east[o.k - 1, o.i])) problem = GateName[g] + " stands in a wall";
+            if (stretch[WaysOut[g].Inside.x, WaysOut[g].Inside.y] != g + 1) problem = "way out " + (g + 1) + " does not leave the stretch beyond " + GateName[g];
+            foreach (int p in HeldBy[g])
+            {
+                int[,] d = Distances(east, north, Plates[p]);
+                float metres = (Mathf.Min(d[o.Low.x, o.Low.y], d[o.High.x, o.High.y]) + 0.5f) * CellSize;
+                if (metres < 6f) problem = PlateName[p] + " is only " + Sdk.F(metres) + " m from " + GateName[g];
+                walks += (walks.Length > 0 ? ", " : "") + PlateName[p] + " to " + GateName[g] + " " + Sdk.F(metres) + " m";
+            }
         }
-        float mean = count > 0 ? (float)sum / count : 0f;
-        meanL = mean * CellSize;
-        string postText = "";
-        foreach (int k in posts) postText += (postText.Length > 0 ? ", " : "") + Sdk.F(Line(k));
-        Debug.Log("[BWM] WhiteoutMaze: seed " + seed + " (" + (tree ? "growing tree" : "depth-first") + "); cairns " + cells);
-        Debug.Log("[BWM] WhiteoutMaze: gantry posts at x " + postText + "; cairn to cairn mean " + Sdk.F(mean) + " cells (L " + Sdk.F(meanL)
-            + " m), max " + max + "; entrance to cairn mean " + Sdk.F(cairns.Count > 0 ? (float)sumE / cairns.Count : 0f) + ", max " + maxE);
+        for (int p = 0; p < Plates.Length; p++)
+            if (stretch[Plates[p].x, Plates[p].y] != p || OpenSides(east, north, Plates[p].x, Plates[p].y).Count != 1)
+                problem = PlateName[p] + " is not in a dead end with " + p + " gate(s) before it";
+        if (stretch[Star.x, Star.y] != Gates.Length || OpenSides(east, north, Star.x, Star.y).Count != 1) problem = "the star is not in a dead end beyond the last gate";
+        if (stretch[WestGateway.Inside.x, WestGateway.Inside.y] != 0) problem = "the west gateway opens beyond a gate";
+        if (problem != null) throw new System.Exception("WhiteoutMaze: " + problem);
+        Debug.Log("[BWM] WhiteoutMaze: gates, plates, star and ways out agree with the map; walks: " + walks);
     }
 
     // ================= walls =================
 
-    // The solid stretches of one wall line (horizontal: z = Line(k), along x; vertical: x = Line(k), along z), with the
-    // turnstiles' and doors' gaps cut out, merged into runs
+    static Opening OpeningAt(bool across, int k, int i)
+    {
+        if (Entrance.across == across && Entrance.k == k && Entrance.i == i) return Entrance;
+        if (WestGateway.across == across && WestGateway.k == k && WestGateway.i == i) return WestGateway;
+        foreach (Opening o in Gates) if (o.across == across && o.k == k && o.i == i) return o;
+        foreach (Opening o in WaysOut) if (o.across == across && o.k == k && o.i == i) return o;
+        return null;
+    }
+
+    // The solid stretches of one wall line (horizontal: z = Line(k), along x; vertical: x = Line(k), along z), merged
+    // into runs. A gate's passage is walled too, but for its door; the gateways and ways out are gaps in the outer wall.
     static List<Vector2> Solids(bool horizontal, int k, bool[,] east, bool[,] north)
     {
         var parts = new List<Vector2>();
         for (int i = 0; i < N; i++)
         {
-            bool present = k == 0 || k == N || (horizontal ? !north[i, k - 1] : !east[k - 1, i]);
+            Opening o = OpeningAt(horizontal, k, i);
+            bool present = k == 0 || k == N || o != null || (horizontal ? !north[i, k - 1] : !east[k - 1, i]);
             if (!present) continue;
-            if (Gap(horizontal, k, i, out float a, out float c))
+            if (o != null)
             {
-                if (a > Line(i) + Eps) parts.Add(new Vector2(Line(i), a));
-                if (c < Line(i + 1) - Eps) parts.Add(new Vector2(c, Line(i + 1)));
+                parts.Add(new Vector2(Line(i), o.U - o.half));
+                parts.Add(new Vector2(o.U + o.half, Line(i + 1)));
             }
             else parts.Add(new Vector2(Line(i), Line(i + 1)));
         }
@@ -463,16 +415,6 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
             else merged.Add(p);
         }
         return merged;
-    }
-
-    // The clear gap in an outer cell edge: the blind turnstile (yaw 0), the exits (yaw 180, so mirrored) and the doors
-    static bool Gap(bool horizontal, int k, int i, out float a, out float c)
-    {
-        a = c = 0f;
-        if (horizontal && k == 0 && i == 3) { a = Mid(3) - GateL; c = Mid(3) + GateR; return true; }
-        if (horizontal && k == 0 && (i == 1 || i == 5)) { a = Mid(i) - GateR; c = Mid(i) + GateL; return true; }
-        if ((horizontal && k == N && i == 3) || (!horizontal && (k == 0 || k == N) && i == 3)) { a = Mid(3) - DoorHalf; c = Mid(3) + DoorHalf; return true; }
-        return false;
     }
 
     static bool Through(List<Vector2> line, float u)
@@ -495,8 +437,8 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
 
     // Snow-block walls: a body 2.0 m high (sunk 0.3) under a peaked 0.35 m ridge, so nobody stands on a wall top. Where
     // walls meet, a wall that another passes straight through stops at its face; at a corner the horizontal wall runs on
-    // and the vertical one stops; a pyramid caps every junction no wall passes straight through. Turnstile and door gaps
-    // end in gables.
+    // and the vertical one stops; a pyramid caps every junction no wall passes straight through. Gateway and door gaps
+    // end in gables. A corridor is 2.15 m wide and a door 1.24, so the walls' stubs close the rest of a gate's passage.
     void BuildWalls(Material snowy, List<Vector2>[] h, List<Vector2>[] v)
     {
         var mb = new MeshBuilder();
@@ -536,19 +478,24 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         }
         foreach (Vector2Int p in caps) Pyramid(mb, new Vector3(Line(p.x), WallBody, Line(p.y)), WallT / 2f, Ridge, SnowBlock);
 
-        // timber frames and lintels (to 2.4 m) round the three doors
-        float mid = Mid(3);
-        foreach (float wx in new[] { Line(0), Line(N) })
+        // timber frames: a gate's jambs stand on as two posts that carry its lights; a way out's lintel is capped with
+        // a ridge, so nobody who jumps back from its steps stands over the doorway
+        foreach (Opening o in Gates) Frame(mb, o, GatePost);
+        foreach (Opening o in WaysOut)
         {
-            Blk(mb, wx - 0.25f, wx + 0.25f, -Sink, 2.4f, mid - DoorHalf - 0.13f, mid - DoorHalf + 0.01f, IsleKit.DarkWood);
-            Blk(mb, wx - 0.25f, wx + 0.25f, -Sink, 2.4f, mid + DoorHalf - 0.01f, mid + DoorHalf + 0.13f, IsleKit.DarkWood);
-            Blk(mb, wx - 0.25f, wx + 0.25f, 2.02f, 2.4f, mid - DoorHalf + 0.01f, mid + DoorHalf - 0.01f, IsleKit.DarkWood);
+            Frame(mb, o, LintelTop);
+            Prism(mb, o.At(o.U - DoorHalf - 0.13f, LintelTop, 0f), o.At(o.U + DoorHalf + 0.13f, LintelTop, 0f), 0.5f, 0.3f, IsleKit.DarkWood);
         }
-        float nz = Line(N);
-        Blk(mb, mid - DoorHalf - 0.13f, mid - DoorHalf + 0.01f, -Sink, 2.4f, nz - 0.25f, nz + 0.25f, IsleKit.DarkWood);
-        Blk(mb, mid + DoorHalf - 0.01f, mid + DoorHalf + 0.13f, -Sink, 2.4f, nz - 0.25f, nz + 0.25f, IsleKit.DarkWood);
-        Blk(mb, mid - DoorHalf + 0.01f, mid + DoorHalf - 0.01f, 2.02f, 2.4f, nz - 0.25f, nz + 0.25f, IsleKit.DarkWood);
         AddMesh("Maze Walls", mb, snowy);
+    }
+
+    // The timber frame of a door-sized opening: two jambs 'postTop' high and a lintel from the door's top to 2.4 m,
+    // all a little thicker than the wall
+    static void Frame(MeshBuilder mb, Opening o, float postTop)
+    {
+        foreach (float side in new[] { -1f, 1f })
+            Slab(mb, o, o.U + side * (DoorHalf - 0.01f), o.U + side * (DoorHalf + 0.13f), -Sink, postTop, -0.25f, 0.25f, IsleKit.DarkWood);
+        Slab(mb, o, o.U - DoorHalf + 0.01f, o.U + DoorHalf - 0.01f, DoorTop, LintelTop, -0.25f, 0.25f, IsleKit.DarkWood);
     }
 
     // Gantry posts on the z = 1.3 wall line (lattice row 4), only where a maze wall meets: the outer walls, and the
@@ -573,44 +520,45 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         return posts;
     }
 
-    // ================= turnstile dressing =================
+    // ================= gateways and ways out =================
 
-    void BuildGates(Material snowy)
+    // The entrance's timber arch, half a metre out from the wall, and the west gateway's lower posts and lintel. Plain
+    // timber: red, green and gold belong to the plates and their gates.
+    void BuildGateways(Material snowy)
     {
         var mb = new MeshBuilder();
-        float zo = Line(0) - 0.5f;
-        // the entrance's red arch
-        foreach (float x in new[] { Mid(3) - GateL - 0.34f, Mid(3) + GateR + 0.34f })
-            Blk(mb, x - 0.11f, x + 0.11f, -Sink, 2.8f, zo - 0.11f, zo + 0.11f, IsleKit.Red);
-        Blk(mb, Mid(3) - GateL - 0.45f, Mid(3) + GateR + 0.45f, 2.8f, 3.04f, zo - 0.15f, zo + 0.15f, IsleKit.Red);
-        // green posts and lintels at the two exits (yaw 180: the gate runs -1.01 .. +1.11)
-        foreach (int i in new[] { 1, 5 })
+        foreach (float side in new[] { -1f, 1f })
         {
-            float g = Mid(i);
-            foreach (float x in new[] { g - GateR - 0.34f, g + GateL + 0.34f })
-                Blk(mb, x - 0.09f, x + 0.09f, -Sink, 2.4f, zo - 0.09f, zo + 0.09f, IsleKit.Green);
-            Blk(mb, g - GateR - 0.43f, g + GateL + 0.43f, 2.4f, 2.58f, zo - 0.1f, zo + 0.1f, IsleKit.Green);
+            Slab(mb, Entrance, Entrance.U + side * (GatewayHalf + 0.23f), Entrance.U + side * (GatewayHalf + 0.45f), -Sink, 2.8f, 0.39f, 0.61f, IsleKit.DarkWood);
+            Slab(mb, WestGateway, WestGateway.U + side * (GatewayHalf + 0.25f), WestGateway.U + side * (GatewayHalf + 0.43f), -Sink, 2.4f, 0.41f, 0.59f, IsleKit.DarkWood);
         }
-        AddMesh("Maze Gates", mb, snowy);
+        Slab(mb, Entrance, Entrance.U - GatewayHalf - 0.45f, Entrance.U + GatewayHalf + 0.45f, 2.8f, 3.04f, 0.35f, 0.65f, IsleKit.Wood);
+        Slab(mb, WestGateway, WestGateway.U - GatewayHalf - 0.43f, WestGateway.U + GatewayHalf + 0.43f, 2.4f, 2.58f, 0.4f, 0.6f, IsleKit.Wood);
+        AddMesh("Gateways", mb, snowy);
     }
 
-    // ================= hooks =================
-
-    // A free-standing 0.18 m post, 1.9 m high, centred at (x, z)
-    static void HookPost(MeshBuilder mb, float x, float z) => Blk(mb, x - 0.09f, x + 0.09f, -Sink, 1.9f, z - 0.09f, z + 0.09f, IsleKit.Wood);
-
-    // A hook on a face at (fx, fz) looking 'yaw', 'baseH' above the ground, accepting 'mask' (PuzzleHookAccepts); with
-    // itemType >= 0 a Vanilla Item of that type hangs on it (savesOnReload off). Returns the hook and the item, if any.
-    Piece[] Hang(string itemName, string hookName, float fx, float fz, float yaw, float baseH, int mask, int itemType)
+    // Outside each way out's doorway, timber steps climb between two tall snow cheeks to a platform DropH up with an
+    // open end: step off it and you are outside the maze, and no jump gets back up. The cheeks (3 m and a ridge) keep
+    // anyone on the steps from jumping anywhere but out, or back into the cell they came from.
+    void BuildWaysOut(Material snowy)
     {
-        Vector2 f = IsleKit.Turn(0f, 1f, yaw);
-        Piece hook = P("Hook", fx + f.x * 0.03f, fz + f.y * 0.03f, baseH + HookUp, yaw).Named(hookName);
-        Sdk.SetFlags(hook.Component("PuzzleHook"), "acceptedVanilla", mask);
-        if (itemType < 0) return new[] { hook };
-        Piece item = P("Vanilla Item", fx + f.x * 0.31f, fz + f.y * 0.31f, baseH + ItemUp, yaw).Named(itemName)
-            .Set("PuzzleVanillaItem", "itemType", itemType).Set("PuzzleVanillaItem", "savesOnReload", false);
-        hook.Set("PuzzleHook", "defaultItem", item.Component("PuzzleVanillaItem"));
-        return new[] { hook, item };
+        var mb = new MeshBuilder();
+        const int Risers = 6;
+        const float Run = 0.3f, Platform = 1.2f, Half = 0.7f, Cheek = 0.26f, CheekTop = 3.0f, Foot = 0.25f;
+        float rise = DropH / Risers, top = Foot + (Risers - 1) * Run, end = top + Platform;
+        foreach (Opening o in WaysOut)
+        {
+            for (int k = 1; k < Risers; k++)
+                Slab(mb, o, o.U - Half, o.U + Half, -Sink, k * rise, Foot + (k - 1) * Run, Foot + k * Run, IsleKit.Wood);
+            Slab(mb, o, o.U - Half, o.U + Half, -Sink, DropH, top, end, IsleKit.Wood);
+            foreach (float side in new[] { -1f, 1f })
+            {
+                float inner = o.U + side * (Half - 0.01f), outer = inner + side * Cheek;
+                Slab(mb, o, inner, outer, -Sink, CheekTop, 0.15f, end + 0.05f, SnowBlock);
+                Prism(mb, o.At((inner + outer) / 2f, CheekTop, 0.15f), o.At((inner + outer) / 2f, CheekTop, end + 0.05f), Cheek, 0.25f, SnowBlock);
+            }
+        }
+        AddMesh("Ways Out", mb, snowy);
     }
 
     // ================= the gantry =================
@@ -717,70 +665,28 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
         AddMesh("Stair Tower", mb, snowy);
     }
 
-    // ================= the signal hut and the board closet =================
-
-    // The hut: 5.0 x 3.6 x 3.0 m, centre (0, 24), open to the north, its back wall (z 22.1..22.3) towards the maze with
-    // the closet's mouth in it, exactly the Door's 1.24 x 2.02, trimmed on the hut side by a lintel (1.98..2.12) and jambs
-    // that overlap the door by 4 cm. The closet: 2.4 x 1.9 x 2.8 m south of the back wall, roofed and sealed, the lamp
-    // board on its south wall facing north, a clear pane (PuzzleGlass) in a partition 0.25 m behind the shutter.
-    void BuildHut(Material snowy, Material bare)
-    {
-        var mb = new MeshBuilder();
-        const float H = 3.0f, B0 = 22.1f, B1 = 22.3f, Front = 25.8f;
-        Blk(mb, -2.5f, -DoorHalf, -Sink, H, B0, B1, IsleKit.Wood);                 // back wall, round the mouth
-        Blk(mb, DoorHalf, 2.5f, -Sink, H, B0, B1, IsleKit.Wood);
-        Blk(mb, -DoorHalf, DoorHalf, 2.02f, H, B0, B1, IsleKit.Wood);
-        Blk(mb, -0.72f, 0.72f, 1.98f, 2.12f, B1, B1 + 0.08f, IsleKit.DarkWood);    // lintel and jambs on the hut side
-        Blk(mb, -0.72f, -0.58f, -Sink, 2.12f, B1, B1 + 0.08f, IsleKit.DarkWood);
-        Blk(mb, 0.58f, 0.72f, -Sink, 2.12f, B1, B1 + 0.08f, IsleKit.DarkWood);
-        Blk(mb, -2.5f, -2.38f, -Sink, H, B1, Front, IsleKit.Wood);                // side walls
-        Blk(mb, 2.38f, 2.5f, -Sink, H, B1, Front, IsleKit.Wood);
-        Blk(mb, -2.9f, 2.9f, H, H + 0.15f, B0 - 0.3f, Front + 0.4f, IsleKit.DarkWood);      // roof, 0.4 m overhang
-        // the closet: x -1.2..1.2, z 20.2..22.1, walls 0.1, roof at 2.8
-        Blk(mb, -1.2f, -1.1f, -Sink, 2.8f, 20.3f, B0, IsleKit.DarkWood);      // (from the south wall's inner face: no coplanar corners)
-        Blk(mb, 1.1f, 1.2f, -Sink, 2.8f, 20.3f, B0, IsleKit.DarkWood);
-        Blk(mb, -1.2f, 1.2f, -Sink, 2.8f, 20.2f, 20.3f, IsleKit.DarkWood);
-        Blk(mb, -1.25f, 1.25f, 2.8f, 2.92f, 20.15f, B0, IsleKit.DarkWood);
-        // the partition the pane fills (the pane overlaps its edges by a centimetre)
-        Blk(mb, -1.1f, -0.64f, -Sink, 2.8f, 21.85f, 21.95f, IsleKit.DarkWood);
-        Blk(mb, 0.64f, 1.1f, -Sink, 2.8f, 21.85f, 21.95f, IsleKit.DarkWood);
-        Blk(mb, -0.64f, 0.64f, 2.06f, 2.8f, 21.85f, 21.95f, IsleKit.DarkWood);
-        AddMesh("Signal Hut", mb, snowy);
-
-        // inside, where no snow settles: the floors, the lamp board (2 x 2 m, bottom 0.5, face z 20.35) and a snowflake
-        var inside = new MeshBuilder();
-        Blk(inside, -2.38f, 2.38f, -Sink, 0.03f, B1, Front, IsleKit.DarkWood);
-        Blk(inside, -1.1f, 1.1f, -Sink, 0.02f, 20.3f, B0, IsleKit.DarkWood);
-        Blk(inside, -1.0f, 1.0f, 0.5f, 2.5f, 20.3f, 20.35f, IsleKit.Board);
-        for (int a = 0; a < 3; a++)
-        {
-            float ang = a * Mathf.PI / 3f;
-            var d = new Vector3(Mathf.Cos(ang), Mathf.Sin(ang), 0f) * 0.13f;
-            var w = new Vector3(-Mathf.Sin(ang), Mathf.Cos(ang), 0f) * 0.015f;
-            var centre = new Vector3(0f, 2.64f, 20.31f);
-            inside.Quad(centre - d - w, centre + d - w, centre + d + w, centre - d + w, Color.white);
-            inside.Quad(centre - d + w, centre + d + w, centre + d - w, centre - d - w, Color.white);
-        }
-        AddMesh("Hut Inside", inside, bare);
-
-        // the pane: a thin box made here (the Glass prefab is a flat plane that Part lays down), clear, muffling
-        var pane = new MeshBuilder();
-        Kit.AddBox(pane, new Vector3(0f, 0f, 21.9f), new Vector3(1.30f, 2.06f, 0.03f), Color.white);
-        Piece glass = AddMesh("Closet Pane", pane, bare, true);
-        Component glassC = b.AddScript(glass, "PuzzleGlass");
-        Sdk.Set(glassC, "style", 2);      // Clear
-        Sdk.Set(glassC, "sound", 0);      // Muffles
-        Sdk.Set(glassC, "wire", false);
-
-        // a low warm light in the closet so the board reads (Winter Walk's RoomLights: colour, range, intensity)
-        E("Room Light 1 FFE2B8 3.0 0.9", 0f, 21.0f, 2.4f);
-    }
-
     // ================= mesh helpers =================
 
     // An axis-aligned block x0..x1, y0..y1, z0..z1
     static void Blk(MeshBuilder mb, float x0, float x1, float y0, float y1, float z0, float z1, Color c)
         => Kit.AddBox(mb, new Vector3((x0 + x1) / 2f, y0, (z0 + z1) / 2f), new Vector3(x1 - x0, y1 - y0, z1 - z0), c);
+
+    // A block at an opening: from u0 to u1 along its wall line and from w0 to w1 out from the line (Opening.At)
+    static void Slab(MeshBuilder mb, Opening o, float u0, float u1, float y0, float y1, float w0, float w1, Color c)
+    {
+        Vector3 a = o.At(u0, y0, w0), d = o.At(u1, y1, w1);
+        Blk(mb, Mathf.Min(a.x, d.x), Mathf.Max(a.x, d.x), y0, y1, Mathf.Min(a.z, d.z), Mathf.Max(a.z, d.z), c);
+    }
+
+    // A plate's mark: a low kerb of its colour round the square the sensor fills
+    static void Kerb(MeshBuilder mb, float cx, float cz, Color c)
+    {
+        const float Outer = PlateSize / 2f, Inner = Outer - 0.12f, Top = 0.09f;
+        Blk(mb, cx - Outer, cx + Outer, -Sink, Top, cz - Outer, cz - Inner, c);
+        Blk(mb, cx - Outer, cx + Outer, -Sink, Top, cz + Inner, cz + Outer, c);
+        Blk(mb, cx - Outer, cx - Inner, -Sink, Top, cz - Inner, cz + Inner, c);
+        Blk(mb, cx + Inner, cx + Outer, -Sink, Top, cz - Inner, cz + Inner, c);
+    }
 
     // A ridge: a triangular prism from 'from' to 'to' (its base line, level), 'width' across and 'height' to its peak,
     // with both ends closed; wound as Kit.AddBox so it shows from outside
@@ -807,5 +713,23 @@ public sealed class WhiteoutMazePuzzle : PuzzleDef
             foot + new Vector3(half, 0f, half), foot + new Vector3(-half, 0f, half),
         };
         for (int i = 0; i < 4; i++) mb.Tri(corner[i], apex, corner[(i + 1) % 4], c);
+    }
+
+    // A five-pointed star standing upright (as Kit.AddStar), turned by 'yaw' about the vertical
+    static void AddStar(MeshBuilder mb, Vector3 centre, float radius, float thickness, float yaw, Color color)
+    {
+        Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+        var rim = new Vector3[10];
+        for (int i = 0; i < 10; i++)
+        {
+            float a = Mathf.PI * 0.5f + 2f * Mathf.PI * i / 10f, r = i % 2 == 0 ? radius : radius * 0.42f;
+            rim[i] = centre + turn * new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0f);
+        }
+        Vector3 front = centre + turn * Vector3.back * thickness, back = centre + turn * Vector3.forward * thickness;
+        for (int i = 0; i < 10; i++)
+        {
+            mb.Tri(front, rim[i], rim[(i + 1) % 10], color);
+            mb.Tri(back, rim[(i + 1) % 10], rim[i], color * 0.85f);
+        }
     }
 }

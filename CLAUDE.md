@@ -76,8 +76,9 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   needed three players with fixed jobs). So by default players work together in the open, in sight and earshot of each
   other, with no clock and little to lose on a miss; sealed rooms, one-way lines and timers are the exception. Five
   relays stay as they were (Glass Booth, Radio Silence, Snow Globe, Lookouts, Midnight Finale), about ten puzzles are
-  for one or two players (skill, counting, logic), the rest are for three or four together. The plan for each puzzle,
-  and which are built (`done`), is `plan` in `docs\puzzle-variety\puzzles.json`; `python docs\puzzle-variety\build.py`
+  for one or two players (skill, counting, logic), the rest are for three or four together. All 24 others were
+  reworked on 2026-11-24 (which five stay, and each design, are Claude's choices for the user to review). The plan for
+  each puzzle, and what it is now (`now`), is in `docs\puzzle-variety\puzzles.json`; `python docs\puzzle-variety\build.py`
   writes the review page (`shots\puzzle-variety\puzzle-variety.html`), which is published as the artifact "Winter Isle
   Puzzle Variety". The base game's own puzzles for any number of players are the model: `LandmarksPlayerCountAny` in
   `world\world-index.tsv` (BasketballChallenge, EggHunt, PerspectiveCounting, MemoryBombs, CannonBallCarry, Fielding,
@@ -87,7 +88,10 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   - **`Tally`**: targets that each count once, in any order (a basket hit, a window flown through). Wire each target's
     event to `Hit(k)` (k from 1, as the event's int argument) and the root's `onPuzzleStop` to `Clear()`; the lamp named
     `<lampPrefix>k` lights, every bar named `<barPrefix>...` goes up, all marked wins. `SnowballRangePuzzle.cs`,
-    `BigAirPuzzle.cs`.
+    `BigAirPuzzle.cs`, `SummitShotPuzzle.cs`. For things that lie in a place (Snowman's balls in a plot's bowl) wire
+    the sensor's `onReleased` to `Unhit(k)` too, and `onPuzzleStart` to `Begin()`, so what already lies there when
+    the puzzle starts counts (a sensor does not fire again for a thing that never left). Never `Begin()` where
+    targets only have `Hit`.
   - **`Seek`**: one spot of a set is lit; stand on it for `dwell` seconds and it counts and another lights; `rounds`
     found win. Spots are the Presence Sensors named `<sensorPrefix><tag>`, each with the lamp `<lampPrefix><tag>`. Wire
     `onPuzzleStart` to `Begin()` and `onPuzzleStop` to `End()`. It exists because the SDK's Press In Order cannot do
@@ -96,7 +100,64 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
   - **`ItemReturn`**: lays an item that has come to rest in a catching box back at a home spot (Snowball Range's
     baskets). **The game pins a prop that stops moving**, so no sloped floor empties a basket: on 15 and on 48 degrees
     the snowballs stayed where they landed. It reads the item's place and moves it through the SDK mod's own
-    `PuzzleItem` (`prop`, `SendTo`) by reflection; an SDK update can rename them, and the log then says so.
+    `PuzzleItem` (`prop`, `SendTo`) by reflection; an SDK update can rename them, and the log then says so. Also
+    what brings back a thing thrown where nobody can fetch it: Summit Shot's gallery, the top of Snowman's wall,
+    Sleigh Run's roofs, Snow Bridge's far bank.
+  - **`LightsOut`**: a ring of lamps `<lampPrefix>k`; a button's `onPressed` to `Press(k)` flips lamp k and both its
+    neighbours; all lit wins. `count` must not be a multiple of 3 (then some deals cannot be solved). `Begin()` on
+    start deals, `End()` on stop. `FairyLightsPuzzle.cs`.
+  - **`Echo`**: a memory game. The lamps `<lampPrefix>k` play a sequence, the players step on the sensors
+    `<sensorPrefix>k` in the same order; a round done adds one (`first` to `last`), a wrong step plays the round
+    again. `pairSpot` is a spot that needs `pairNeed` players at once. `BellRingersPuzzle.cs`.
+  - **`Guess`**: a deduction on a Peg Board. The script holds a hidden answer (one picture a slot); when every slot
+    holds a tile, the first n lamps `<lampPrefix>k` show how many are right, never which; all right wins. The SDK's
+    checks fail a Peg Board with no Answer From, so the board has one-flap Displays buried under the pad as its
+    answers, which the script ignores. `StockingSortPuzzle.cs`.
+  - **`Differ`**: two Displays (`listA`, `listB`) are dealt the same pictures but for `differ` places; a button a
+    place (`Press(k)`) marks it (lamp `<markPrefix>k`), and the named Validator is right when the marks are the
+    places that differ. No Peg Tiles: the SDK's log then warns "0 tile(s) for 10 display flap(s)", which is expected.
+    `SantasListPuzzle.cs`.
+  - **`CountDeal`**: lights `least` to `most` of the lamps whose names start with `lampPrefix` and sets that number
+    on a Count Validator. Its `onIncorrect` goes to `Redeal()`, which deals again 3 s later: the Count Validator
+    counts up to the right number as it checks, and a new answer blanks its screen at once, so a deal in the same
+    frame hid the cross. `ReindeerCountPuzzle.cs`.
+  - **`HeldOpen`**: a Door (mode Control With Functions Only) that stands open while a player is on any of its
+    plates (`plates`: sensor names separated by `;`). The SDK's events cannot do "this plate or that".
+    `WhiteoutMazePuzzle.cs`.
+- **Reworking a puzzle with a helper:** a sub-agent edits a copy in `Z:\Temp\claude\BigWalkMods\rework\` (its rules:
+  `README.md` there), never the repo, and compiles it alone with csc; Claude copies it in, builds and tests. Read its
+  header before trusting the design: Bell Ringers came back as two rooms with a wall between (the wall came out),
+  Sleigh Run with plain doorways a present could be walked out of (turnstiles went in).
+- **What the SDK's parts turned out to be** (found in the game, 2026-11-24):
+  - **Lamps:** a pendant (Light 2) shows only its shade from across a site, lit or not: for a lamp whose state must
+    be read, use the disc (Light 6) on a dark board, facing the players. The small round Light 8 reads only from a
+    few metres (a lit one has a white ring).
+  - **A five-flap Display's pivot is its flap 1**, a reader's far left; the frame runs 1.4 m to the reader's right
+    (0.35 m a flap). A one-flap frame is 0.42 m wide.
+  - **A Sign's text does not show in the game** (its TextMeshPro has no material there): paint pips, arrows and
+    pictures into a mesh instead (Advent Trail's fingerpost, Santa's List's die-pip plaques).
+  - **A Peg Tile's picture is drawn in grey**, our own sheets too: tell tiles apart by shape, pattern and light or
+    dark, never by hue (Stocking Sort's red and green papers look the same).
+  - **A Validator thinks for 5 s** before its tick or cross; its `TurnOn()` cancels a check that is running.
+  - **Presence Sensors fire whether the puzzle is running or not, and `PuzzleSDK.Win()` does not ask.** Snow Bridge,
+    Sleigh Run and Whiteout Maze are won by what the players do, switch or no switch; their Start Switch only
+    lights lamps.
+  - **Gate No items** (the turnstile: players pass, things do not) is 2.12 m wide, 2.3 m high and 1.41 m deep, its
+    pivot 5 cm off its middle: a doorway for it is 2.16 x 2.32 m.
+  - **Snow things players carry** (snowballs, snow blocks) are drawn by the ground's own shader, `BWM/Snow`, which
+    reads a vertex's colour as the state of the ground: a mesh with no colours is white, which it takes for bare,
+    sandy ground with rock on every steep face (the snowballs were dark boulders with white caps). Wrap the mesh in
+    `Kit.AsLooseSnow(...)`, or build it in `Kit.LooseSnow`, the colour of fresh snow lying in a hollow.
+- **Downhill counts skiers in pairs** (`Pack` and `CatchPack` in `DownhillPuzzle.cs`), so the one test player lights
+  nothing: build it once with both at 1 to go down the course by teleport (`find?name=Lane 3 ` lists a row's lanes; a
+  screenshot from 40 m up the run shows which gate's lamp is lit), then set both back to 2 and build again. Its start
+  pad is 17 m off run 1's edge, and gear comes off 6 s after its wearer leaves a piste (`SkiDriver`), so the island
+  stands a pair of racks on the run's edge by the pad (rack 6); the lift-top pair is 67 m away.
+- **The companion's `use?name=` takes the first object of that name in the whole world**, and several puzzles have a
+  "Check Button": stand in front of the one meant (`teleport?...&yaw=`, `press?action=stickLookY&value=1&ms=400` to
+  look up), ask `use` what the reach sees, then `press?action=use`.
+- **Advent Trail's post boxes look for free ground** on the stations' flats from `WinterIsle.dressing`, as Island
+  Gear's firework posts do: build `WinterIsle` first, then `IslandGear` and `AdventTrail`.
 - **A lamp's `color` tints its lens whether it is lit or not.** Slalom's gate lamps in a strong green looked the same
   on and off in daylight (only the glow on the snow told them apart). Keep a lamp whose state must be read near white
   (1, 0.92, 0.75): off it is a dull olive disc, lit a bright white one, readable at 50 m by day. Say whose lamp it is
@@ -620,9 +681,11 @@ review viewpoints (`tools\review\review-viewpoints.txt`, twelve on each island) 
 ## Testing
 
 `tools\review\puzzle-capture.ps1 [-Names A,B]` captures every island puzzle from the running game into
-`shots\puzzles\`: an aerial and four eye-level views, a view while running, and its start/stop/win results with the
+`shots\puzzles\` (the review page's thumbnails are its `-s.png` views at 420 x 199): an aerial and four eye-level views, a view while running, and its start/stop/win results with the
 game's log lines from that time. The redesign specs of 2026-11-22 (each puzzle's roles, wiring, anti-cheese table)
-are in `Z:\Temp\claude\BigWalkMods\puzzle-specs\<Name>.md` with `<Name>.impl.md` beside them.
+are in `Z:\Temp\claude\BigWalkMods\puzzle-specs\<Name>.md` with `<Name>.impl.md` beside them; since the rework of
+2026-11-24 they are right only for the five relays that stayed, and each other puzzle's spec is the comment at the
+head of its `PuzzleDef`.
 
 1. `bwm.ps1 build <Puzzle>` and Read `previews\<Puzzle>-*.png`.
 2. `bwm.ps1 play` (once), then after each rebuild `bwm.ps1 game reload`.
