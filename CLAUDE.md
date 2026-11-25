@@ -22,7 +22,7 @@ All through `tools\bwm.ps1` (Windows PowerShell):
 | `log` | The puzzle-related lines of the last game run. |
 | `logs [n] [-Full]` | Winter Walk's debug log of the latest session (n = 2 the one before): the header, what became of the session before, warnings, snapshots, marks, slow frames, the last heartbeat. |
 | `release [<version>] [-Notes <file>]` | That zip (default the newest) as a release on the GitHub repo, tagged `v<version>` at its commit: the user's own versioning. They copy it to Google Drive themselves. |
-| `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 0.9 GB) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
+| `package [<version>]` | The players' download: `Z:\Temp\claude\BigWalkMods\dist\BigChristmasWalk-<date>-<commit>.zip` (about 340 MB since the scatter left the island's pack) with `Install.cmd` / `Uninstall.cmd` and the players' `README.txt` (sources in `tools\install\`). Build the packs and plugins first. |
 | `survey` | Renders `world\heightmap.png` (whole island) and `world\heightmap-zoom.png` (the coast by the opening area). Both include the Winter Isle. |
 | (trailer) | `tools\trailer\plan.py` plans a fly-over (`frames.csv`), `capture.py --hide GameOverlay` shoots it from the running game into `shots\trailer\` (resumable), `encode.ps1` makes the MP4s in `Z:\Temp\claude\BigWalkMods\trailer\` (`-Music <wav> -MusicStart 2.4` lays the game's menu theme under it; `menu_theme.py` extracts that from the game). `GameOverlay` is the HUD (the arms reticle) and the sleep fade. |
 | `dump-world` / `part-metrics` | Rewrite `world\world-index.tsv` (every world object) / `world\part-metrics.tsv` (each SDK part's size about its pivot). |
@@ -143,7 +143,8 @@ walls, soundproofing, wall-mounted parts, wiring); `TutorialPuzzle.cs` is the mi
     Sleigh Run and Whiteout Maze are won by what the players do, switch or no switch; their Start Switch only
     lights lamps.
   - **Gate No items** (the turnstile: players pass, things do not) is 2.12 m wide, 2.3 m high and 1.41 m deep, its
-    pivot 5 cm off its middle: a doorway for it is 2.16 x 2.32 m.
+    pivot 5 cm off its middle: a doorway for it is 2.16 x 2.32 m. A player who enters it drops what they hold where
+    they stood (tried at Sleigh Run: a present picked up with `press?action=use`, then `use?name=Workshop Gate`).
   - **Snow things players carry** (snowballs, snow blocks) are drawn by the ground's own shader, `BWM/Snow`, which
     reads a vertex's colour as the state of the ground: a mesh with no colours is white, which it takes for bare,
     sandy ground with rock on every steep face (the snowballs were dark boulders with white caps). Wrap the mesh in
@@ -744,7 +745,7 @@ the user and friends, who must all have the same packs and SDK version.
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
   Winter Walk also patches `GameRefs.Light.ExactPath` (`SdkSpeedups.cs`, Circle lamps' place) with Harmony.
 - **Game folder:** `Z:\SteamLibrary\steamapps\common\Big Walk` (moved from G:'s Steam library on 2026-11-23: G: is a
-  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.24-1688d1e, updated in place by each release's own Install.cmd) is in it, so a plain
+  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.24-85c3dd1, updated in place by each release's own Install.cmd) is in it, so a plain
   Steam start runs that; `play`/`launch` still load the dev profile. Tools find the folder through Steam's library list
   (`Find-Game` in `tools\install\Install-Common.ps1`); `World.GameData` (the Unity side) names it.
 - **Disk:** C: is nearly full. Unity, its caches, this repo and the game are on Z:; keep it that way.
