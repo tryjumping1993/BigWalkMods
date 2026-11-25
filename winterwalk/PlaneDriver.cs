@@ -46,9 +46,9 @@ namespace WinterWalk
         bool found;
         Transform propeller;
         float nextLook, nextPlinthCheck, yaw, pitch, bank, slowFor, leftAt = -10f;
-        bool wasJump, towerComplete;
+        bool wasJump, towerComplete, awayFirst;
         readonly List<BigPuzzleSDK.PuzzleGourdPlinth> plinths = new List<BigPuzzleSDK.PuzzleGourdPlinth>();
-        int jumpAction = -2, forwardAction = -2;
+        static int jumpAction = -2, forwardAction = -2;
         float nextAlive;
 
         void Find()
@@ -75,7 +75,7 @@ namespace WinterWalk
             found = parked.Count > 0;
         }
 
-        void FindActions()
+        static void FindActions()
         {
             jumpAction = -1; forwardAction = -1;
             try
@@ -94,7 +94,7 @@ namespace WinterWalk
             Plugin.L.LogInfo("Winter Walk: planes read jump from " + (jumpAction >= 0 ? "Rewired action " + jumpAction : "the space bar") + ", the throttle from " + (forwardAction >= 0 ? "Rewired action " + forwardAction : "W and S"));
         }
 
-        bool Jump()
+        static bool Jump()
         {
             try
             {
@@ -104,9 +104,12 @@ namespace WinterWalk
             try { return Input.GetKey(KeyCode.Space); } catch (Exception) { return false; }
         }
 
-        float Forward()
+        float Forward() => TestThrottle != 0f ? TestThrottle : Stick();
+
+        // the move stick, forward 1 to back -1 (the skis' poling reads it too)
+        internal static float Stick()
         {
-            if (TestThrottle != 0f) return TestThrottle;
+            if (jumpAction == -2) FindActions();
             try
             {
                 if (forwardAction >= 0) { Rewired.Player p = Rewired.ReInput.players.GetPlayer(0); if (p != null) return p.GetAxis(forwardAction); }
@@ -169,9 +172,16 @@ namespace WinterWalk
             Plugin.L.LogInfo("Winter Walk: boarded a biplane at " + plane.transform.position);
         }
 
-        void Leave(Transform player, string why)
+        void Leave(Transform player, string why, bool lost = false)
         {
             Flying = false;
+            if (lost && flown != null)
+            {
+                // a plane lost at sea is back on its stand (the one it was taken from, if that is a stand's)
+                try { Destroy(flown); } catch (Exception) { }
+                if (flownFrom != null) { flownFrom.SetActive(true); parked.Add(flownFrom); }
+                flown = null;
+            }
             if (flown != null)
             {
                 // the plane stays where it stopped, level, for anyone to take again
@@ -183,6 +193,8 @@ namespace WinterWalk
             flown = null; flownFrom = null; propeller = null;
             Speed = 0f;
             leftAt = Time.unscaledTime;
+            awayFirst = true;      // not boarded again until the player has walked away from it once
+            Driven.Give("plane");
             // out beside the cockpit, on the left
             Vector3 side = Quaternion.Euler(0f, yaw, 0f) * Vector3.left;
             Diag.Touched("plane");
@@ -228,22 +240,37 @@ namespace WinterWalk
                     // (A plane anyone comes upon can be flown, whatever the towers hold: the gourds only open the hangar's
                     // doors, which is what keeps the planes behind them out of reach. The user, 2026-11-24.)
                     // board the plane whose cockpit the player walks up to (not straight after climbing out of it)
-                    GameObject nearest = null; float best = TestBoard ? 60f : BoardReach;
+                    // (Climbing out sets the player down 2.2 m from the cockpit, inside the reach: with only a wait of 4 s
+                    // a player who stood there was taken aboard again. Now they must walk away from every plane first.)
+                    Driven.Give("plane");
+                    GameObject nearest = null; float best = TestBoard ? 60f : BoardReach, any = float.MaxValue;
                     foreach (GameObject plane in parked)
                     {
                         if (plane == null) continue;
                         float d = (plane.transform.position + Vector3.up * 1.2f - t.position).magnitude;
+                        if (d < any) any = d;
                         if (d < best) { best = d; nearest = plane; }
                     }
-                    if (nearest != null && (TestBoard || Time.unscaledTime - leftAt > 4f)) { TestBoard = false; Board(t, nearest); }
+                    if (awayFirst && any > BoardReach + 1.5f) awayFirst = false;
+                    if (nearest != null && (TestBoard || (!awayFirst && Time.unscaledTime - leftAt > 4f))) { TestBoard = false; Board(t, nearest); }
                     else State = "open: " + parked.Count + " planes parked";
                     return;
                 }
-                if (flown == null) { Flying = false; return; }
+                if (flown == null) { Flying = false; Driven.Give("plane"); return; }
+                // the pilot sits, and the game's mover is held off: it sets a standing player's speed itself every step,
+                // so a pilot on their feet stayed on the ground while the plane's speed rose, and was put out as having
+                // "struck something" the moment they left it (see Driven.cs). Every step: a press of jump stands a
+                // sitting player up again.
+                Driven.Take(pc, "plane", true);
 
                 float dt = Time.fixedDeltaTime;
                 float gap = Gap(t.position, t) - SeatHeight;      // the wheels' height above what is under them
                 bool onGround = gap < 0.35f;
+                // Into the sea: nothing is under the water out there, so a plane flown into it sank for ever with its
+                // pilot (the test flight of 2026-11-25 was 170 m under the sea and still "flying"). The pilot is left
+                // to swim and the plane is back on its stand. (Wheels under the water's level: near the island the sea has
+                // the swimmers' floor, on which a ditched plane rolled on at 34 m/s for as long as the throttle was held.)
+                if (t.position.y - SeatHeight < -0.3f) { body.linearVelocity = Vector3.zero; Leave(t, "came down in the sea", true); return; }
                 float throttle = Forward();
                 // steering: towards where the camera looks
                 Camera cam = Camera.main;
@@ -290,6 +317,7 @@ namespace WinterWalk
             }
             catch (Exception e)
             {
+                Driven.Give("plane");
                 if (State.StartsWith("stopped")) return;
                 State = "stopped: " + e.GetType().Name + ": " + e.Message;
                 Plugin.L.LogWarning("Winter Walk: planes stopped: " + e.GetType().Name + ": " + e.Message);

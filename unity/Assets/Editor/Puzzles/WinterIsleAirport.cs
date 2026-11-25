@@ -224,11 +224,11 @@ public static class WinterIsleAirport
             stands++;
         }
         for (int k = -1; k <= 1; k++) Stand(Pt(HU + k * 13.5f, HV - 3f, 0f), yawAcross);      // in the hangar, noses to the doors
-        Stand(Pt(28f, -38f, 0f), yawAlong);                                                 // on the apron, ready to roll
-        // two more on the apron, in the open (the user, 2026-11-24: "there should be several planes available";
-        // with the hangar shut only one could be seen), a wingspan and more apart and clear of the tower at u 58
-        Stand(Pt(44f, -38f, 0f), yawAlong);
-        Stand(Pt(28f, -56f, 0f), yawAlong);
+        // Three on the apron, in the open (the user, 2026-11-24: "there should be several planes available"; with the
+        // hangar shut only one could be seen), in a row along the apron with their noses to the runway and nothing in
+        // front of any. Until 2026-11-25 they faced along the runway, one 16 m straight ahead of another and the
+        // tower 30 m ahead of both rows: a plane rolled straight on ran into the next and its pilot stuck on its wing.
+        for (int k = 0; k < 3; k++) Stand(Pt(16f + k * 14f, -36f, 0f), yawAcross);
 
         // ---- the summit's airstrip: a deck on stilts, level with the crest where it starts ----
         {

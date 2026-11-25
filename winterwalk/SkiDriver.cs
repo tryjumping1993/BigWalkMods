@@ -23,6 +23,8 @@ namespace WinterWalk
         public static float Speed;              // metres a second, for reading
         public static float OffPisteSeconds = 20f;      // gear comes off this long after leaving a piste (or a rack)
         public static bool Straight;           // for testing without a hand on the camera: steer straight down the fall line
+        public static float PoleSpeed = 4f, PoleAccel = 3f;     // pushing the stick forward poles along the way the player looks, up to this speed
+        public static float TestPush;          // for testing: the stick (1 forward)
 
         const float BodyHeight = 0.75f;         // a standing player's origin above the ground
         GameObject rackSki, rackBoard, modelSki, modelBoard, worn;
@@ -160,7 +162,7 @@ namespace WinterWalk
                 }
                 if (fromItem) offPisteSince = -1f;
                 Wear(t);
-                if (Gear == 0) { State = "no gear"; wasOn = false; return; }
+                if (Gear == 0 || PlaneDriver.Flying) { Driven.Give("ski"); State = Gear == 0 ? "no gear" : "in a plane"; wasOn = false; airborne = false; return; }
 
                 // on a piste? (the nearest sheet below; far down it only counts while flying off a jump)
                 bool on = false;
@@ -178,6 +180,7 @@ namespace WinterWalk
                 if (flyer != null && flyer.rb != null && (!on || gap > 0.25f) && (airborne ? Time.unscaledTime - airSince < 4f : true))
                 {
                     if (!airborne) { airborne = true; airSince = Time.unscaledTime; }
+                    Driven.Take(flyer, "ski", Driven.SkiSit);
                     velocity += Vector3.down * (9.81f * Time.fixedDeltaTime);
                     Diag.Touched("ski");
                     flyer.rb.linearVelocity = velocity;
@@ -188,6 +191,7 @@ namespace WinterWalk
                 if (airborne) { airborne = false; if (on) velocity = Vector3.ProjectOnPlane(velocity, normal) * 0.9f; }      // landed
                 if (!on)
                 {
+                    Driven.Give("ski");      // off the piste the player walks as ever
                     if (offPisteSince < 0f) offPisteSince = Time.unscaledTime;
                     if (fromItem) State = "carrying " + (Gear == 1 ? "skis" : "a snowboard") + ", off the piste";
                     else if (atRack) State = "at a rack (gear " + Gear + "): the run is a few steps away";
@@ -203,6 +207,9 @@ namespace WinterWalk
                 if (body == null) { State = "no body"; return; }
                 if (!wasOn) velocity = Vector3.ProjectOnPlane(body.linearVelocity, normal);
                 wasOn = true;
+                // The game's mover is held off while the gear runs (see Driven.cs): it sets a standing player's speed
+                // itself every step, so the glide written below never moved anyone who had walked onto the piste.
+                Driven.Take(pc, "ski", Driven.SkiSit);
 
                 bool board = Gear == 2;
                 float dt = Time.fixedDeltaTime;
@@ -212,10 +219,15 @@ namespace WinterWalk
                 // steer: turn what speed there is towards where the player looks, along the slope
                 Camera cam = Camera.main;
                 Vector3 look = cam != null && !Straight ? Vector3.ProjectOnPlane(cam.transform.forward, normal) : fall;
+                bool haveLook = look.sqrMagnitude > 1e-4f;
+                if (haveLook) look.Normalize();
+                // poling: with the mover off the stick walks nobody, so on the flat (a run's foot, a cat track) a skier
+                // stood where they stopped. The stick pushed forward now poles them along the way they look.
+                float stick = TestPush != 0f ? TestPush : PlaneDriver.Stick();
+                if (haveLook && stick > 0.3f && Vector3.Dot(velocity, look) < PoleSpeed) velocity += look * (PoleAccel * dt);
                 float speed = velocity.magnitude;
-                if (look.sqrMagnitude > 1e-4f && speed > 0.3f)
+                if (haveLook && speed > 0.3f)
                 {
-                    look.Normalize();
                     Vector3 heading = velocity / speed;
                     float turn = (board ? 0.9f : 1.5f) * dt;
                     Vector3 turned = Vector3.RotateTowards(heading, look, turn, 0f);
@@ -238,6 +250,7 @@ namespace WinterWalk
             }
             catch (Exception e)
             {
+                Driven.Give("ski");
                 if (State.StartsWith("stopped")) return;
                 State = "stopped: " + e.GetType().Name + ": " + e.Message;
                 Plugin.L.LogWarning("Winter Walk: skiing stopped: " + e.GetType().Name + ": " + e.Message);
