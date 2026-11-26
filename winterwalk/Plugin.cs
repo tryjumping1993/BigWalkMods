@@ -223,6 +223,7 @@ namespace WinterWalk
             using var diag = Diag.Time("sky");
             SunShadows();
             JoinFlood.Tick(Time.unscaledTime);
+            SeatAssist.Tick(Time.unscaledTime);
             SkyCube();
             try
             {
