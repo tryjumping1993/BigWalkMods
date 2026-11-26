@@ -778,7 +778,7 @@ the user and friends, who must all have the same packs and SDK version.
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
   Winter Walk also patches `GameRefs.Light.ExactPath` (`SdkSpeedups.cs`, Circle lamps' place) with Harmony.
 - **Game folder:** `Z:\SteamLibrary\steamapps\common\Big Walk` (moved from G:'s Steam library on 2026-11-23: G: is a
-  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.25-1219378, updated in place by each release's own Install.cmd) is in it, so a plain
+  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.25-9592c16, updated in place by each release's own Install.cmd) is in it, so a plain
   Steam start runs that; `play`/`launch` still load the dev profile. Tools find the folder through Steam's library list
   (`Find-Game` in `tools\install\Install-Common.ps1`); `World.GameData` (the Unity side) names it.
 - **Disk:** C: is nearly full. Unity, its caches, this repo and the game are on Z:; keep it that way.
@@ -878,7 +878,7 @@ fix (needs a second hosting in one game session and five gourds), anything with 
   leave its visibility alone unless they ask.
 - Nothing has been tested with two players. In particular: a standing rider as other players see them (`Riders`
   moves only this PC's player), and seats clicked by a player who is not the host.
-- **"Players still can't sit in seats"** (the user, 2026-11-25): not reproduced. On the host, standing, with the game's own input (`press?action=use`, crosshair on the seat's box), a Cast Iron Pizza bar stool took the player from 0.94 m on three sides and a train coach's seat from the aisle looking down. Not known: which seats, and whether it is joiners only (a seat's network id is given out by `Tickets.Allocate` on each PC). Needs a player's F8 mark at a seat that fails.
+- **Sitting down** (`winterwalk\SeatAssist.cs`, 2026-11-25; the user: "players still can't sit in seats", host too): a PuzzleSeat is clicked on an unseen box on the seat, which the game's reach finds only in a narrow band (at a pizzeria chair: from 0.9 m only with the view 73 degrees down, from 1.3 m at 54 and 73, never looking at the chair's back). Every earlier test aimed by script until the box was found. Now, when use is pressed and the game's reach has nothing (no target, no item), hands empty, not seated, the nearest free seat within `Reach` 1.8 m of the camera and roughly in view (`Cone`; anywhere in front within `Near` 0.9 m) takes the player, by `CmdEnterPose` as Riders does. Tested as host at a table chair (sat from 17 degrees down at 1.3 m) and from a coach's aisle looking level; `SeatAssist.Off`, `State`, `TestUse`. Not tested: a joiner (the command goes to the host). The helper reads Rewired's action "use", which does not exist at the title screen: ask for input actions only in a walk. An F8 mark looking down at a red shape between two arms is the player's own body, not a seat. Never rewrite this file with PowerShell 5's Get-Content/Set-Content: it reads UTF-8 as ANSI and every dash comes back as mojibake.
 - A seat is clicked from within about 2 m (the game's reach): from 2.6 m the test player's `use` did nothing, from
   1.4 m it sat. Beside a mantrip that means standing right at its side.
 - Sea cliffs carry big smooth white sheets where the ground shader's "gully" snow lies on 58 degree faces (seen from
