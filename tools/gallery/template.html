@@ -1,0 +1,146 @@
+<title>Winter Isle Puzzle Gallery</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: a contact sheet of all the puzzles on the left (a strip on a phone), one big picture with its views on the right. */
+:root {
+  --bg: #edf2f5; --panel: #ffffff; --line: #cfdae0; --fg: #15232b; --muted: #55676f;
+  --accent: #1d6a4e; --accent-fg: #ffffff; --berry: #a8242c; --gold: #8a6410; --stage: #0c1418;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: Inter, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e181d; --panel: #16242b; --line: #2a3d46; --fg: #e4edf0; --muted: #9bb0b8;
+  --accent: #5fc79c; --accent-fg: #062116; --berry: #f08a8f; --gold: #e3bd62; --stage: #060b0d; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e181d; --panel: #16242b; --line: #2a3d46; --fg: #e4edf0; --muted: #9bb0b8;
+  --accent: #5fc79c; --accent-fg: #062116; --berry: #f08a8f; --gold: #e3bd62; --stage: #060b0d; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5 }
+.wrap { max-width: 1500px; margin: 0 auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 16px }
+h1 { font-family: var(--display); font-size: 1.55rem; margin: 0; text-wrap: balance }
+header p { margin: 0; color: var(--muted) }
+.cols { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start }
+.list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: calc(100vh - 40px); overflow-y: auto; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); padding: 2px }
+.pick { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 2px solid transparent; border-radius: 6px; background: var(--panel); color: var(--fg); font: inherit; text-align: left; cursor: pointer; overflow: hidden }
+.pick img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--stage) }
+.pick span { padding: 2px 8px 7px; font-size: 0.82rem; font-weight: 500; line-height: 1.25 }
+.pick[aria-current="true"] { border-color: var(--accent) }
+.pick:focus-visible, .tab:focus-visible, .nav:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px }
+.view { min-width: 0; display: flex; flex-direction: column; gap: 12px }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px }
+.head h2 { font-family: var(--display); font-size: 1.7rem; margin: 0; flex: 1 1 auto; text-wrap: balance }
+.count { color: var(--muted); font-variant-numeric: tabular-nums }
+.nav { border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: inherit; font-weight: 600; padding: 7px 14px; border-radius: 6px; cursor: pointer }
+.stage { position: relative; background: var(--stage); border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; max-width: 100% }
+.stage img { display: block; width: 100%; height: 100%; object-fit: contain }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px }
+.tab { border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: inherit; padding: 6px 12px; border-radius: 999px; cursor: pointer }
+.tab[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600 }
+.about { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px }
+.about ol { margin: 0; padding-left: 0; list-style: none; max-width: 62ch }
+.about li { padding: 1px 0 }
+.facts { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; color: var(--muted); white-space: nowrap }
+.facts b { color: var(--gold); font-weight: 600 }
+.label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px }
+.hint { color: var(--muted); font-size: 0.85rem; margin: 0 }
+@media (max-width: 900px) {
+  .cols { grid-template-columns: minmax(0, 1fr) }
+  .list { position: static; max-height: none; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 128px; overflow-x: auto; overflow-y: hidden; order: 2 }
+  .view { order: 1 }
+  .about { grid-template-columns: minmax(0, 1fr) }
+  .facts { flex-direction: row; flex-wrap: wrap; gap: 4px 16px; white-space: normal }
+  .head h2 { font-size: 1.35rem; flex-basis: 100% }
+}
+</style>
+<div class="wrap">
+  <header>
+    <h1>Winter Isle Puzzle Gallery</h1>
+    <p id="summary"></p>
+  </header>
+  <div class="cols">
+    <nav class="list" id="list" aria-label="Puzzles"></nav>
+    <main class="view">
+      <div class="head">
+        <h2 id="title"></h2>
+        <span class="count" id="count"></span>
+        <button class="nav" id="prev" type="button">&larr; Previous</button>
+        <button class="nav" id="next" type="button">Next &rarr;</button>
+      </div>
+      <div class="stage"><img id="shot" alt=""></div>
+      <div class="tabs" id="tabs" role="group" aria-label="Views of this puzzle"></div>
+      <section class="about">
+        <div>
+          <p class="label">The how-to board at its start switch says</p>
+          <ol id="lines"></ol>
+        </div>
+        <div class="facts" id="facts"></div>
+      </section>
+      <p class="hint">Left and right arrow keys change the view; up and down change the puzzle. Pictures were taken from the running game at 13 h on 28 November 2026, with one test player, from a camera outside each site.</p>
+    </main>
+  </div>
+</div>
+<script>
+const PUZZLES = /*DATA*/[];
+const VIEW_NAMES = /*VIEWS*/{};
+let at = 0, view = 0;
+const $ = id => document.getElementById(id);
+function build() {
+  $('summary').textContent = PUZZLES.length + ' puzzles, ' + PUZZLES.reduce((n, p) => n + p.views.length, 0) + ' pictures';
+  PUZZLES.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'pick'; b.type = 'button'; b.id = 'pick-' + p.id;
+    const img = document.createElement('img'); img.loading = 'lazy'; img.alt = ''; img.src = 'img/' + p.id + '-thumb.jpg';
+    const s = document.createElement('span'); s.textContent = p.title;
+    b.append(img, s); b.addEventListener('click', () => go(i, 0));
+    $('list').append(b);
+  });
+  $('prev').addEventListener('click', () => go(at - 1, 0));
+  $('next').addEventListener('click', () => go(at + 1, 0));
+  document.addEventListener('keydown', e => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'ArrowRight') { show(view + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { show(view - 1); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { go(at + 1, 0); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { go(at - 1, 0); e.preventDefault(); }
+  });
+  window.addEventListener('hashchange', fromHash);
+  fromHash();
+}
+function fromHash() {
+  const id = location.hash.slice(1);
+  const i = PUZZLES.findIndex(p => p.id === id);
+  go(i < 0 ? 0 : i, 0, true);
+}
+function go(i, v, quiet) {
+  at = (i + PUZZLES.length) % PUZZLES.length;
+  const p = PUZZLES[at];
+  $('title').textContent = p.title;
+  $('count').textContent = (at + 1) + ' of ' + PUZZLES.length;
+  $('lines').replaceChildren(...p.lines.map(t => { const li = document.createElement('li'); li.textContent = t; return li; }));
+  const facts = [['Players', p.players]];
+  if (p.where) facts.push(['On the island at', p.where]);
+  $('facts').replaceChildren(...facts.map(([k, val]) => { const d = document.createElement('div'); const b = document.createElement('b'); b.textContent = val; d.append(k + ': ', b); return d; }));
+  $('tabs').replaceChildren(...p.views.map((key, n) => {
+    const b = document.createElement('button'); b.className = 'tab'; b.type = 'button'; b.textContent = VIEW_NAMES[key] || key;
+    b.addEventListener('click', () => show(n)); return b;
+  }));
+  document.querySelectorAll('.pick').forEach((b, n) => b.setAttribute('aria-current', n === at ? 'true' : 'false'));
+  const cur = $('pick-' + p.id);
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  if (!quiet && location.hash.slice(1) !== p.id) { try { location.hash = p.id; } catch (e) {} }
+  show(v);
+  const nxt = PUZZLES[(at + 1) % PUZZLES.length];      // have the next puzzle's first picture ready
+  new Image().src = 'img/' + nxt.id + '-' + nxt.views[0] + '.jpg';
+}
+function show(v) {
+  const p = PUZZLES[at];
+  view = (v + p.views.length) % p.views.length;
+  const key = p.views[view];
+  $('shot').src = 'img/' + p.id + '-' + key + '.jpg';
+  $('shot').alt = p.title + ', ' + (VIEW_NAMES[key] || key).toLowerCase();
+  [...$('tabs').children].forEach((b, n) => b.setAttribute('aria-pressed', n === view ? 'true' : 'false'));
+}
+build();
+</script>

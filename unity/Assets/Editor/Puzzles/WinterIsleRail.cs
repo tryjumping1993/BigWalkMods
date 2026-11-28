@@ -575,7 +575,7 @@ public static class WinterIsleRail
         Kit.AddStar(loco, new Vector3(0f, 1.7f, 4.4f), 0.45f, 0.06f, gold);
         var coach = new MeshBuilder();
         Kit.AddBox(coach, new Vector3(0f, 0.25f, 0f), new Vector3(2.5f, 0.3f, 8.6f), black);
-        Kit.AddBox(coach, new Vector3(0f, 0.55f, 0f), new Vector3(2.5f, 0.15f, 8.6f), wood);                // the floor (its top 0.7 m up)
+        Kit.AddBox(coach, new Vector3(0f, 0.55f, 0f), new Vector3(2.5f, 0.15f, 8.6f), Kit.Dry(wood));       // the floor (its top 0.7 m up), under the roof: no snow
         foreach (int sx in new[] { -1, 1 })
         {
             Kit.AddBox(coach, new Vector3(sx * 1.2f, 0.7f, 0f), new Vector3(0.12f, 0.8f, 8.6f), green);    // low sides
@@ -588,8 +588,9 @@ public static class WinterIsleRail
         Kit.AddBox(coach, new Vector3(0f, 3.08f, 0f), new Vector3(2.2f, 0.12f, 8.6f), cream);
         for (int row = 0; row < 4; row++)      // benches, facing forward
         {
-            Kit.AddBox(coach, new Vector3(0f, 0.7f, -3.2f + row * 2.1f - 0.1f), new Vector3(2.2f, 0.45f, 0.55f), wood * 1.15f);
-            Kit.AddBox(coach, new Vector3(0f, 0.7f, -3.2f + row * 2.1f - 0.45f), new Vector3(2.2f, 1.0f, 0.12f), wood);      // the back
+            Kit.AddBox(coach, new Vector3(0f, 0.7f, -3.2f + row * 2.1f - 0.1f), new Vector3(2.2f, 0.45f, 0.55f), Kit.Dry(wood * 1.15f));
+            // the back: 0.35 m above the seat (it was 0.55, and filled a seated rider's view of the way ahead)
+            Kit.AddBox(coach, new Vector3(0f, 0.7f, -3.2f + row * 2.1f - 0.45f), new Vector3(2.2f, 0.8f, 0.12f), Kit.Dry(wood));
         }
         Kit.AddBox(coach, new Vector3(-0.85f, 0.7f, 4.05f), new Vector3(0.14f, 1.0f, 0.14f), gold);        // the throttle's stand, at the front on the left
         Mesh locoMesh = b.SaveMesh("Train Locomotive", loco.ToMesh()), coachMesh = b.SaveMesh("Train Coach", coach.ToMesh());
@@ -629,8 +630,12 @@ public static class WinterIsleRail
                             seat.Transform.SetParent(car.transform, false);
                             seat.Transform.localPosition = new Vector3(0.55f * sgn, 1.15f, -3.2f + row * 2.1f);
                             b.AddScript(seat, "PuzzleSeat");
-                            seat.Set("PuzzleSeat", "pose", 14 + (row * 2 + (sgn > 0 ? 1 : 0)) % 5);      // TrainSeatA..E
+                            // MidcenturyChair, the pose that sits right on a seat's top (Cast Iron Pizza's chairs). The game's
+                            // train seat poses (14..18) put the body half a metre lower: riders sat inside the bench with
+                            // only the head above it (seen in the recording of 2026-11-28)
+                            seat.Set("PuzzleSeat", "pose", 0);
                             seat.Set("PuzzleSeat", "clickSize", new Vector3(0.7f, 0.7f, 0.7f));
+                            seat.Set("PuzzleSeat", "seatOffset", new Vector3(0f, Kit.SeatUp, 0f));
                         }
                 }
     }

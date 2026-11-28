@@ -315,6 +315,7 @@ public sealed class CastIronPizzaPuzzle : PuzzleDef
         b.AddScript(seat, "PuzzleSeat");
         seat.Set("PuzzleSeat", "pose", 0);
         seat.Set("PuzzleSeat", "clickSize", new Vector3(0.6f, 0.6f, 0.6f));
+        seat.Set("PuzzleSeat", "seatOffset", new Vector3(0f, Kit.SeatUp, 0f));
     }
     // a marker for Winter Walk's RoomLights: colour (sRGB hex), range, intensity
     void Lamp(Vector3 at, string hex, float range, float intensity)

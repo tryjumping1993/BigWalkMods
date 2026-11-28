@@ -358,6 +358,15 @@ namespace Bwm
         // A solid block added to a mesh being built: 'foot' is the centre of its underside, yaw turns it about that.
         // Build a puzzle's posts, walls, roofs and plinths this way into one mesh with the Snowy shader, and snow
         // settles on their tops by itself.
+        // How far above a seat's top a PuzzleSeat's sitting point has to be: the game sits a player with the middle of
+        // their round body about 0.2 m below that point, so with the point on the seat's top the body was inside the
+        // seat (every seat of ours until 2026-11-28: coach benches, cabins, the pizzeria's chairs and stools). Tried
+        // live at 0.45: the body rests on the seat, legs over its edge, with both the chair and the chairlift pose.
+        public const float SeatUp = 0.45f;
+
+        // A colour for a face under cover: BWM/Snowy puts no snow where the vertex colour's alpha is 0
+        public static Color Dry(Color c) => new Color(c.r, c.g, c.b, 0f);
+
         public static void AddBox(MeshBuilder mb, Vector3 foot, Vector3 size, Color color, float yaw = 0f)
         {
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);

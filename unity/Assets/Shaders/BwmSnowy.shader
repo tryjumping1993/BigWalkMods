@@ -115,7 +115,9 @@ Shader "BWM/Snowy"
                 float3 v = viewVector / max(viewDistance, 1e-4);
                 BwmSnowDetail detail = BwmSnowDetailOn(positionWS, viewDistance, 5.0);
                 float ragged = (Noise3(positionWS * 3.1) - 0.5) * _SnowNoise + (detail.cavity - 0.5) * 0.2 * _SnowNoise;
-                float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + ragged);
+                // (a vertex colour with no alpha is a face under cover, which takes no snow: a coach's floor and benches
+                // under its roof, a cabin's. Kit.Dry makes one. Snow lay on them as on any face that looks up.)
+                float snow = smoothstep(_SnowLine - _SnowEdge, _SnowLine + _SnowEdge, n.y + ragged) * step(0.02, i.color.a);
                 float3 albedo = i.color.rgb * _Tint.rgb;
 
                 Light sun = BwmSun(positionWS);

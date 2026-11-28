@@ -25,7 +25,10 @@ namespace WinterWalk
     {
         public PlaneDriver(IntPtr ptr) : base(ptr) { }
 
-        const float SeatHeight = 1.55f;     // the player's origin above the ground while the plane stands on its wheels
+        // the player's origin above the ground while the plane stands on its wheels. It was 1.55, a standing pilot's
+        // height in the cockpit; a pilot now sits (Driven), which drops the body about half a metre, and from outside
+        // only a sliver of them showed at the wing root, inside the fuselage (seen in the recording of 2026-11-28).
+        public static float SeatHeight = 2.6f;      // (tried live at 2.35, 2.65 and 2.9 with the cockpit well: at 2.6 the round body sits in the well, its top half over the rim)
         const float BoardReach = 3.2f;      // how near the cockpit a player must come to board
         const float TopSpeed = 34f, Cruise = 24f, SlowFlight = 15f, Stall = 12f, Takeoff = 17f;
         const float Accel = 5f, Brake = 6f;

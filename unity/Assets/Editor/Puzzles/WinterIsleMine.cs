@@ -1050,6 +1050,7 @@ public static class WinterIsleMine
                         b.AddScript(seat, "PuzzleSeat");
                         seat.Set("PuzzleSeat", "pose", sx < 0 ? 12 : 13);      // ChairliftLeft, ChairliftRight
                         seat.Set("PuzzleSeat", "clickSize", new Vector3(0.6f, 0.7f, 0.6f));
+                        seat.Set("PuzzleSeat", "seatOffset", new Vector3(0f, Kit.SeatUp, 0f));
                     }
             }
         }

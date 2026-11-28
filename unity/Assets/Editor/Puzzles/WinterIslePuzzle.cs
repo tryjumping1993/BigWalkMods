@@ -3104,7 +3104,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
             // forward. Built facing +z with the grip at the origin; Winter Walk turns and moves them.
             var car = new MeshBuilder();
             const float Drop = 3.6f;      // grip to floor
-            Kit.AddBox(car, new Vector3(0f, -Drop, 0f), new Vector3(1.9f, 0.12f, 1.5f), timber);                        // floor
+            Kit.AddBox(car, new Vector3(0f, -Drop, 0f), new Vector3(1.9f, 0.12f, 1.5f), Kit.Dry(timber));               // floor (under the roof: no snow)
             Kit.AddBox(car, new Vector3(0f, -Drop + 0.12f, -0.68f), new Vector3(1.9f, 1.75f, 0.12f), red);              // back wall
             for (int sgn = -1; sgn <= 1; sgn += 2)
             {
@@ -3114,7 +3114,9 @@ public sealed class WinterIslePuzzle : PuzzleDef
             }
             Kit.AddBox(car, new Vector3(0f, -Drop + 1.87f, 0f), new Vector3(2.1f, 0.14f, 1.7f), red);                   // roof
             Kit.AddBox(car, new Vector3(0f, -Drop + 2.01f, 0f), new Vector3(1.7f, 0.1f, 1.3f), gold);
-            Kit.AddBox(car, new Vector3(0f, -Drop + 0.12f, -0.45f), new Vector3(1.7f, 0.42f, 0.42f), timber * 1.15f); // bench
+            // the bench stands 0.3 m clear of the back wall: a seated rider's eyes are 0.4 m behind the seat's point, and
+            // with the bench against the wall they were inside it (the rider saw only red, and could not be seen)
+            Kit.AddBox(car, new Vector3(0f, -Drop + 0.12f, -0.15f), new Vector3(1.7f, 0.42f, 0.42f), Kit.Dry(timber * 1.15f)); // bench
             Kit.AddBox(car, new Vector3(0f, -Drop + 2.11f, -0.05f), new Vector3(0.14f, Drop - 2.11f, 0.14f), steel); // hanger
             Kit.AddBox(car, new Vector3(0f, -0.25f, -0.05f), new Vector3(0.3f, 0.35f, 0.5f), steel * 0.8f);         // grip
             Kit.AddBox(car, new Vector3(0f, -Drop + 0.5f, 0.66f), new Vector3(1.8f, 0.06f, 0.06f), gold);           // safety bar
@@ -3140,10 +3142,11 @@ public sealed class WinterIslePuzzle : PuzzleDef
                 {
                     var seat = new Piece(new GameObject(sgn < 0 ? "Seat Left" : "Seat Right"));
                     seat.Transform.SetParent(cabin.transform, false);
-                    seat.Transform.localPosition = new Vector3(0.42f * sgn, -Drop + 0.54f, -0.45f);
+                    seat.Transform.localPosition = new Vector3(0.42f * sgn, -Drop + 0.54f, -0.05f);
                     b.AddScript(seat, "PuzzleSeat");
                     seat.Set("PuzzleSeat", "pose", sgn < 0 ? 12 : 13);      // ChairliftLeft, ChairliftRight
                     seat.Set("PuzzleSeat", "clickSize", new Vector3(0.7f, 0.7f, 0.7f));
+                    seat.Set("PuzzleSeat", "seatOffset", new Vector3(0f, Kit.SeatUp, 0f));
                 }
             }
             Debug.Log("[BWM] Winter Isle gondola: " + Sdk.F(length) + " m, " + (spans - 1) + " pylons, cable from " + Sdk.F(line[0].y) + " to " + Sdk.F(line[spans].y) + " m, " + GondolaCabins + " cabins");
@@ -3287,6 +3290,7 @@ public sealed class WinterIslePuzzle : PuzzleDef
                     b.AddScript(seat, "PuzzleSeat");
                     seat.Set("PuzzleSeat", "pose", sgn < 0 ? 12 : 13);      // ChairliftLeft, ChairliftRight
                     seat.Set("PuzzleSeat", "clickSize", new Vector3(0.6f, 0.6f, 0.6f));
+                    seat.Set("PuzzleSeat", "seatOffset", new Vector3(0f, Kit.SeatUp, 0f));
                 }
             }
             Debug.Log("[BWM] Winter Isle " + liftName.ToLowerInvariant() + ": " + Sdk.F(length) + " m from " + Sdk.F(bottomDeck) + " to " + Sdk.F(topDeck) + " m, " + (spans - 1) + " towers, " + chairCount + " chairs");

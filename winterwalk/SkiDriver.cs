@@ -31,7 +31,7 @@ namespace WinterWalk
         int wornGear;
         float nextLook, offPisteSince = -1f;
         Vector3 velocity;
-        bool wasOn, airborne;
+        bool wasOn, airborne, turned;
         // Skis and boards that are things (the summit's stand: items named "Skis n" and "Snowboard n", the user,
         // 2026-11-24: "intuitive to use as is most of the equipment in the base game"): pick a pair up and they are on
         // your feet for as long as you hold them, anywhere; put them down and they are off. In the hand they are not
@@ -192,6 +192,7 @@ namespace WinterWalk
                 if (!on)
                 {
                     Driven.Give("ski");      // off the piste the player walks as ever
+                    if (turned && worn != null) { worn.transform.localRotation = Quaternion.identity; turned = false; }
                     if (offPisteSince < 0f) offPisteSince = Time.unscaledTime;
                     if (fromItem) State = "carrying " + (Gear == 1 ? "skis" : "a snowboard") + ", off the piste";
                     else if (atRack) State = "at a rack (gear " + Gear + "): the run is a few steps away";
@@ -243,6 +244,9 @@ namespace WinterWalk
                 if (speed < 0f) speed = 0f;
                 velocity = velocity.sqrMagnitude > 1e-6f ? velocity.normalized * speed : Vector3.zero;
                 Speed = speed;
+                // The skis point the way they run. They hung under the player at the body's own facing, so a skier who
+                // looked across the slope went down it with the skis sideways (seen in the recording of 2026-11-28).
+                if (worn != null && speed > 1f) { worn.transform.rotation = Quaternion.LookRotation(velocity / speed, normal); turned = true; }
                 // keep to the snow: close the gap to the sheet a little each step
                 Diag.Touched("ski");
                 body.linearVelocity = velocity + Vector3.down * Mathf.Clamp(gap * 6f, -2f, 6f);

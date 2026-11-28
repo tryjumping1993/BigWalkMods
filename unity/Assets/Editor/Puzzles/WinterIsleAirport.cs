@@ -63,7 +63,7 @@ public static class WinterIsleAirport
 
     // A biplane facing +z with its wheels on the ground at the origin, into 'body' (and its propeller, about its own
     // middle, into 'prop'): a fuselage tapering to the tail, an engine and cowling, two wings with struts, a tailplane
-    // and fin, the undercarriage. 7 m long, 9.2 m across; the pilot sits at (0, 1.55, 0)
+    // and fin, the undercarriage. 7 m long, 9.2 m across; the pilot's origin is at (0, PlaneDriver.SeatHeight 2.6, 0), seated in the cockpit's well
     public static void AddBiplane(MeshBuilder body, MeshBuilder prop, Color hull, Color wings, Color trim)
     {
         // the fuselage: sections from the cockpit back to the tail, narrowing and rising
@@ -71,7 +71,9 @@ public static class WinterIsleAirport
         {
             float z0 = 1.5f - k * 0.75f, t = k / 7f;
             float w = Mathf.Lerp(1.05f, 0.3f, t), h = Mathf.Lerp(1.0f, 0.4f, t), y = Mathf.Lerp(0.9f, 1.5f, t);
-            Kit.AddBox(body, new Vector3(0f, y, z0 - 0.375f), new Vector3(w, h, 0.77f), k == 2 ? trim : hull);
+            // (the third section is the cockpit: a well 0.55 m deep, so the seated pilot shows from the shoulders up
+            // over its rim. As a full section it hid them: only a sliver showed at the wing root.)
+            Kit.AddBox(body, new Vector3(0f, y, z0 - 0.375f), new Vector3(w, k == 2 ? h - 0.55f : h, 0.77f), k == 2 ? trim : hull);
         }
         Kit.AddBox(body, new Vector3(0f, 0.85f, 1.9f), new Vector3(1.2f, 1.15f, 0.8f), Dark);      // the engine's cowling
         Kit.AddBox(body, new Vector3(0f, 1.3f, 2.35f), new Vector3(0.3f, 0.3f, 0.2f), trim);       // the hub
@@ -79,12 +81,13 @@ public static class WinterIsleAirport
         // wings: lower through the fuselage's foot, upper high over the cockpit's front, held only by struts out
         // near the tips (the game is seen from the pilot's eyes, just over the cockpit's rim: nothing in front of them)
         Kit.AddBox(body, new Vector3(0f, 0.9f, 1.2f), new Vector3(8.4f, 0.12f, 1.5f), wings);
-        Kit.AddBox(body, new Vector3(0f, 3.0f, 1.45f), new Vector3(9.2f, 0.13f, 1.55f), wings);
+        // (the upper wing is 3.6 m up: at 3.0 it lay across the seated pilot's view, whose eyes are now 2.7 m up)
+        Kit.AddBox(body, new Vector3(0f, 3.6f, 1.45f), new Vector3(9.2f, 0.13f, 1.55f), wings);
         foreach (int sx in new[] { -1, 1 })
         {
-            Kit.AddBox(body, new Vector3(sx * 4.2f, 3.0f, 1.45f), new Vector3(0.6f, 0.14f, 1.57f), trim);      // the wingtips
+            Kit.AddBox(body, new Vector3(sx * 4.2f, 3.6f, 1.45f), new Vector3(0.6f, 0.14f, 1.57f), trim);      // the wingtips
             foreach (float z in new[] { 0.85f, 1.85f })
-                Kit.AddBox(body, new Vector3(sx * 3.1f, 1.0f, z), new Vector3(0.08f, 2.0f, 0.08f), Dark);       // interplane struts
+                Kit.AddBox(body, new Vector3(sx * 3.1f, 1.0f, z), new Vector3(0.08f, 2.6f, 0.08f), Dark);       // interplane struts
             Kit.AddBox(body, new Vector3(sx * 0.9f, 0f, 1.0f), new Vector3(0.22f, 0.72f, 0.72f), Dark);        // a wheel
             Kit.AddBox(body, new Vector3(sx * 0.6f, 0.36f, 1.0f), new Vector3(0.08f, 0.6f, 0.08f), Dark);      // its leg
         }
