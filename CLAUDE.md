@@ -784,7 +784,7 @@ the user and friends, who must all have the same packs and SDK version.
   reflection. An SDK update can rename them; read the new source and adjust `Sdk.cs`, `Cli.cs`, `Plugin.cs`.
   Winter Walk also patches `GameRefs.Light.ExactPath` (`SdkSpeedups.cs`, Circle lamps' place) with Harmony.
 - **Game folder:** `Z:\SteamLibrary\steamapps\common\Big Walk` (moved from G:'s Steam library on 2026-11-23: G: is a
-  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.25-9592c16, updated in place by each release's own Install.cmd) is in it, so a plain
+  USB hard disk and a cold start waited a minute on it). A players' install (2026.11.28-403b7b3, updated in place by each release's own Install.cmd) is in it, so a plain
   Steam start runs that; `play`/`launch` still load the dev profile. Tools find the folder through Steam's library list
   (`Find-Game` in `tools\install\Install-Common.ps1`); `World.GameData` (the Unity side) names it.
 - **Disk:** C: is nearly full. Unity, its caches, this repo and the game are on Z:; keep it that way.
