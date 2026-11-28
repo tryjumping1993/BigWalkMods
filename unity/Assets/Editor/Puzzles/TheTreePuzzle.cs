@@ -1,0 +1,458 @@
+// The Tree: the winter edition's gourd tower, a great Christmas tree in the island's central plaza.
+//
+// Every puzzle on the island rewards a gourd. The first five go round the tree's foot: five plinths, and holding
+// the button opens the next empty one. When all five hold a gourd the gondola opens (Winter Walk's
+// GondolaDriver watches "Tree Plinth 1".."5"). The next five go to the mine tower (the mine), five to the airport's
+// control tower (the biplanes), five to the railway's water tower by the Plaza Halt (the trains), and the last
+// twenty to the summit, where a ring of plinths stands round a great gold star with its own hold button.
+//
+// All 45 plinths are in this one pack and in one Tower Button list (tree first), because the SDK puts gourds
+// back from a save only into the plinths of a single Tower-type pack; a summit in a pack of its own would lose
+// its gourds on every reload. The SDK shows only as many plinths as there are modded puzzles installed, first
+// first, so the summit's plinths appear as puzzles are added. Lights wind up the tree and ring the plaza.
+using System.Collections.Generic;
+using Bwm;
+using UnityEngine;
+
+public sealed class TheTreePuzzle : PuzzleDef
+{
+    public override string Name => "TheTree";
+    public override int PuzzleType => 1;                                             // Tower
+    public override Vector2 Footprint => new Vector2(WinterIslePuzzle.PlazaRadius * 2f, WinterIslePuzzle.PlazaRadius * 2f);
+    public override Vector2? FixedSite => WinterIslePuzzle.Plaza;
+
+    const float TreeHeight = 19f;
+    const int TreePlinths = 5, SummitPlinths = 20;
+    const float SummitRing = 9f;
+    const float RingRadius = 6.2f;
+    static readonly Color Stone = new Color(0.50f, 0.52f, 0.56f);
+    static readonly Color Wood = new Color(0.36f, 0.25f, 0.17f);
+    static readonly Color Gold = new Color(1f, 0.78f, 0.2f);
+
+    public override void Build(PuzzleBuilder b)
+    {
+        b.DebugTeleport(0f, -14f);
+        Material snowy = b.ShaderMaterial("BWM/Snowy", "Snowy");
+        Material stone = b.ShaderMaterial("BWM/Snowy", "Stone", m => { m.SetFloat("_SnowLine", 0.93f); m.SetFloat("_SnowNoise", 0.5f); });
+        Material bare = b.ShaderMaterial("BWM/Snowy", "Bare", m => m.SetFloat("_SnowLine", 2f));      // never takes snow
+
+        // ---- the tree, on a round stone step ----
+        var step = new MeshBuilder();
+        Kit.AddDisc(step, Vector3.zero, RingRadius + 1.6f, 0.3f, Stone, 32);
+        Kit.AddDisc(step, Vector3.up * 0.3f, RingRadius - 1.4f, 0.3f, Stone * 0.92f, 32);
+        b.MeshPiece("Step", step.ToMesh(), stone);
+
+        // a great snow-laden fir, the same make as the island's (Kit.AddFir), decked with baubles
+        Material fir = b.ShaderMaterial("BWM/Fir", "Fir", m => Kit.SetTreeMaps(m, "FirBark"));
+        var tree = new MeshBuilder();
+        Kit.AddFir(tree, Vector3.up * 0.6f, TreeHeight, 2026, 1.4f);
+        Kit.AddFir(tree, Vector3.up * 0.6f, TreeHeight * 0.97f, 1225, 0.9f);      // a second set of boughs, for a full crown
+        Piece pine = b.MeshPiece("Tree", tree.ToMesh(true), fir, false);
+
+        var baubles = new MeshBuilder();
+        var random = new System.Random(2512);
+        Color[] colours = { new Color(0.85f, 0.08f, 0.1f), new Color(1f, 0.75f, 0.18f), new Color(0.82f, 0.85f, 0.9f), new Color(0.15f, 0.35f, 0.9f), new Color(0.75f, 0.1f, 0.12f) };
+        for (int i = 0; i < 90; i++)
+        {
+            float t = 0.06f + 0.86f * (float)random.NextDouble();
+            float y = 0.6f + TreeHeight * (0.14f + 0.79f * t);
+            float r = (TreeHeight * 0.36f * Mathf.Pow(1f - t, 0.95f) + 0.25f) * (0.78f + 0.15f * (float)random.NextDouble());
+            float a = (float)random.NextDouble() * Mathf.PI * 2f;
+            var at = new Vector3(Mathf.Cos(a) * r, y - r * 0.42f, Mathf.Sin(a) * r);
+            Kit.AddBall(baubles, at, 0.17f + 0.1f * (float)random.NextDouble() * (1f - t), colours[i % colours.Length]);
+        }
+        b.MeshPiece("Baubles", baubles.ToMesh(), bare, false);
+        CapsuleCollider trunk = pine.Go.AddComponent<CapsuleCollider>();
+        trunk.center = Vector3.up * (0.6f + TreeHeight * 0.2f);
+        trunk.radius = 0.7f;
+        trunk.height = TreeHeight * 0.45f;
+
+        var star = new MeshBuilder();
+        Kit.AddStar(star, Vector3.up * (0.6f + TreeHeight + 0.55f), 0.9f, 0.22f, Gold);
+        b.MeshPiece("Star", star.ToMesh(), bare, false);
+
+        // ---- presents piled under the boughs, between the plinths: wrapped boxes of every size, tied with ribbon ----
+        {
+            var presents = new MeshBuilder();
+            var pr = new System.Random(1224);
+            float R(float lo, float hi) => lo + (hi - lo) * (float)pr.NextDouble();
+            Color[] paper = { new Color(0.8f, 0.1f, 0.1f), new Color(0.1f, 0.42f, 0.2f), new Color(0.15f, 0.3f, 0.75f), new Color(0.95f, 0.75f, 0.2f), new Color(0.92f, 0.92f, 0.9f), new Color(0.55f, 0.15f, 0.55f) };
+            Color[] ribbon = { new Color(0.95f, 0.8f, 0.3f), new Color(0.95f, 0.95f, 0.92f), new Color(0.8f, 0.1f, 0.1f) };
+            for (int i = 0; i < 18; i++)
+            {
+                // in clusters between the plinths, out at the boughs' tips where they show (deep under them they were hidden)
+                float a = Mathf.PI * 1.5f - 2f * Mathf.PI * (i % 5) / 5f - Mathf.PI / 5f + R(-0.22f, 0.22f), r = R(4.6f, 6.4f);
+                float sx = R(0.4f, 0.95f), sy = R(0.3f, 0.75f), sz = R(0.4f, 0.95f), yaw = R(0f, 90f);
+                var at = new Vector3(Mathf.Cos(a) * r, 0.6f, Mathf.Sin(a) * r);
+                Color c = paper[pr.Next(paper.Length)], band = ribbon[pr.Next(ribbon.Length)];
+                Kit.AddBox(presents, at, new Vector3(sx, sy, sz), c, yaw);
+                Kit.AddBox(presents, at, new Vector3(sx + 0.02f, sy + 0.01f, 0.08f), band, yaw);
+                Kit.AddBox(presents, at, new Vector3(0.08f, sy + 0.01f, sz + 0.02f), band, yaw);
+                Kit.AddBall(presents, at + Vector3.up * (sy + 0.05f), 0.08f, band);      // the bow
+                if (pr.NextDouble() < 0.4)      // a smaller one on top
+                {
+                    float tx = sx * 0.55f, ty = sy * 0.6f, tz = sz * 0.55f;
+                    Color c2 = paper[pr.Next(paper.Length)];
+                    Kit.AddBox(presents, at + Vector3.up * sy, new Vector3(tx, ty, tz), c2, yaw + 25f);
+                    Kit.AddBox(presents, at + Vector3.up * sy, new Vector3(tx + 0.02f, ty + 0.01f, 0.06f), band, yaw + 25f);
+                }
+            }
+            b.MeshPiece("Presents", presents.ToMesh(), bare, false);
+        }
+
+        // ---- three jetpacks among the presents: each a jetpack standing in an opened box, its lid leaning beside it.
+        //      Walking up to one straps a jetpack on (Winter Walk's JetpackDriver finds them by name: "Jetpack Present",
+        //      "Jetpack Present 2", ...) and fills its tank. The model Winter Walk hangs on a player's back is kept
+        //      hidden here as "Jetpack Model" ----
+        {
+            var opened = new MeshBuilder();
+            for (int i = 0; i < 3; i++)
+            {
+                float a = Mathf.PI * 0.5f + 2f * Mathf.PI * i / 3f + 0.35f, r = 7.4f;
+                var at = new Vector3(Mathf.Cos(a) * r, 0.6f, Mathf.Sin(a) * r);
+                float facing = Mathf.Atan2(at.x, at.z) * Mathf.Rad2Deg;      // looking out from the tree
+                Color paper = i == 0 ? new Color(0.8f, 0.1f, 0.1f) : i == 1 ? new Color(0.12f, 0.42f, 0.2f) : new Color(0.15f, 0.3f, 0.75f);
+                Quaternion turn = Quaternion.Euler(0f, facing, 0f);
+                Kit.AddBox(opened, at, new Vector3(1.0f, 0.35f, 0.8f), paper, facing);                                      // the box, opened
+                Kit.AddBox(opened, at + turn * new Vector3(0f, 0f, 0f), new Vector3(1.02f, 0.36f, 0.1f), Gold, facing);    // its ribbon
+                Kit.AddBox(opened, at + turn * new Vector3(0.85f, 0f, 0.1f), new Vector3(1.0f, 0.06f, 0.8f), paper, facing + 18f);      // the lid, on the snow beside it
+                AddJetpack(opened, at + Vector3.up * 0.3f, facing);
+                Piece marker = b.Empty(i == 0 ? "Jetpack Present" : "Jetpack Present " + (i + 1), at.x, at.z, 1f, false);
+            }
+            b.MeshPiece("Jetpack Presents", opened.ToMesh(), bare, false);
+            var model = new MeshBuilder();
+            AddJetpack(model, Vector3.zero, 0f);
+            var models = new GameObject("Jetpack Models");
+            models.transform.SetParent(b.Root.transform, false);
+            var jet = new GameObject("Jetpack Model");
+            jet.transform.SetParent(models.transform, false);
+            jet.AddComponent<MeshFilter>().sharedMesh = b.SaveMesh("Jetpack Model", model.ToMesh());
+            jet.AddComponent<MeshRenderer>().sharedMaterial = bare;
+            var flame = new MeshBuilder();      // the flames under its nozzles, shown while it fires
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(flame, new Vector3(sgn * 0.11f, -0.42f, -0.02f), new Vector3(0.09f, 0.28f, 0.09f), new Color(1f, 0.75f, 0.2f));
+                Kit.AddBox(flame, new Vector3(sgn * 0.11f, -0.6f, -0.02f), new Vector3(0.05f, 0.2f, 0.05f), new Color(1f, 0.45f, 0.1f));
+            }
+            var flameGo = new GameObject("Flame");
+            flameGo.transform.SetParent(jet.transform, false);
+            flameGo.AddComponent<MeshFilter>().sharedMesh = b.SaveMesh("Jetpack Flame", flame.ToMesh());
+            flameGo.AddComponent<MeshRenderer>().sharedMaterial = b.ShaderMaterial("BWM/FairyLight", "Jet Flame", m => { m.SetFloat("_Twinkle", 0.6f); m.SetFloat("_Glow", 3.5f); m.SetFloat("_Speed", 18f); });
+            models.SetActive(false);
+        }
+
+        // ---- lights winding up the tree: five turns, hugging the boughs ----
+        var spiral = new List<Vector3>();
+        const int points = 60;
+        for (int i = 0; i <= points; i++)
+        {
+            float t = (float)i / points;
+            float y = 0.6f + TreeHeight * (0.17f + 0.78f * t);
+            float r = TreeHeight * 0.31f * (1f - t * 0.93f) + 0.2f;
+            float a = t * 5f * 2f * Mathf.PI;
+            spiral.Add(new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r));
+        }
+        Kit.LightString(b, "Tree Lights", spiral, 0.06f, 0.42f, false, false, 5);
+
+        // ---- the first five: a ring of plinths round the tree, facing outwards, filled clockwise from the south ----
+        var plinths = new List<UnityEngine.Object>();
+        for (int i = 0; i < TreePlinths; i++)
+        {
+            float a = Mathf.PI * 1.5f - 2f * Mathf.PI * i / TreePlinths;      // start at -z (south), go clockwise seen from above
+            float x = Mathf.Cos(a) * RingRadius, z = Mathf.Sin(a) * RingRadius;
+            Piece plinth = b.Empty("Tree Plinth " + (i + 1), x, z, 0.3f, false);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(x, z) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        // the list fills in this order: the tree's five (the gondola), the mine tower's five (the mine), the airport
+        // tower's five (the biplanes), the train tower's five (the railway), the summit's twenty. A save fills them from
+        // the first, whatever order they were filled in
+        plinths.AddRange(MineTower(b, snowy));
+        plinths.AddRange(AirportTower(b, snowy));
+        plinths.AddRange(TrainTower(b, snowy));
+        var summitPlinths = Summit(b, stone, bare, snowy);
+        plinths.AddRange(summitPlinths);
+
+        // ---- the button that opens the next plinth, on a post in front of the tree ----
+        b.Box("Button Post", 0f, -(RingRadius + 3.2f), new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, 0f, false);
+        Piece button = b.Part("Button Hold", 0f, -(RingRadius + 3.2f) - 0.11f, 1.15f, 180f, false);
+        Sdk.Add(b.AddScript(button, "TowerButton"), "plinths", plinths.ToArray());
+
+        // ---- lights round the plaza: a sixteen-sided ring, open to the south where the path comes in ----
+        var ring = new List<Vector3>();
+        float outer = WinterIslePuzzle.PlazaRadius - 2.5f;
+        for (int i = 1; i <= 15; i++)
+        {
+            float a = Mathf.PI * 1.5f + 2f * Mathf.PI * i / 16f;
+            ring.Add(new Vector3(Mathf.Cos(a) * outer, 3f, Mathf.Sin(a) * outer));
+        }
+        Kit.LightString(b, "Plaza Lights", ring, 0.3f, 0.5f, true, true, 9);
+    }
+
+    // The mine tower, beside the track at the mine's first station (WinterIsleMine.Tower): a timber headframe with a
+    // lantern at its top, five plinths in an arc before it and a hold button that opens them while it is held.
+    // When the five hold gourds, Winter Walk opens the mine (MineDriver). Local coordinates are from the plaza.
+    const int MinePlinths = 5;
+    // A jetpack, its straps' side at 'foot' and facing along 'yaw': two silver tanks on a red frame with gold trim,
+    // nozzles underneath, a little dial on the left tank. About 0.5 m tall, its middle at foot + 0.25 m (the model on
+    // a player's back is this with foot at the origin)
+    static void AddJetpack(MeshBuilder mb, Vector3 foot, float yaw)
+    {
+        Quaternion t = Quaternion.Euler(0f, yaw, 0f);
+        Vector3 P(float x, float y, float z) => foot + t * new Vector3(x, y, z);
+        var silver = new Color(0.78f, 0.8f, 0.84f); var red = new Color(0.75f, 0.1f, 0.08f); var dark = new Color(0.18f, 0.18f, 0.2f);
+        Kit.AddBox(mb, P(0f, -0.25f, 0.02f), new Vector3(0.36f, 0.5f, 0.06f), red, yaw);            // the frame against the back
+        foreach (int sgn in new[] { -1, 1 })
+        {
+            for (int k = 0; k < 4; k++)      // a tank: a stack of discs, rounded at the top
+                Kit.AddDisc(mb, P(sgn * 0.11f, -0.22f + k * 0.1f, -0.08f), 0.075f - (k == 3 ? 0.02f : 0f), 0.1f, silver, 12);
+            Kit.AddBox(mb, P(sgn * 0.11f, -0.3f, -0.08f), new Vector3(0.1f, 0.08f, 0.1f), dark, yaw);      // the nozzle
+            Kit.AddBox(mb, P(sgn * 0.19f, -0.05f, 0.04f), new Vector3(0.04f, 0.42f, 0.03f), dark, yaw);     // a strap
+        }
+        Kit.AddBox(mb, P(0f, 0.17f, -0.03f), new Vector3(0.3f, 0.05f, 0.12f), Gold, yaw);         // gold trim across the top
+        Kit.AddBox(mb, P(0f, -0.24f, -0.04f), new Vector3(0.3f, 0.05f, 0.1f), Gold, yaw);        // and the bottom
+        Kit.AddBall(mb, P(-0.11f, 0.08f, -0.16f), 0.03f, new Color(0.95f, 0.95f, 0.9f));          // the fuel dial
+    }
+
+    static List<UnityEngine.Object> MineTower(PuzzleBuilder b, Material snowy)
+    {
+        var plinths = new List<UnityEngine.Object>();
+        if (!WinterIsleMine.Load()) { Debug.LogWarning("[BWM] The Tree: no mine yet (build WinterIsle first); the mine tower is left out"); return plinths; }
+        Vector2 c = WinterIsleMine.Tower - WinterIslePuzzle.Plaza;
+        Vector2 toTrack = WinterIsleMine.TowerFacing;               // the tower stands beside the track at the first station
+        Vector2 along = new Vector2(-toTrack.y, toTrack.x);
+        float yaw = Mathf.Atan2(toTrack.x, toTrack.y) * Mathf.Rad2Deg;
+        Vector3 Here(float x, float z, float up) => b.WorldPoint(c.x + x, c.y + z, up) - b.Root.transform.position;
+        Vector3 At(float forward, float side, float up) { Vector2 p = toTrack * forward + along * side; return Here(p.x, p.y, up); }
+        var frame = new MeshBuilder();
+        Color timber = new Color(0.5f, 0.35f, 0.2f), iron = new Color(0.22f, 0.22f, 0.25f);
+        Kit.AddBox(frame, At(-1.2f, 0f, -0.4f), new Vector3(4.4f, 0.6f, 4.4f), Stone, yaw);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(-1.2f + sz * 1.5f, sx * 1.5f, 0.2f), new Vector3(0.36f, 8.2f, 0.36f), timber, yaw);
+        foreach (float up in new[] { 2.6f, 5.2f, 8.1f })
+        {
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(frame, At(-1.2f + sgn * 1.5f, 0f, up), new Vector3(3.3f, 0.26f, 0.26f), timber * 0.9f, yaw);
+                Kit.AddBox(frame, At(-1.2f, sgn * 1.5f, up), new Vector3(0.26f, 0.26f, 3.3f), timber * 0.9f, yaw);
+            }
+        }
+        Kit.AddBox(frame, At(-1.2f, 0f, 8.4f), new Vector3(4.2f, 0.3f, 4.2f), timber * 0.8f, yaw);             // the top deck
+        Kit.AddBox(frame, At(-1.2f, 0f, 8.7f), new Vector3(0.3f, 1.7f, 2.2f), iron, yaw);                      // the winding wheel, edge on
+        Kit.AddBox(frame, At(-1.2f, 0f, 9.15f), new Vector3(0.5f, 0.8f, 0.8f), iron * 1.3f, yaw);
+        Kit.AddBox(frame, At(-1.2f, 0f, 10.4f), new Vector3(3.2f, 0.25f, 3.2f), new Color(0.55f, 0.16f, 0.13f), yaw);      // a red cap
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(-1.2f + sz * 1.3f, sx * 1.3f, 8.7f), new Vector3(0.2f, 1.7f, 0.2f), timber, yaw);
+        b.MeshPiece("Mine Tower", frame.ToMesh(), snowy);
+
+        for (int i = 0; i < MinePlinths; i++)
+        {
+            float a = (i - (MinePlinths - 1) / 2f) * 0.5f;
+            Vector2 p = toTrack * (-1.2f + Mathf.Cos(a) * 4.3f) + along * (Mathf.Sin(a) * 4.3f);
+            Vector2 facing = (toTrack * Mathf.Cos(a) + along * Mathf.Sin(a)).normalized;
+            Piece plinth = b.Empty("Mine Plinth " + (i + 1), c.x + p.x, c.y + p.y, 0.15f, true);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(facing.x, facing.y) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        Vector2 post = toTrack * 1.4f - along * 3.6f;
+        b.Box("Mine Button Post", c.x + post.x, c.y + post.y, new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, yaw, true);
+        Vector2 face = post + toTrack * 0.11f;
+        Piece button = b.Part("Button Hold", c.x + face.x, c.y + face.y, 1.15f, yaw, true);
+        foreach (UnityEngine.Object p in plinths) button.On("PuzzleButton", "onPressed", p, "HoldToOpen");
+        var lights = new List<Vector3>();
+        for (int i = 0; i <= 6; i++)
+        {
+            float a = (i - 3) * 0.5f;
+            Vector2 p = toTrack * (-1.2f + Mathf.Cos(a) * 5.6f) + along * (Mathf.Sin(a) * 5.6f);
+            lights.Add(new Vector3(c.x + p.x, 2.2f, c.y + p.y));
+        }
+        Kit.LightString(b, "Mine Tower Lights", lights, 0.3f, 0.5f, true, true, 31);
+        return plinths;
+    }
+
+    // Five plinths in an arc before a tower at 'spot' (world x, z), the arc's middle 'centre' metres along 'toFront'
+    // from the spot; a hold button on a post beside them that opens them while it is held; lights round the arc.
+    // Local coordinates are from the plaza (this pack's root)
+    static List<UnityEngine.Object> PlinthArc(PuzzleBuilder b, string prefix, Vector2 spot, Vector2 toFront, float centre, float radius, int seed)
+    {
+        var plinths = new List<UnityEngine.Object>();
+        Vector2 c = spot - WinterIslePuzzle.Plaza;
+        Vector2 along = new Vector2(-toFront.y, toFront.x);
+        float yaw = Mathf.Atan2(toFront.x, toFront.y) * Mathf.Rad2Deg;
+        for (int i = 0; i < 5; i++)
+        {
+            float a = (i - 2f) * 0.5f;
+            Vector2 p = toFront * (centre + Mathf.Cos(a) * radius) + along * (Mathf.Sin(a) * radius);
+            Vector2 facing = (toFront * Mathf.Cos(a) + along * Mathf.Sin(a)).normalized;
+            Piece plinth = b.Empty(prefix + " Plinth " + (i + 1), c.x + p.x, c.y + p.y, 0.15f, true);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(facing.x, facing.y) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        Vector2 post = toFront * (centre + 2.6f) - along * (radius + 1.4f);
+        b.Box(prefix + " Button Post", c.x + post.x, c.y + post.y, new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, yaw, true);
+        Vector2 face = post + toFront * 0.11f;
+        Piece button = b.Part("Button Hold", c.x + face.x, c.y + face.y, 1.15f, yaw, true);
+        foreach (UnityEngine.Object p in plinths) button.On("PuzzleButton", "onPressed", p, "HoldToOpen");
+        var lights = new List<Vector3>();
+        for (int i = 0; i <= 6; i++)
+        {
+            float a = (i - 3) * 0.5f;
+            Vector2 p = toFront * (centre + Mathf.Cos(a) * (radius + 1.3f)) + along * (Mathf.Sin(a) * (radius + 1.3f));
+            lights.Add(new Vector3(c.x + p.x, 2.2f, c.y + p.y));
+        }
+        Kit.LightString(b, prefix + " Tower Lights", lights, 0.3f, 0.5f, true, true, seed);
+        return plinths;
+    }
+
+    // The airport's control tower, on its apron (WinterIsleAirport.TowerSpot): a stone foot, a steel frame, a glazed
+    // cab lit from inside with a red beacon on its roof. Its five plinths open the airport (Winter Walk's PlaneDriver
+    // takes the hangar's doors away and lets the biplanes be flown)
+    static List<UnityEngine.Object> AirportTower(PuzzleBuilder b, Material snowy)
+    {
+        Vector2 spot = WinterIsleAirport.TowerSpot, toFront = WinterIsleAirport.TowerFacing;
+        Vector2 c = spot - WinterIslePuzzle.Plaza, along = new Vector2(-toFront.y, toFront.x);
+        float yaw = Mathf.Atan2(toFront.x, toFront.y) * Mathf.Rad2Deg;
+        Vector3 At(float forward, float side, float up) { Vector2 p = c + toFront * forward + along * side; return b.WorldPoint(p.x, p.y, up) - b.Root.transform.position; }
+        var frame = new MeshBuilder();
+        var glow = new MeshBuilder();
+        Color steel = new Color(0.55f, 0.57f, 0.6f), red = new Color(0.7f, 0.12f, 0.1f), cream = new Color(0.9f, 0.86f, 0.76f);
+        Kit.AddBox(frame, At(0f, 0f, -0.5f), new Vector3(5.2f, 1.1f, 5.2f), Stone, yaw);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(sz * 1.7f, sx * 1.7f, 0.5f), new Vector3(0.34f, 9.6f, 0.34f), steel, yaw);
+        foreach (float up in new[] { 3.4f, 6.8f })
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(frame, At(sgn * 1.7f, 0f, up), new Vector3(3.6f, 0.22f, 0.22f), steel * 0.9f, yaw);
+                Kit.AddBox(frame, At(0f, sgn * 1.7f, up), new Vector3(0.22f, 0.22f, 3.6f), steel * 0.9f, yaw);
+            }
+        Kit.AddBox(frame, At(0f, 0f, 10f), new Vector3(6.4f, 0.3f, 6.4f), cream, yaw);                // the cab's floor and balcony
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(frame, At(sz * 2.3f, sx * 2.3f, 10.3f), new Vector3(0.2f, 2.3f, 0.2f), cream, yaw);      // the cab's corners
+        Kit.AddBox(frame, At(0f, 0f, 10.3f), new Vector3(4.8f, 0.8f, 4.8f), red, yaw);                 // under the windows
+        Kit.AddBox(frame, At(0f, 0f, 12.6f), new Vector3(6f, 0.35f, 6f), red * 0.8f, yaw);             // the roof
+        Kit.AddBox(frame, At(0f, 0f, 12.95f), new Vector3(0.15f, 1.6f, 0.15f), steel, yaw);            // the beacon's mast
+        Kit.AddGlow(glow, At(0f, 0f, 11.75f), new Vector3(4.7f, 1.3f, 4.7f), yaw, new Color(1f, 0.85f, 0.55f), 0.2f);      // the lit windows
+        Kit.AddGlow(glow, At(0f, 0f, 14.7f), new Vector3(0.4f, 0.4f, 0.4f), yaw, new Color(1f, 0.15f, 0.1f), 0.7f);        // the beacon
+        b.MeshPiece("Airport Tower", frame.ToMesh(), snowy);
+        b.MeshPiece("Airport Tower Windows", glow.ToMesh(), b.ShaderMaterial("BWM/FairyLight", "Lantern Glow", m => { m.SetFloat("_Twinkle", 0.12f); m.SetFloat("_Glow", 2.2f); m.SetFloat("_Speed", 3.1f); }), false);
+        return PlinthArc(b, "Airport", spot, toFront, 1.2f, 5f, 41);
+    }
+
+    // The railway's water tower, beside the Plaza Halt (WinterIsleRail.TowerSpot): a timber tank with iron hoops and
+    // a pointed roof on four braced legs, its spout swung out towards the track. Its five plinths start the trains
+    // (Winter Walk's TrainDriver)
+    static List<UnityEngine.Object> TrainTower(PuzzleBuilder b, Material snowy)
+    {
+        var plinths = new List<UnityEngine.Object>();
+        if (!WinterIsleRail.Load()) { Debug.LogWarning("[BWM] The Tree: no railway (unity/Land/WinterIsle.rail); the train tower is left out"); return plinths; }
+        Vector2 spot = WinterIsleRail.TowerSpot(out Vector2 toTrack);
+        Vector2 toFront = -toTrack;      // the plinths on the side away from the track, where the path comes in
+        Vector2 c = spot - WinterIslePuzzle.Plaza, along = new Vector2(-toFront.y, toFront.x);
+        float yaw = Mathf.Atan2(toFront.x, toFront.y) * Mathf.Rad2Deg;
+        Vector3 At(float forward, float side, float up) { Vector2 p = c + toFront * forward + along * side; return b.WorldPoint(p.x, p.y, up) - b.Root.transform.position; }
+        var mb = new MeshBuilder();
+        Color timber = new Color(0.48f, 0.33f, 0.2f), iron = new Color(0.22f, 0.22f, 0.25f), red = new Color(0.68f, 0.12f, 0.1f), green = new Color(0.12f, 0.36f, 0.2f);
+        Kit.AddBox(mb, At(0f, 0f, -0.4f), new Vector3(5f, 0.8f, 5f), Stone, yaw);
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sz in new[] { -1, 1 })
+                Kit.AddBox(mb, At(sz * 1.8f, sx * 1.8f, 0.4f), new Vector3(0.4f, 7f, 0.4f), timber, yaw);
+        foreach (float up in new[] { 2.4f, 4.8f })
+            foreach (int sgn in new[] { -1, 1 })
+            {
+                Kit.AddBox(mb, At(sgn * 1.8f, 0f, up), new Vector3(3.8f, 0.25f, 0.25f), timber * 0.9f, yaw);
+                Kit.AddBox(mb, At(0f, sgn * 1.8f, up), new Vector3(0.25f, 0.25f, 3.8f), timber * 0.9f, yaw);
+            }
+        Kit.AddBox(mb, At(0f, 0f, 7.2f), new Vector3(5.6f, 0.3f, 5.6f), timber * 0.8f, yaw);
+        Kit.AddDisc(mb, At(0f, 0f, 7.5f), 2.7f, 3.6f, timber * 1.05f, 18);                                // the tank
+        foreach (float up in new[] { 7.9f, 9.1f, 10.4f }) Kit.AddDisc(mb, At(0f, 0f, up), 2.78f, 0.14f, iron, 18);      // hoops
+        for (int k = 0; k < 6; k++) Kit.AddDisc(mb, At(0f, 0f, 11.1f + k * 0.38f), 3.0f - k * 0.5f, 0.38f, k % 2 == 0 ? red : red * 0.85f, 18);      // the roof
+        Kit.AddStar(mb, At(0f, 0f, 13.9f), 0.45f, 0.08f, Gold);
+        Kit.AddBox(mb, At(-2.6f, 0f, 8.2f), new Vector3(0.45f, 0.45f, 2.6f), iron, yaw);                  // the spout, towards the track
+        Kit.AddBox(mb, At(2.74f, 0f, 8.5f), new Vector3(1.3f, 1.3f, 0.12f), green, yaw);                 // a wreath on the tank's front
+        b.MeshPiece("Train Tower", mb.ToMesh(), snowy);
+        return PlinthArc(b, "Train", spot, toFront, 1.0f, 4.6f, 51);
+    }
+
+    // The summit sanctuary, at WinterIslePuzzle.Summit: twenty plinths in a ring round a great gold star on a
+    // stone column, a hold button that opens every summit plinth while it is held, lanterns and a ring of lights.
+    // Local coordinates here are from the plaza (this pack's root).
+    static List<UnityEngine.Object> Summit(PuzzleBuilder b, Material stone, Material bare, Material snowy)
+    {
+        Vector2 c = WinterIslePuzzle.Summit - WinterIslePuzzle.Plaza;
+        var built = new MeshBuilder();
+        Vector3 Here(float x, float z, float up) => b.WorldPoint(c.x + x, c.y + z, up) - b.Root.transform.position;
+        // a round stone floor, two steps, the column and the star
+        Kit.AddDisc(built, Here(0f, 0f, -0.3f), SummitRing + 2.2f, 0.45f, Stone, 40);
+        Kit.AddDisc(built, Here(0f, 0f, 0.15f), 3.2f, 0.35f, Stone * 0.92f, 28);
+        Kit.AddDisc(built, Here(0f, 0f, 0.5f), 1.6f, 4.5f, Stone * 0.85f, 16);
+        b.MeshPiece("Summit Floor", built.ToMesh(), stone);
+        // the pavilion over the middle: eight slender pillars round the column, and a tall red roof rising to a spire,
+        // the great star on top, so the summit has a tower that reads from the slopes and the plaza far below (it keeps
+        // inside the plinths' ring, clear of the gondola's top station, which reaches in to 5.5 m)
+        const int Pillars = 8;
+        const float PillarRing = 3.2f, Eave = 4.6f, Apex = 11.5f, Overhang = 1.1f;
+        var pavilion = new MeshBuilder();
+        for (int i = 0; i < Pillars; i++)
+        {
+            float a = 2f * Mathf.PI * (i + 0.5f) / Pillars;
+            Kit.AddBox(pavilion, Here(Mathf.Cos(a) * PillarRing, Mathf.Sin(a) * PillarRing, 0f), new Vector3(0.42f, Eave, 0.42f), new Color(0.9f, 0.86f, 0.76f), -a * Mathf.Rad2Deg);
+            Kit.AddBox(pavilion, Here(Mathf.Cos(a) * PillarRing, Mathf.Sin(a) * PillarRing, Eave - 0.4f), new Vector3(0.6f, 0.4f, 0.6f), Gold, -a * Mathf.Rad2Deg);      // capitals
+        }
+        const int RoofSegments = 24;
+        Vector3 apex = Here(0f, 0f, Apex);
+        for (int i = 0; i < RoofSegments; i++)
+        {
+            float a0 = 2f * Mathf.PI * i / RoofSegments, a1 = 2f * Mathf.PI * (i + 1) / RoofSegments;
+            float rr = PillarRing + Overhang;
+            Vector3 e0 = Here(Mathf.Cos(a0) * rr, Mathf.Sin(a0) * rr, Eave), e1 = Here(Mathf.Cos(a1) * rr, Mathf.Sin(a1) * rr, Eave);
+            Vector3 i0 = Here(Mathf.Cos(a0) * PillarRing, Mathf.Sin(a0) * PillarRing, Eave - 0.3f), i1 = Here(Mathf.Cos(a1) * PillarRing, Mathf.Sin(a1) * PillarRing, Eave - 0.3f);
+            Color roof = i % 2 == 0 ? new Color(0.62f, 0.1f, 0.09f) : new Color(0.55f, 0.08f, 0.08f);
+            pavilion.Tri(e0, apex, e1, roof);           // the roof, outside
+            pavilion.Tri(e0, e1, apex, roof * 0.7f);    // and its underside
+            pavilion.Quad(i0, i1, e1, e0, Gold);        // a gold band round the eave
+            pavilion.Quad(i0, e0, e1, i1, Gold);
+        }
+        b.MeshPiece("Summit Pavilion", pavilion.ToMesh(), snowy, true);
+        var star = new MeshBuilder();
+        Kit.AddStar(star, Here(0f, 0f, Apex + 2.1f), 2.0f, 0.45f, Gold);
+        b.MeshPiece("Summit Star", star.ToMesh(), bare, false);
+        // a second star crossing the first, so it reads from every side
+        var star2 = new MeshBuilder();
+        Kit.AddStar(star2, Vector3.zero, 2.0f, 0.45f, Gold);
+        Piece cross = b.MeshPiece("Summit Star Cross", star2.ToMesh(), bare, false);
+        cross.Transform.position = b.Root.transform.position + Here(0f, 0f, Apex + 2.1f);
+        cross.Transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+        var plinths = new List<UnityEngine.Object>();
+        for (int i = 0; i < SummitPlinths; i++)
+        {
+            float a = Mathf.PI * 0.5f + 2f * Mathf.PI * i / SummitPlinths;      // from the east (the gondola's side), clockwise
+            float x = Mathf.Cos(a) * SummitRing, z = Mathf.Sin(a) * SummitRing;
+            Piece plinth = b.Empty("Summit Plinth " + (i + 1), c.x + x, c.y + z, 0.15f, true);
+            plinth.Transform.rotation = b.Root.transform.rotation * Quaternion.Euler(0f, Mathf.Atan2(x, z) * Mathf.Rad2Deg, 0f);
+            plinths.Add(b.AddScript(plinth, "PuzzleGourdPlinth"));
+        }
+        // the hold button, on a post on the gondola's side, just inside the ring
+        Vector2 toGondola = (WinterIslePuzzle.GondolaTop - WinterIslePuzzle.Summit).normalized;
+        Vector2 post = toGondola * (SummitRing - 3f);
+        b.Box("Summit Button Post", c.x + post.x, c.y + post.y, new Vector3(0.3f, 1.35f, 0.22f), Wood, 0f, Mathf.Atan2(toGondola.x, toGondola.y) * Mathf.Rad2Deg, true);
+        Vector2 face = post + toGondola * 0.11f;
+        Piece button = b.Part("Button Hold", c.x + face.x, c.y + face.y, 1.15f, Mathf.Atan2(toGondola.x, toGondola.y) * Mathf.Rad2Deg, true);
+        foreach (UnityEngine.Object p in plinths) button.On("PuzzleButton", "onPressed", p, "HoldToOpen");
+
+        // lights: a ring round the sanctuary on short posts
+        var ring = new List<Vector3>();
+        for (int i = 0; i < 24; i++)
+        {
+            float a = 2f * Mathf.PI * i / 24f;
+            ring.Add(new Vector3(c.x + Mathf.Cos(a) * (SummitRing + 1.6f), 1.8f, c.y + Mathf.Sin(a) * (SummitRing + 1.6f)));
+        }
+        ring.Add(ring[0]);
+        Kit.LightString(b, "Summit Lights", ring, 0.3f, 0.5f, true, true, 24);
+        return plinths;
+    }
+}

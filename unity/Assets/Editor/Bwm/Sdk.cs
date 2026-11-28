@@ -84,21 +84,55 @@ namespace Bwm
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        // Sets a [Flags] enum field to a combination of its values (Set takes an enum's index, which a flags value is not)
+        public static void SetFlags(Component c, string field, int value)
+        {
+            var so = new SerializedObject(c);
+            SerializedProperty p = so.FindProperty(field);
+            if (p == null) throw new Exception(c.GetType().Name + " has no field '" + field + "'");
+            p.intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Appends numbers to a serialized list of ints (e.g. PuzzlePegBoard.answerFromFlap)
+        public static void AddInts(Component c, string field, params int[] values)
+        {
+            var so = new SerializedObject(c);
+            SerializedProperty p = so.FindProperty(field);
+            if (p == null || !p.isArray) throw new Exception(c.GetType().Name + " has no list '" + field + "'");
+            foreach (int v in values)
+            {
+                p.InsertArrayElementAtIndex(p.arraySize);
+                p.GetArrayElementAtIndex(p.arraySize - 1).intValue = v;
+            }
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         // Makes source.<eventField> (a UnityEvent) call target.<method>() with no argument, as the Inspector's + button would
-        public static void Wire(Component source, string eventField, Component target, string method)
+        // The target can be an SDK component, one of our own scripts, a built-in component or a GameObject. With
+        // 'arg' the method takes that one argument (bool, int, float or string), e.g. GameObject.SetActive(true).
+        public static void Wire(Component source, string eventField, UnityEngine.Object target, string method, object arg = null)
         {
             var so = new SerializedObject(source);
             SerializedProperty calls = so.FindProperty(eventField + ".m_PersistentCalls.m_Calls");
             if (calls == null) throw new Exception(source.GetType().Name + " has no event '" + eventField + "'");
-            if (target.GetType().GetMethod(method, BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null) == null)
-                throw new Exception(target.GetType().Name + " has no public method " + method + "()");
+            Type[] signature = arg == null ? Type.EmptyTypes : new[] { arg.GetType() };
+            if (target.GetType().GetMethod(method, BindingFlags.Public | BindingFlags.Instance, null, signature, null) == null)
+                throw new Exception(target.GetType().Name + " has no public method " + method + "(" + (arg == null ? "" : arg.GetType().Name) + ")");
             calls.InsertArrayElementAtIndex(calls.arraySize);
             SerializedProperty call = calls.GetArrayElementAtIndex(calls.arraySize - 1);
             call.FindPropertyRelative("m_Target").objectReferenceValue = target;
             call.FindPropertyRelative("m_TargetAssemblyTypeName").stringValue = target.GetType().AssemblyQualifiedName;
             call.FindPropertyRelative("m_MethodName").stringValue = method;
-            call.FindPropertyRelative("m_Mode").intValue = 1;          // PersistentListenerMode.Void
             call.FindPropertyRelative("m_CallState").intValue = 2;     // UnityEventCallState.RuntimeOnly
+            SerializedProperty args = call.FindPropertyRelative("m_Arguments");
+            int mode = 1;                                              // PersistentListenerMode: 1 Void, 3 Int, 4 Float, 5 String, 6 Bool
+            if (arg is bool flag) { mode = 6; args.FindPropertyRelative("m_BoolArgument").boolValue = flag; }
+            else if (arg is int number) { mode = 3; args.FindPropertyRelative("m_IntArgument").intValue = number; }
+            else if (arg is float real) { mode = 4; args.FindPropertyRelative("m_FloatArgument").floatValue = real; }
+            else if (arg is string text) { mode = 5; args.FindPropertyRelative("m_StringArgument").stringValue = text; }
+            else if (arg != null) throw new Exception("Unsupported event argument type " + arg.GetType().Name);
+            call.FindPropertyRelative("m_Mode").intValue = mode;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
     }
